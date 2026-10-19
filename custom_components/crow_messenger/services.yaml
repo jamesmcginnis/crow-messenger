@@ -1,0 +1,28 @@
+send_message:
+  fields:
+    to:
+      required: true
+      example: '["James", "Sarah"]'
+      selector:
+        object:
+    message:
+      required: true
+      example: "Someone is at the front door"
+      selector:
+        text:
+          multiline: true
+    attachment:
+      required: false
+      example: "/config/www/snapshots/doorbell.jpg"
+      selector:
+        text:
+    group_name:
+      required: false
+      example: "Family"
+      selector:
+        text:
+    actions:
+      required: false
+      example: '["Unlock", "Ignore"]'
+      selector:
+        object:

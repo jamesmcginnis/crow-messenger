@@ -1,0 +1,26 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Crow Messenger",
+        "description": "Set up Crow Messenger. There's nothing to fill in — add the Crow Messenger card to a dashboard, then open the card editor to choose each person's dashboard, notifications and how long messages are kept."
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Crow Messenger is already configured."
+    }
+  },
+  "services": {
+    "send_message": {
+      "name": "Send message",
+      "description": "Send a Crow Messenger message to one or more Home Assistant users.",
+      "fields": {
+        "to": { "name": "To", "description": "Home Assistant user IDs or names to send to. More than one makes a group chat." },
+        "message": { "name": "Message", "description": "The message text." },
+        "attachment": { "name": "Attachment", "description": "Optional file to attach: a path inside an allowed folder (e.g. /config/www/doorbell.jpg) or a /local/… URL." },
+        "group_name": { "name": "Group name", "description": "Optional name for the group chat when sending to more than one person." },
+        "actions": { "name": "Buttons", "description": "Optional buttons under the message, e.g. [\"Unlock\", \"Ignore\"] or [{\"title\": \"Unlock\", \"action\": \"UNLOCK_DOOR\"}]. Tapping one (in the card or the notification) fires the crow_messenger_action event with who tapped it." }
+      }
+    }
+  }
+}

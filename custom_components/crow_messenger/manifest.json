@@ -1,0 +1,27 @@
+{
+  "domain": "crow_messenger",
+  "name": "Crow Messenger",
+  "after_dependencies": [
+    "mobile_app",
+    "person",
+    "lovelace",
+    "conversation",
+    "ai_task",
+    "media_source"
+  ],
+  "codeowners": [
+    "@jamesmcginnis"
+  ],
+  "config_flow": true,
+  "dependencies": [
+    "frontend",
+    "http",
+    "websocket_api"
+  ],
+  "documentation": "https://github.com/jamesmcginnis/crow-messenger",
+  "iot_class": "local_push",
+  "issue_tracker": "https://github.com/jamesmcginnis/crow-messenger/issues",
+  "requirements": [],
+  "single_config_entry": true,
+  "version": "1.9.7"
+}
