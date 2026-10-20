@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.0.3';
+const CM_VERSION = '2.0.5';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '20 Oct 2026 14:00';
+const CM_BUILD = '20 Oct 2026 14:20';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -660,6 +660,7 @@ svg { display: block; }
 .mrow.first { margin-top: 8px; }
 .mrow.me { justify-content: flex-end; }
 .mrow .mav { width: 28px; height: 28px; flex-shrink: 0; }
+.mrow .buddy { display: none; }
 .mcol { display: flex; flex-direction: column; gap: 2px; max-width: min(76%, 540px); min-width: 0; }
 .me .mcol { align-items: flex-end; }
 .them .mcol { align-items: flex-start; }
@@ -2762,7 +2763,7 @@ class CrowMessengerCard extends HTMLElement {
   }
 
   _wireSwipe(container) {
-    let row = null, sx = 0, sy = 0, dx = 0, active = false, id = null;
+    let row = null, sx = 0, sy = 0, dx = 0, base = 0, active = false, id = null;
     container.addEventListener('pointerdown', (e) => {
       if (this._s.editing || e.pointerType === 'mouse' && e.button !== 0) return;
       const r = e.target.closest('.row:not(.hit)');
@@ -2774,12 +2775,11 @@ class CrowMessengerCard extends HTMLElement {
       if (!row || e.pointerId !== id) return;
       const mx = e.clientX - sx, my = e.clientY - sy;
       if (!active) {
-        if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.4) { active = true; row.classList.add('swiping'); try { row.setPointerCapture(id); } catch (err) { /* */ } }
+        if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.4) { active = true; base = row.classList.contains('swiped') ? -216 : row.classList.contains('swiped-l') ? 160 : 0; row.classList.add('swiping'); try { row.setPointerCapture(id); } catch (err) { /* */ } }
         else if (Math.abs(my) > 10) { row = null; return; }
       }
       if (active) {
         // swipe left for Hide Alerts and Delete, right for Unread and Pin
-        const base = row.classList.contains('swiped') ? -216 : row.classList.contains('swiped-l') ? 160 : 0;
         dx = clamp(base + mx, -250, 200);
         row.querySelector('.swipe-actions').style.visibility = dx < 0 ? 'visible' : 'hidden';
         const lead = row.querySelector('.swipe-lead');
@@ -2796,7 +2796,11 @@ class CrowMessengerCard extends HTMLElement {
       const inner = row.querySelector('.row-inner');
       inner.style.transition = '';
       if (active) {
-        const open = dx < -60, openL = dx > 60;
+        // an open row closes as soon as it's pushed back a little way, rather than needing to be
+        // dragged nearly all the way across
+        const moved = dx - base;
+        const open = base < 0 ? moved < 40 && dx < -60 : dx < -60;
+        const openL = base > 0 ? moved > -40 && dx > 60 : dx > 60;
         inner.style.transform = open ? 'translateX(-216px)' : openL ? 'translateX(160px)' : '';
         this._swipeButtons(row, open ? -216 : openL ? 160 : 0, true);
         row.classList.toggle('swiped', open);
@@ -2805,7 +2809,7 @@ class CrowMessengerCard extends HTMLElement {
         if (!open && !openL) setTimeout(() => { if (!r0.classList.contains('swiped') && !r0.classList.contains('swiped-l')) { r0.querySelector('.swipe-actions').style.visibility = ''; const l = r0.querySelector('.swipe-lead'); if (l) l.style.visibility = ''; } }, 260);
         // the release of a swipe isn't a tap, but only for a moment and never on the buttons:
         // on iPhone no click follows a swipe, so a lasting guard ate the next real tap
-        { const r1 = row, swallow = (ev) => { if (!ev.target.closest('.swipe-actions, .swipe-lead')) ev.stopPropagation(); };
+        { const r1 = row, t0 = Date.now(), swallow = (ev) => { if (!ev.target.closest('.swipe-actions, .swipe-lead') || Date.now() - t0 < 80) { ev.stopPropagation(); ev.preventDefault(); } };
           r1.addEventListener('click', swallow, true); setTimeout(() => r1.removeEventListener('click', swallow, true), 350); }
       }
       row.classList.remove('swiping');
@@ -2968,7 +2972,7 @@ class CrowMessengerCard extends HTMLElement {
         }
         // the release of a swipe isn't a tap, but only for a moment and never on the buttons:
         // on iPhone no click follows a swipe, so a lasting guard ate the next real tap
-        { const r1 = row, swallow = (ev) => { if (!ev.target.closest('.swipe-actions, .swipe-lead')) ev.stopPropagation(); };
+        { const r1 = row, t0 = Date.now(), swallow = (ev) => { if (!ev.target.closest('.swipe-actions, .swipe-lead') || Date.now() - t0 < 80) { ev.stopPropagation(); ev.preventDefault(); } };
           r1.addEventListener('click', swallow, true); setTimeout(() => r1.removeEventListener('click', swallow, true), 350); }
       }
       sw = null;
@@ -3375,7 +3379,7 @@ class CrowMessengerCard extends HTMLElement {
     const s = this._s, t = s.threads.get(tid), box = s.msgs.get(tid);
     if (!box || (!box.loaded && !box.list.length)) return `<div class="more-spin">Loading…</div>`;
     const list = box.list;
-    const isGroup = t?.is_group, skinned = this._skin().id !== 'iphone';
+    const isGroup = t?.is_group, skinned = this._skin().id !== 'iphone', buddy = !!this._skin().buddy;
     let html = box.more ? `<div class="more-spin">Loading earlier messages…</div>` : '';
     html += this._disappearNote(t);
     if (!list.length) html += `<div class="sys" style="margin-top:30px">${t ? `Send a message to ${esc(this._threadTitle(t))}.` : ''}</div>`;
@@ -3414,7 +3418,9 @@ class CrowMessengerCard extends HTMLElement {
       }
       inner += this._linkHtml(m) + this._actionsHtml(m) + this._ttlHtml(m) + this._editedHtml(m) + this._fxNoteHtml(m) + this._sentNotesHtml(m) + this._starHtml(m, t) + this._remindHtml(m, t);
       inner += this._tapbacksHtml(m) + this._placedHtml(m);
-      const avSlot = !mine && isGroup ? `<div class="mav">${runEnd ? this._userAv(m.sender, 28) : ''}</div>` : '';
+      const avSlot = (!mine && isGroup ? `<div class="mav">${runEnd ? this._userAv(m.sender, 28) : ''}</div>` : '')
+        // skins with a buddy picture beside the first message of each run (Mac OS X Aqua)
+        + (buddy && runStart ? `<div class="buddy">${this._userAv(m.sender, 30)}</div>` : '');
       html += `<div class="mrow ${mine ? 'me' : 'them'}${runStart ? ' first' : ''}${m.reactions && Object.keys(m.reactions).length ? ' has-tb' : ''}" data-mid="${esc(m.id)}"${skinned ? ` data-who="${esc(mine ? this._userName(s.me, true) || 'Me' : this._nameIn(tid, m.sender))}" data-t="${esc(fmtTime(m.ts, this._hass))}"` : ''}>${avSlot}<div class="mcol">${inner}</div></div>`;
       if (i === lastMineIdx) html += this._receiptHtml(m, t);
     }
@@ -6204,7 +6210,7 @@ Object.assign(CrowMessengerCard.prototype, {
         place(r, openR ? -W : openL ? W : 0, true);
         // the release of a swipe isn't a tap, but only for a moment and never on the buttons:
         // on iPhone no click follows a swipe, so a lasting guard ate the next real tap
-        { const r1 = r, swallow = (ev) => { if (!ev.target.closest('.dsw-l, .dsw-r')) ev.stopPropagation(); };
+        { const r1 = r, t0 = Date.now(), swallow = (ev) => { if (!ev.target.closest('.dsw-l, .dsw-r') || Date.now() - t0 < 80) { ev.stopPropagation(); ev.preventDefault(); } };
           r1.addEventListener('click', swallow, true); setTimeout(() => r1.removeEventListener('click', swallow, true), 350); }
       }
       sw = null; active = false;
@@ -7502,7 +7508,7 @@ const SKINS = [
   { id: 'yahoo', name: 'Yahoo!', group: 'retro', mode: 'light', win: true, log: true, more: 'Skins' },
   { id: 'win98', name: 'Windows 98', group: 'retro', mode: 'light', win: true, log: true, more: 'Settings' },
   { id: 'xp', name: 'Windows XP', group: 'retro', mode: 'light', win: true, more: 'Chats' },
-  { id: 'aqua', name: 'Mac OS X Aqua', group: 'retro', mode: 'light', win: true, more: 'View' },
+  { id: 'aqua', name: 'Mac OS X Aqua', group: 'retro', mode: 'light', win: true, buddy: true, more: 'View' },
   { id: 'bbm', name: 'BlackBerry Messenger', group: 'retro', mode: 'light', log: true, more: 'Menu' },
   { id: 'nokia', name: 'Nokia SMS', group: 'retro', mode: 'light', log: true, more: 'Options' },
   { id: 'irc', name: 'IRC / Terminal', group: 'retro', mode: 'dark', log: true, more: '/skin' },
@@ -7911,12 +7917,15 @@ const SKIN_CSS = `
 }
 :host([data-skin="aqua"]) ha-card { background: linear-gradient(160deg, #3a7bd5, #6fb1fc 50%, #2b5fa8); }
 :host([data-skin="aqua"]) .page.thread { background: #fff; }
-:host([data-skin="aqua"]) .mrow.first::before { content: ''; width: 30px; height: 30px; border-radius: 6px; flex-shrink: 0; align-self: flex-end; background: linear-gradient(160deg, #ffd1dc, #f39ab2); }
+:host([data-skin="aqua"]) .mrow .buddy { display: block; width: 30px; height: 30px; flex-shrink: 0; align-self: flex-end; border-radius: 6px; overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.35), inset 0 0 0 1px rgba(0,0,0,0.12); background: linear-gradient(160deg, #ffd1dc, #f39ab2); }
+:host([data-skin="aqua"]) .mrow.me .buddy { background: linear-gradient(160deg, #c8e0ff, #7fb0ef); }
+:host([data-skin="aqua"]) .mrow .buddy .av { width: 30px !important; height: 30px !important; border-radius: 6px !important; font-size: 12px !important; background: none; color: #fff; text-shadow: 0 1px 1px rgba(0,0,0,0.3); }
+:host([data-skin="aqua"]) .mrow .buddy .av img { width: 100%; height: 100%; object-fit: cover; border-radius: 6px; }
 :host([data-skin="aqua"]) .mrow { gap: 8px; }
 :host([data-skin="aqua"]) .mrow:not(.first) { padding-left: 38px; }
 :host([data-skin="aqua"]) .mrow.me { flex-direction: row-reverse; justify-content: flex-start; }
 :host([data-skin="aqua"]) .mrow.me:not(.first) { padding: 0 38px 0 0; }
-:host([data-skin="aqua"]) .mrow.me.first::before { background: linear-gradient(160deg, #c8e0ff, #7fb0ef); }
 :host([data-skin="aqua"]) .mrow .mav { display: none; }
 
 /* ═══ BlackBerry Messenger ═══════════════════════════════════════════════ */
