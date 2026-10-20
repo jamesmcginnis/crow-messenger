@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.0.1';
+const CM_VERSION = '2.0.3';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '20 Oct 2026 05:40';
+const CM_BUILD = '20 Oct 2026 14:00';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -7564,7 +7564,7 @@ const SKIN_CSS = `
 :host([data-retro]) .tmore svg { display: none; }
 :host([data-retro]) .tmore .tlbl { display: inline; font-size: 13.5px; font-weight: 600; white-space: nowrap; }
 :host([data-retro]) .tmore .tlbl::after { content: ' ▾'; font-size: 10px; }
-:host([data-skin]) .thread .msgs { padding: calc(var(--sk-bar-h, 56px) + 8px) 10px 86px; }
+:host([data-skin]) .thread .msgs { padding: calc(var(--sk-bar-h, 56px) + 8px) 10px calc(var(--cm-composer-h, 66px) + 20px); }
 :host([data-skin]) .page.thread { background: var(--sk-wall, var(--cm-bg)); }
 :host([data-skin]) .page.thread.has-bg .chatbg::after { background: none; }
 :host([data-retro]) .page.thread .chatbg { display: none; }
@@ -7769,7 +7769,7 @@ const SKIN_CSS = `
   --sk-menu: #fff; --sk-menu-r: 0; --sk-menu-bd: 1px solid #7fa3d0; --sk-menu-sh: 2px 2px 6px rgba(0,0,0,0.25); --sk-hl: #3168c6; --sk-hl-text: #fff; --sk-menu-fs: 13.5px; --sk-menu-pad: 6px 14px; --sk-mh: #2f63ad;
   --sk-row-pad: 6px 12px 6px 2px; --sk-name-fs: 14px; --sk-prev-fs: 12.5px; --sk-sep-left: 70px; --sk-unread: #2f9e1e;
 }
-:host([data-skin="msn"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 8px) 8px 82px; padding: 8px 10px; min-height: calc(100% - var(--sk-bar-h) - 90px); background: #fff; border: 1px solid #7fa3d0; border-radius: 4px; justify-content: flex-end; }
+:host([data-skin="msn"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 8px) 8px calc(var(--cm-composer-h, 66px) + 16px); padding: 8px 10px; min-height: calc(100% - var(--sk-bar-h) - 8px - var(--cm-composer-h, 66px) - 16px); background: #fff; border: 1px solid #7fa3d0; border-radius: 4px; justify-content: flex-end; }
 :host([data-skin="msn"]) .mrow.first::before { content: attr(data-who) ' says:'; }
 :host([data-skin="msn"]) .mrow:not(.first)::before { content: none; }
 :host([data-skin="msn"]) .clist .row .dot i { width: 9px; height: 9px; background: radial-gradient(circle at 35% 35%, #9df07a, #2f9e1e 70%); }
@@ -7790,7 +7790,7 @@ const SKIN_CSS = `
   --sk-menu: #c0c0c0; --sk-menu-r: 0; --sk-menu-bd: 2px outset #fff; --sk-menu-sh: 2px 2px 0 #000; --sk-hl: #000080; --sk-hl-text: #fff; --sk-menu-fs: 13px; --sk-menu-pad: 5px 12px; --sk-mh: #000080;
   --sk-sheet-r: 0; --sk-alert-r: 0; --sk-row-pad: 5px 12px 5px 2px; --sk-name-fs: 14px; --sk-prev-fs: 12.5px; --sk-sep-left: 66px; --sk-unread: #2e8b57;
 }
-:host([data-skin="icq"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 6px) 8px 82px; padding: 8px; min-height: calc(100% - var(--sk-bar-h) - 88px); background: #fff; border: 2px inset #fff; justify-content: flex-end; }
+:host([data-skin="icq"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 6px) 8px calc(var(--cm-composer-h, 66px) + 16px); padding: 8px; min-height: calc(100% - var(--sk-bar-h) - 6px - var(--cm-composer-h, 66px) - 16px); background: #fff; border: 2px inset #fff; justify-content: flex-end; }
 :host([data-skin="icq"]) .mrow.first::before { content: attr(data-who) ' (' attr(data-t) '):'; }
 :host([data-skin="icq"]) .mrow:not(.first)::before { content: none; }
 :host([data-skin="icq"]) .clist .scroll { background: #fff; border: 2px inset #fff; margin-left: 6px; margin-right: 6px; }
@@ -7813,7 +7813,7 @@ const SKIN_CSS = `
   --sk-sheet-r: 0; --sk-alert-r: 0; --sk-row-pad: 5px 12px 5px 2px; --sk-name-fs: 14px; --sk-prev-fs: 12.5px; --sk-sep-left: 66px; --sk-unread: #ffcc00;
 }
 :host([data-skin="aim"]) ha-card::after { box-shadow: inset -1px -1px #404040, inset 1px 1px #fff; }
-:host([data-skin="aim"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 6px) 6px 82px; padding: 8px; min-height: calc(100% - var(--sk-bar-h) - 88px); background: #fff; border: 2px inset #fff; justify-content: flex-end; font-family: Arial, sans-serif; }
+:host([data-skin="aim"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 6px) 6px calc(var(--cm-composer-h, 66px) + 16px); padding: 8px; min-height: calc(100% - var(--sk-bar-h) - 6px - var(--cm-composer-h, 66px) - 16px); background: #fff; border: 2px inset #fff; justify-content: flex-end; font-family: Arial, sans-serif; }
 :host([data-skin="aim"]) .mrow::before { content: attr(data-who) ' (' attr(data-t) '):'; }
 :host([data-skin="aim"]) .clist .scroll { background: #fff; border: 2px inset #fff; margin-left: 6px; margin-right: 6px; }
 
@@ -7832,7 +7832,7 @@ const SKIN_CSS = `
   --sk-menu: #fff; --sk-menu-r: 6px; --sk-menu-bd: 1px solid #7b3fc4; --sk-menu-sh: 0 6px 18px rgba(40,10,80,0.35); --sk-hl: #efe6fb; --sk-hl-text: #4b1a8c; --sk-menu-fs: 13.5px; --sk-menu-pad: 7px 14px; --sk-mh: #7b3fc4;
   --sk-row-pad: 6px 12px 6px 2px; --sk-name-fs: 14px; --sk-prev-fs: 12.5px; --sk-sep-left: 70px; --sk-unread: #7b3fc4;
 }
-:host([data-skin="yahoo"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 8px) 8px 82px; padding: 10px; min-height: calc(100% - var(--sk-bar-h) - 90px); background: #fff; border: 1px solid #b9a2dc; border-radius: 4px; justify-content: flex-end; }
+:host([data-skin="yahoo"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 8px) 8px calc(var(--cm-composer-h, 66px) + 16px); padding: 10px; min-height: calc(100% - var(--sk-bar-h) - 8px - var(--cm-composer-h, 66px) - 16px); background: #fff; border: 1px solid #b9a2dc; border-radius: 4px; justify-content: flex-end; }
 :host([data-skin="yahoo"]) .mrow::before { content: attr(data-who) ':'; }
 :host([data-skin="yahoo"]) .tmore { border: 2px solid #7b3fc4 !important; background: #efe6fb !important; color: #4b1a8c !important; height: 30px !important; }
 
@@ -7855,7 +7855,7 @@ const SKIN_CSS = `
 }
 :host([data-skin="win98"]) ha-card { background: #008080; }
 :host([data-skin="win98"]) ha-card::after { box-shadow: none; filter: drop-shadow(1px 1px 0 #000); }
-:host([data-skin="win98"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 4px) 6px 82px; padding: 6px; min-height: calc(100% - var(--sk-bar-h) - 86px); background: #fff; border: 2px inset #fff; justify-content: flex-end; }
+:host([data-skin="win98"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 4px) 6px calc(var(--cm-composer-h, 66px) + 16px); padding: 6px; min-height: calc(100% - var(--sk-bar-h) - 4px - var(--cm-composer-h, 66px) - 16px); background: #fff; border: 2px inset #fff; justify-content: flex-end; }
 :host([data-skin="win98"]) .mrow::before { content: '<' attr(data-who) '>'; }
 :host([data-skin="win98"]) .clist .scroll { background: #fff; border: 2px inset #fff; margin-left: 6px; margin-right: 6px; }
 :host([data-skin="win98"]) .composer .field .send::after, :host([data-skin="icq"]) .composer .field .send::after, :host([data-skin="aim"]) .composer .field .send::after,
@@ -7882,7 +7882,7 @@ const SKIN_CSS = `
 }
 :host([data-skin="xp"]) ha-card { border-top: 0; }
 :host([data-skin="xp"]) ha-card::after { box-shadow: inset 0 0 0 1px #fff; border-radius: 3px; }
-:host([data-skin="xp"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 8px) 8px 82px; padding: 8px; min-height: calc(100% - var(--sk-bar-h) - 90px); background: #fff; border: 1px solid #7f9db9; justify-content: flex-end; }
+:host([data-skin="xp"]) .thread .msgs { margin: calc(var(--sk-bar-h) + 8px) 8px calc(var(--cm-composer-h, 66px) + 16px); padding: 8px; min-height: calc(100% - var(--sk-bar-h) - 8px - var(--cm-composer-h, 66px) - 16px); background: #fff; border: 1px solid #7f9db9; justify-content: flex-end; }
 :host([data-skin="xp"]) .mrow { flex-direction: column; align-items: flex-start; }
 :host([data-skin="xp"]) .mrow.me { align-items: flex-end; }
 :host([data-skin="xp"]) .mrow.first::before { content: attr(data-who); font-weight: 700; font-size: 12.5px; color: #0a246a; margin: 0 4px 1px; }
@@ -13577,6 +13577,7 @@ ${this._toggle('n_show_attachment', 'Show Attachment Preview', 'Photos, videos a
 ${this._toggle('n_sound', 'Sound', 'Play the notification sound. On Android this uses the “Crow Messenger” notification channel.')}
 ${this._toggle('n_reply_action', 'Reply from Notification', 'Adds a Reply button so people can answer without opening Home Assistant.')}
 ${this._toggle('n_call_alerts', 'Call Alerts', 'When someone FaceTimes or calls from a chat, the other person gets “James is FaceTiming you” — even with alerts hidden or Focus on.')}
+${this._toggle('n_badge', 'App Icon Badge', 'A red number on the Home Assistant app’s icon on iPhone and iPad, showing unread messages (muted chats aren’t counted). Off until you turn it on. On Android, notifications for chats you’ve read are cleared, so the app’s dot goes away.')}
 <div class="grp-sub">People &amp; Phones</div>
 <div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">Phones are found automatically from the Home Assistant Companion app each person is signed in to. Turn off a person or a phone to stop notifications going there.</div>
 <div id="notify-people"><div style="font-size:12px;color:#888;padding:10px 0;">Loading…</div></div>`;
@@ -13995,7 +13996,7 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     });
 
     // Household settings (integration)
-    ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action', 'call_alerts'].forEach(k => {
+    ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action', 'call_alerts', 'badge'].forEach(k => {
       root.getElementById('n_' + k)?.addEventListener('change', (e) => this._saveSettings({ notifications: { [k]: e.target.checked } }));
     });
     RETENTION.forEach(([v]) => root.getElementById('retention_' + v)?.addEventListener('change', () => this._onRetention(v)));
@@ -14282,6 +14283,7 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     const n = st?.notifications || {};
     const chk = (id, on) => { const el = r.getElementById(id); if (el) el.checked = on; };
     ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action', 'call_alerts'].forEach(k => chk('n_' + k, n[k] !== false));
+    chk('n_badge', n.badge === true);
     const f = st?.features || {};
     ['link_previews', 'zones'].forEach(k => chk('f_' + k, f[k] !== false));
     const fw = r.getElementById('feat-wrap');
@@ -14290,7 +14292,7 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     RETENTION.forEach(([v]) => chk('retention_' + v, ret === v));
     const up = st?.max_upload_mb ?? 300;
     UPLOAD_SIZES.forEach(([v]) => chk('upload_' + v, up === v));
-    ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action', 'n_call_alerts'].forEach(id => {
+    ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action', 'n_call_alerts', 'n_badge'].forEach(id => {
       const row = r.getElementById(id)?.closest('.toggle-item');
       if (row) row.style.opacity = n.enabled === false ? '0.4' : '1';
     });
