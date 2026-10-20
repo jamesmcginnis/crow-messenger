@@ -90,20 +90,6 @@ def thread_title(thread: dict, users: dict, for_uid: str) -> str:
     return f"{', '.join(others[:2])} & {len(others) - 2} others"
 
 
-def _badge(hass: HomeAssistant, uid: str) -> int | None:
-    """The app icon badge, when Crow Email looks after it: its unread email plus our unread messages."""
-    reg = hass.data.get("crow_badge")
-    if not reg or not callable(reg.get("total")):
-        return None
-    try:
-        n = reg["total"](uid)
-        if n is not None and callable(reg.get("sent")):
-            reg["sent"](uid, n)
-        return n
-    except Exception:  # noqa: BLE001
-        return None
-
-
 async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, msg: dict, users: dict) -> None:
     """Send the phone notifications for one new message."""
     settings = messenger.settings.get("notifications", {})
@@ -178,9 +164,6 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
                 data["tag"] = tag
                 data["push"] = {"thread-id": f"{TAG_PREFIX}{thread['id']}",
                                 "sound": "default" if settings.get("sound", True) else "none"}
-                badge = _badge(hass, uid)
-                if badge is not None:
-                    data["push"]["badge"] = badge
                 if group_title:
                     data["subtitle"] = group_title if mentioned else sender
                 if mentioned or ringing:
