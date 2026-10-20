@@ -658,6 +658,7 @@ SETTINGS_SCHEMA = vol.Schema({
         vol.Optional("sound"): bool,
         vol.Optional("reply_action"): bool,
         vol.Optional("call_alerts"): bool,
+        vol.Optional("badge"): bool,
     }),
     vol.Optional("features"): vol.Schema({
         vol.Optional("link_previews"): bool,

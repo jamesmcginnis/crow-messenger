@@ -148,6 +148,7 @@ from .features import FeaturesMixin  # noqa: E402 - needs the helpers above
 from .features2 import MoreFeaturesMixin  # noqa: E402
 from .play import PlayMixin  # noqa: E402
 from .organise import OrganiseMixin  # noqa: E402
+from .badge import COUNTED as BADGE_COUNTED  # noqa: E402
 
 
 class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
@@ -172,6 +173,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
         self.push_callback: Callable | None = None  # set by __init__ (notify.async_push)
         self.message_hook: Callable | None = None  # set by __init__ (the Home Assistant chat)
         self.alert_callback: Callable | None = None  # set by __init__ (notify.async_alert)
+        from .badge import Badge
+        self.badge = Badge(self)  # the app icon badge (off until turned on in the editor)
 
     # ── Persistence ─────────────────────────────────────────────────────────
     async def async_load(self) -> None:
@@ -293,6 +296,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
                 pass
 
     def _send_to(self, uid: str, payload: dict) -> None:
+        if payload.get("type") in BADGE_COUNTED:
+            self.badge.changed(uid)
         for sub in list(self._subs.values()):
             if sub.uid == uid:
                 try:
@@ -946,6 +951,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
         self._save()
         if "retention_days" in patch:
             await self.async_cleanup()
+        if "badge" in (patch.get("notifications") or {}):
+            self.badge.everyone_changed(force=True)
         return self.settings
 
     @callback

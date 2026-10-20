@@ -164,6 +164,9 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
                 data["tag"] = tag
                 data["push"] = {"thread-id": f"{TAG_PREFIX}{thread['id']}",
                                 "sound": "default" if settings.get("sound", True) else "none"}
+                badge = messenger.badge.for_notification(uid)
+                if badge is not None:
+                    data["push"]["badge"] = badge
                 if group_title:
                     data["subtitle"] = group_title if mentioned else sender
                 if mentioned or ringing:
@@ -183,6 +186,7 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
                 data["clickAction"] = link
                 data["group"] = f"{TAG_PREFIX}{thread['id']}"
                 data["tag"] = tag
+                messenger.badge.note_notified(uid, thread["id"], tag)
                 data["channel"] = ANDROID_CHANNEL if settings.get("sound", True) else ANDROID_CHANNEL_SILENT
                 data["importance"] = "high"
                 data["priority"] = "high"

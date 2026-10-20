@@ -224,5 +224,7 @@ async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.services.async_remove(DOMAIN, SERVICE_SEND_MESSAGE)
-    hass.data.pop(DOMAIN, None)
+    m = hass.data.pop(DOMAIN, None)
+    if m is not None and getattr(m, "badge", None):
+        m.badge.unload()
     return True
