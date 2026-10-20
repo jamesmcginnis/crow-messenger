@@ -77,6 +77,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     async def _push(thread, msg, users):
         await async_push(hass, messenger, thread, msg, users)
+        # the app icon badge (looked after by Crow Email, when it's installed and turned on)
+        for uid in thread["participants"]:
+            if uid != msg.get("sender"):
+                messenger.badge_changed(uid)
 
     messenger.push_callback = _push
 

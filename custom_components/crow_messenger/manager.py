@@ -388,6 +388,26 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
             **self.organise_thread_view(thread, uid),
         }
 
+    def unread_total(self, uid: str) -> int:
+        """Unread messages in conversations that aren't muted, for the app icon badge (shared with Crow Email)."""
+        n = 0
+        for t in self.data["threads"].values():
+            if uid not in t["participants"] or self.is_muted(t, uid):
+                continue
+            v = self.thread_view(t, uid)
+            if v["visible"]:
+                n += v["unread"] or (1 if v.get("marked_unread") else 0)
+        return n
+
+    def badge_changed(self, uid: str) -> None:
+        """Tell Crow Email (which looks after the app icon badge) that the unread count may have changed."""
+        reg = self.hass.data.get("crow_badge")
+        if reg and callable(reg.get("changed")):
+            try:
+                reg["changed"](uid)
+            except Exception:  # noqa: BLE001
+                pass
+
     def threads_for(self, uid: str) -> list[dict]:
         views = [self.thread_view(t, uid) for t in self.data["threads"].values() if uid in t["participants"]]
         views = [v for v in views if v["visible"]]
@@ -544,6 +564,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
             return
         thread["read"][uid] = last
         self._save()
+        self.badge_changed(uid)
         for pid in thread["participants"]:
             self._send_to(pid, {"type": "read", "thread_id": thread_id, "user_id": uid, "ts": last,
                                 "unread": 0 if pid == uid else None})
