@@ -74,6 +74,7 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **One-to-one and group chats** — group names and photos, mentions, nicknames and member management
 - **Photos, videos and files** — up to 300 MB each by default, stored on your Home Assistant server
 - **Replies, tapbacks, edits and Undo Send** — press and hold any message for the full menu
+- **Instant when you come back** — your conversations, the newest messages of your recent chats and photo thumbnails are kept on your device, so opening the card or coming back to the app shows them straight away, then quietly fetches anything new. Each person's copy is separate, and it is cleared when someone else signs in on that device
 - **Bubble and screen effects** — Slam, Loud, Gentle, Invisible Ink, Fireworks, Confetti, Balloons and many more
 - **Text formatting** — bold, italic, underline and strikethrough
 - **Stickers and Sketch** — make stickers from photos, or draw and send a sketch

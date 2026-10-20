@@ -25,6 +25,7 @@ Everything is **private to your household** — nothing is stored in the cloud.
 - **iPhone Messages Design** — Liquid Glass bars, bubbles with tails and swipe actions
 - **One-to-one and Group Chats** — group names and photos, mentions and nicknames
 - **Photos, Videos and Files** — up to 300 MB each by default, stored on your server
+- **Instant When You Come Back** — your chats show straight away, then only new messages are fetched
 - **Replies, Tapbacks, Edits and Undo Send** — press and hold any message
 - **Bubble and Screen Effects** — Invisible Ink, Fireworks, Confetti, Balloons and more
 - **Send Later and Disappearing Messages**
