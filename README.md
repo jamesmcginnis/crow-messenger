@@ -136,6 +136,7 @@ All optional, and each can be switched off individually in the editor:
 ### Integration
 
 - **Phone notifications** — through the Companion app on iPhone and Android, with Reply right from the notification
+- **App icon badge** — optional and off by default: a red number on the Home Assistant app's icon on iPhone and iPad showing unread messages (muted chats aren't counted), kept up to date even when you read a chat on another device. On Android, notifications for chats you've read are cleared, so the app's dot goes away
 - **Focus aware** — see when someone has notifications silenced, and choose Notify Anyway
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from your automations
 - **`crow_messenger_message_received` event** — build automations around new messages
@@ -263,6 +264,7 @@ show_people_map: true
 | Largest File Attachment | 300 MB | The biggest photo, video or file anyone can send |
 | Delete Photos & Files from the Server | 90 Days | Clears out older attachments when you choose |
 | One Dashboard for Everyone | On | Every notification opens the same dashboard |
+| App Icon Badge | Off | A red number on the Home Assistant app's icon showing unread messages |
 | AI Features | Off | Turns on the AI features for everyone |
 
 ---

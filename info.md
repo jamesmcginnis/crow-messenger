@@ -55,6 +55,7 @@ All optional, and each can be switched off individually:
 ## Integration
 
 - **Phone Notifications** — through the Companion app, with Reply from the notification
+- **App Icon Badge** — optional: a red number on the app's icon showing unread messages
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from automations
 - **`crow_messenger_message_received` event** — for automations around new messages
 - **`crow_messenger_action` event** — when someone taps a button sent by an automation
