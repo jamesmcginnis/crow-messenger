@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '1.9.7';
+const CM_VERSION = '2.0.0';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '19 Oct 2026 08:45';
+const CM_BUILD = '20 Oct 2026 05:40';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -1758,6 +1758,112 @@ const CM_MORE_CSS = `
 const HA_ID = '__home_assistant__';
 // Colour settings older versions kept in the editor; colours now come from each person's theme in the card
 const CM_OLD_COLOURS = ['accent_color', 'sent_bubble_color', 'sent_text_color', 'received_bubble_color', 'received_text_color', 'background_color'];
+// ── Keeping chats on this device ─────────────────────────────────────────────
+// Your conversations, contacts and the newest messages of your recent chats are remembered on
+// this device, so opening the card (or coming back to the app) shows them straight away, then
+// quietly brings them up to date. Photo thumbnails are kept too (in the browser's own database).
+// Each person's copy is separate, and anyone else's is cleared when a different person signs in.
+const CM_KEEP_DAYS = 14;
+const CM_SHARED = new Map();   // user id -> { boot, msgs, blobs, ready }: shared by every card on the page
+const cmStore = {
+  key: (uid) => `crowMessengerCache:${uid}`,
+  shared(uid) {
+    let sh = CM_SHARED.get(uid);
+    if (sh) return sh;
+    sh = { boot: null, msgs: {}, blobs: new Map(), ready: new Map() };
+    CM_SHARED.set(uid, sh);
+    try {
+      const raw = JSON.parse(localStorage.getItem(this.key(uid)) || 'null');
+      if (raw && raw.v === 1 && raw.at > Date.now() - CM_KEEP_DAYS * 86400000 && raw.boot?.me === uid) { sh.boot = raw.boot; sh.msgs = raw.msgs || {}; }
+    } catch (e) { /* nothing kept, or it couldn't be read */ }
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('crowMessengerCache:') && k !== this.key(uid)) localStorage.removeItem(k);
+      }
+    } catch (e) { /* */ }
+    cmMedia.purgeOthers(uid);
+    return sh;
+  },
+  // big pictures (photos, backgrounds, stickers) aren't kept: they come with the fresh copy
+  slim(v) { return JSON.parse(JSON.stringify(v, (k, x) => (typeof x === 'string' && x.length > 60000 && x.startsWith('data:') ? undefined : x))); },
+  persist(uid, build) {
+    clearTimeout(this._t?.[uid]);
+    this._t = this._t || {};
+    this._t[uid] = setTimeout(() => {
+      const sh = CM_SHARED.get(uid);
+      if (!sh) return;
+      let data;
+      try { data = build(); } catch (e) { return; }
+      if (!data) return;
+      sh.boot = data.boot; sh.msgs = data.msgs;
+      let msgs = Object.entries(data.msgs);
+      const pack = () => JSON.stringify({ v: 1, at: Date.now(), boot: cmStore.slim(data.boot), msgs: Object.fromEntries(msgs) });
+      try {
+        let out = pack();
+        while (out.length > 2000000 && msgs.length) { msgs = msgs.slice(0, -1); out = pack(); }
+        localStorage.setItem(this.key(uid), out);
+      } catch (e) {
+        try { msgs = msgs.slice(0, 2); localStorage.setItem(this.key(uid), pack()); } catch (e2) { /* storage full or blocked */ }
+      }
+    }, 1200);
+  },
+};
+
+// photo and video thumbnails, kept in the browser's database (IndexedDB) so they appear at once
+const cmMedia = {
+  MAX: 500,
+  open() {
+    if (this._db !== undefined) return this._db;
+    this._db = new Promise((res) => {
+      try {
+        const rq = indexedDB.open('crowMessenger', 1);
+        rq.onupgradeneeded = () => { const st = rq.result.createObjectStore('media'); st.createIndex('at', 'at'); };
+        rq.onsuccess = () => res(rq.result);
+        rq.onerror = () => res(null);
+        rq.onblocked = () => res(null);
+      } catch (e) { res(null); }
+    });
+    return this._db;
+  },
+  async get(key) {
+    const db = await this.open();
+    if (!db) return null;
+    return new Promise((res) => {
+      try {
+        const rq = db.transaction('media').objectStore('media').get(key);
+        rq.onsuccess = () => res(rq.result?.blob || null);
+        rq.onerror = () => res(null);
+      } catch (e) { res(null); }
+    });
+  },
+  async put(key, blob) {
+    const db = await this.open();
+    if (!db) return;
+    try {
+      const tx = db.transaction('media', 'readwrite');
+      const st = tx.objectStore('media');
+      st.put({ blob, at: Date.now() }, key);
+      const cnt = st.count();
+      cnt.onsuccess = () => {
+        let extra = cnt.result - this.MAX;
+        if (extra <= 0) return;
+        const cur = st.index('at').openKeyCursor();
+        cur.onsuccess = () => { const c = cur.result; if (c && extra-- > 0) { st.delete(c.primaryKey); c.continue(); } };
+      };
+    } catch (e) { /* full or blocked */ }
+  },
+  async purgeOthers(uid) {
+    const db = await this.open();
+    if (!db) return;
+    try {
+      const st = db.transaction('media', 'readwrite').objectStore('media');
+      const cur = st.openKeyCursor();
+      cur.onsuccess = () => { const c = cur.result; if (!c) return; if (!String(c.primaryKey).startsWith(`${uid}|`)) st.delete(c.primaryKey); c.continue(); };
+    } catch (e) { /* */ }
+  },
+};
+
 const CM_DEFAULTS = {
   card_liquid_glass: true, appearance: 'auto', use_ha_theme: false, default_skin: '',
   glass_popups: true, glass_bars: true, contact_blur: true, animations: true, effect_words: true,
@@ -1929,9 +2035,54 @@ class CrowMessengerCard extends HTMLElement {
   // ── Server connection ──────────────────────────────────────────────────────
   _ws(type, payload = {}) { return this._hass.callWS({ type: `crow_messenger/${type}`, ...payload }); }
 
+  // what was on screen last time: shown at once, before Home Assistant answers
+  _warmStart() {
+    const uid = this._hass?.user?.id;
+    if (!uid || this._s.ready) return;
+    const sh = cmStore.shared(uid);
+    this._blobs = sh.blobs; this._blobReady = sh.ready;
+    if (!sh.boot) return;
+    try {
+      this._applyBoot(sh.boot);
+      for (const [tid, b] of Object.entries(sh.msgs || {})) {
+        if (this._s.threads.has(tid) && !this._s.msgs.has(tid)) this._s.msgs.set(tid, { list: b.list || [], more: !!b.more, loaded: true, loading: false, stale: true });
+      }
+      this._s.cached = true;
+      this._refresh('all');
+      this._restoreLastChat();
+    } catch (e) { this._s.ready = false; }
+  }
+
+  // the conversations and newest messages, for next time
+  _keepSoon() {
+    const uid = this._s.me;
+    if (!uid || !this._s.ready || this._s.cached) return;
+    cmStore.persist(uid, () => {
+      const s = this._s;
+      const threads = [...s.threads.values()];
+      const boot = { ...(this._boot || {}), me: s.me, is_admin: s.isAdmin, profile: s.profile, backgrounds: s.backgrounds, themes: s.themes, ai: s.ai,
+        stickers: s.stickers, features: s.features, focus_entities: s.focusEntities, presence: s.presence, share_hidden: [...(s.shareHidden || [])],
+        limits: s.limits, users: [...s.users.values()], threads, contacts: [...s.contacts.values()],
+        scheduled: [...s.scheduled.values()].flat() };
+      const recent = threads.slice().sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0)).map(t => t.id);
+      const msgs = {};
+      for (const tid of recent) {
+        const b = s.msgs.get(tid);
+        if (!b?.loaded || b.stale) { const old = CM_SHARED.get(uid)?.msgs?.[tid]; if (old) msgs[tid] = old; }
+        else {
+          const list = b.list.filter(m => !m.pending && !m.failed);
+          msgs[tid] = { list: list.slice(-40), more: b.more || list.length > 40 };
+        }
+        if (Object.keys(msgs).length >= 15) break;
+      }
+      return { boot, msgs };
+    });
+  }
+
   async _connect() {
     if (this._connecting || !this._hass) return;
     this._connecting = true;
+    this._warmStart();
     try {
       this._unsub = await this._hass.connection.subscribeMessage((ev) => this._onEvent(ev), { type: 'crow_messenger/subscribe' });
       this._hass.connection.addEventListener('ready', this._onReady);
@@ -1946,7 +2097,33 @@ class CrowMessengerCard extends HTMLElement {
 
   async _bootstrap(reconnect = false) {
     const r = await this._ws('bootstrap');
+    const warm = !!this._s.cached;
+    this._applyBoot(r);
     const s = this._s;
+    s.cached = false;
+    // what was shown from this device is brought up to date quietly: the open chat now, others when opened
+    for (const [tid, box] of s.msgs) {
+      if (!s.threads.has(tid)) { s.msgs.delete(tid); continue; }
+      if (box.loaded && (reconnect || warm)) box.stale = true;
+    }
+    const open = [...this._stack].reverse().find(p => p.type === 'thread');
+    if (open && s.msgs.get(open.data.tid)?.stale) this._loadMsgs(open.data.tid, { soft: true });
+    this._refresh('all');
+    this._checkDeepLink();
+    if (!reconnect && !warm) this._restoreLastChat();
+    else this._restoreTried = true;
+    this._reportFocus();
+    this._keepSoon();
+    // Tell the integration which dashboard this card is on, so notifications
+    // can open here when no dashboard has been chosen for this person.
+    if (!new URLSearchParams(window.location.search).has('edit')) {
+      this._ws('here', { path: window.location.pathname }).catch(() => {});
+    }
+  }
+
+  _applyBoot(r) {
+    const s = this._s;
+    this._boot = r;
     s.me = r.me; s.isAdmin = r.is_admin; s.profile = r.profile || {}; s.limits = r.limits || s.limits;
     s.backgrounds = r.backgrounds || {};
     s.themes = r.themes || {};
@@ -1964,18 +2141,6 @@ class CrowMessengerCard extends HTMLElement {
     this._loadDrafts();
     s.contacts = new Map(r.contacts.map(c => [c.id, c]));
     s.error = null; s.ready = true;
-    if (reconnect) {
-      for (const [tid, box] of s.msgs) if (box.loaded) this._loadMsgs(tid, { reset: true });
-    }
-    this._refresh('all');
-    this._checkDeepLink();
-    if (!reconnect) this._restoreLastChat();
-    this._reportFocus();
-    // Tell the integration which dashboard this card is on, so notifications
-    // can open here when no dashboard has been chosen for this person.
-    if (!new URLSearchParams(window.location.search).has('edit')) {
-      this._ws('here', { path: window.location.pathname }).catch(() => {});
-    }
   }
 
   _onEvent(ev) {
@@ -2276,6 +2441,7 @@ class CrowMessengerCard extends HTMLElement {
 
   _refresh(what, tid, force) {
     for (const p of this._stack) p.refresh?.(what, tid, force);
+    if (['all', 'messages', 'thread', 'read', 'contacts'].includes(what)) this._keepSoon();
   }
 
   _openThread(tid, opts = {}) {
@@ -2944,6 +3110,7 @@ class CrowMessengerCard extends HTMLElement {
       page.visible = true; page.renderBg();
       const box = s.msgs.get(tid);
       if (!box?.loaded) this._loadMsgs(tid);
+      else if (box.stale && !this._s.cached) this._loadMsgs(tid, { soft: true });
       this._maybeMarkRead();
       if (!coarse()) setTimeout(() => composer.focus(), 350);
     };
@@ -3153,20 +3320,27 @@ class CrowMessengerCard extends HTMLElement {
     return t.participants.find(p => p !== this._s.me) || null;
   }
 
-  async _loadMsgs(tid, { reset = false } = {}) {
+  async _loadMsgs(tid, { reset = false, soft = false } = {}) {
     const s = this._s;
     let box = s.msgs.get(tid);
-    if (!box || reset) { const pending = box?.list.filter(m => m.pending) || []; box = { list: pending, more: false, loaded: false, loading: true }; s.msgs.set(tid, box); }
+    // soft: what's on screen stays while the newest messages are fetched (no loading spinner)
+    if (soft && box?.loaded) {
+      if (box.refreshing) return;
+      box.refreshing = true;
+    } else if (!box || reset) { const pending = box?.list.filter(m => m.pending) || []; box = { list: pending, more: false, loaded: false, loading: true }; s.msgs.set(tid, box); }
     try {
       const r = await this._ws('messages', { thread_id: tid, limit: 60 });
       const pending = box.list.filter(m => m.pending);
-      box.list = [...r.messages, ...pending];
-      box.more = r.more; box.loaded = true;
+      const first = r.messages[0]?.ts;
+      // older messages you'd already scrolled back to are kept
+      const older = soft && first !== undefined && r.more ? box.list.filter(m => !m.pending && m.ts < first) : [];
+      box.list = [...older, ...r.messages, ...pending];
+      box.more = older.length ? box.more : r.more; box.loaded = true; box.stale = false;
       this._upsertThread(r.thread);
     } catch (err) {
       box.loaded = true;
       if (err?.code === 'not_found') { s.threads.delete(tid); this._closeThreadPages(tid); this._toast('This conversation is no longer available'); }
-    } finally { box.loading = false; }
+    } finally { box.loading = false; box.refreshing = false; }
     this._refresh('messages', tid);
     this._maybeMarkRead();
   }
@@ -3298,8 +3472,11 @@ class CrowMessengerCard extends HTMLElement {
   _media(aid, thumb = false) {
     const key = `${aid}:${thumb ? 1 : 0}`;
     if (!this._blobs.has(key)) {
-      const p = this._hass.fetchWithAuth(`/api/crow_messenger/media/${encodeURIComponent(aid)}${thumb ? '?thumb=1' : ''}`)
+      const dbKey = `${this._s.me || this._hass?.user?.id || ''}|${key}`;
+      const fetchIt = () => this._hass.fetchWithAuth(`/api/crow_messenger/media/${encodeURIComponent(aid)}${thumb ? '?thumb=1' : ''}`)
         .then(r => { if (!r.ok) throw new Error(r.status); return r.blob(); })
+        .then(b => { if (thumb || (b.type.startsWith('image/') && b.size < 1500000)) cmMedia.put(dbKey, b); return b; });
+      const p = cmMedia.get(dbKey).then(b => b || fetchIt())
         .then(b => { const u = URL.createObjectURL(b); this._blobReady.set(key, u); return u; });
       p.catch(() => this._blobs.delete(key));
       this._blobs.set(key, p);
@@ -14405,8 +14582,21 @@ Object.assign(CrowLiveWallpaper.prototype, {
 
 });
 
-if (!customElements.get('crow-messenger-card')) customElements.define('crow-messenger-card', CrowMessengerCard);
-if (!customElements.get('crow-messenger-card-editor')) customElements.define('crow-messenger-card-editor', CrowMessengerCardEditor);
+// Home Assistant can swap in a new custom element registry while it starts up, and a card
+// defined before that happens isn't found (the card picker then spins forever). So the card
+// checks again over the first few seconds, and defines itself in whichever registry is current.
+const defineCrowMessenger = () => {
+  [['crow-messenger-card', CrowMessengerCard], ['crow-messenger-card-editor', CrowMessengerCardEditor]].forEach(([name, cls]) => {
+    const reg = window.customElements;
+    if (reg.get(name)) return;
+    try { reg.define(name, cls); } catch (e) {
+      try { reg.define(name, class extends cls {}); } catch (e2) { /* defined meanwhile */ }
+    }
+  });
+};
+defineCrowMessenger();
+[0, 300, 1000, 2500, 5000, 10000].forEach(t => setTimeout(defineCrowMessenger, t));
+window.addEventListener('load', defineCrowMessenger);
 window.customCards = window.customCards || [];
 if (!window.customCards.some(c => c.type === 'crow-messenger-card')) {
   window.customCards.push({
