@@ -6,7 +6,7 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.0.0';
+const CM_VERSION = '2.0.1';
 // when this copy of the card was built (shown at the bottom of the visual editor)
 const CM_BUILD = '20 Oct 2026 05:40';
 
