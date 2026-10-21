@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.0.5';
+const CM_VERSION = '2.1.5';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '20 Oct 2026 14:20';
+const CM_BUILD = '21 Oct 2026 06:45';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -3366,7 +3366,8 @@ class CrowMessengerCard extends HTMLElement {
     const top = this._stack[this._stack.length - 1];
     if (top?.type !== 'thread' || document.visibilityState !== 'visible' || !this.isConnected) return;
     const tid = top.data.tid, t = this._s.threads.get(tid);
-    if (!t || (!t.unread && !t.marked_unread)) return;
+    const selfUnread = t && t.participants?.length === 1 && t.participants[0] === this._s.me && (t.last?.ts || 0) > (t.self_read || 0);
+    if (!t || (!t.unread && !t.marked_unread && !selfUnread)) return;
     clearTimeout(this._readTimer);
     this._readTimer = setTimeout(() => {
       t.unread = 0; t.marked_unread = false;
@@ -3439,6 +3440,11 @@ class CrowMessengerCard extends HTMLElement {
     if (!t) return '';
     const others = t.participants.filter(p => p !== this._s.me && p !== HA_ID);
     const readers = others.filter(p => (t.read?.[p] || 0) >= m.ts);
+    // a chat with yourself: Read once you've read it (from the notification, or by opening the chat)
+    if (!others.length && (t.self_read || 0) >= m.ts) {
+      const ts = t.self_read;
+      return `<div class="receipt"><b>Read</b> ${esc(sameDay(new Date(ts), new Date()) ? fmtTime(ts, this._hass) : fmtListDate(ts, this._hass))}</div>`;
+    }
     if (!t.is_group && readers.length) {
       const ts = t.read[readers[0]];
       return `<div class="receipt"><b>Read</b> ${esc(sameDay(new Date(ts), new Date()) ? fmtTime(ts, this._hass) : fmtListDate(ts, this._hass))}</div>`;
@@ -13585,8 +13591,13 @@ ${this._toggle('n_show_text', 'Show Message Text', 'Turn off to show just “New
 ${this._toggle('n_show_attachment', 'Show Attachment Preview', 'Photos, videos and audio messages appear in the notification itself.')}
 ${this._toggle('n_sound', 'Sound', 'Play the notification sound. On Android this uses the “Crow Messenger” notification channel.')}
 ${this._toggle('n_reply_action', 'Reply from Notification', 'Adds a Reply button so people can answer without opening Home Assistant.')}
-${this._toggle('n_call_alerts', 'Call Alerts', 'When someone FaceTimes or calls from a chat, the other person gets “James is FaceTiming you” — even with alerts hidden or Focus on.')}
-${this._toggle('n_badge', 'App Icon Badge', 'A red number on the Home Assistant app’s icon on iPhone and iPad, showing unread messages (muted chats aren’t counted). Off until you turn it on. On Android, notifications for chats you’ve read are cleared, so the app’s dot goes away.')}
+${this._toggle('n_badge', 'App Icon Badge', 'A red number on the Home Assistant app’s icon on iPhone and iPad, showing unread messages (muted chats aren’t counted). Off until you turn it on.')}
+<div class="grp-sub">Notification Buttons</div>
+<div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">Press and hold a message notification to use these. Android shows three at most: Reply, Mark as Read and Thumbs Up.</div>
+${this._toggle('nb_tapbacks', 'Tapbacks', 'Heart, Thumbs Up and Ha Ha, so you can react without opening the chat.')}
+${this._toggle('nb_mark_read', 'Mark as Read', 'Marks the conversation as read, and clears the badge.')}
+${this._toggle('nb_mute', 'Hide Alerts for 1 Hour', 'Silences that conversation for an hour.')}
+${this._toggle('nb_home', 'I’m Home and On My Way', 'Sends “I’m home 🏠” or “On my way 🚗” with one tap.')}
 <div class="grp-sub">People &amp; Phones</div>
 <div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">Phones are found automatically from the Home Assistant Companion app each person is signed in to. Turn off a person or a phone to stop notifications going there.</div>
 <div id="notify-people"><div style="font-size:12px;color:#888;padding:10px 0;">Loading…</div></div>`;
@@ -14005,8 +14016,11 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     });
 
     // Household settings (integration)
-    ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action', 'call_alerts', 'badge'].forEach(k => {
+    ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action', 'badge'].forEach(k => {
       root.getElementById('n_' + k)?.addEventListener('change', (e) => this._saveSettings({ notifications: { [k]: e.target.checked } }));
+    });
+    ['tapbacks', 'mark_read', 'mute', 'home'].forEach(k => {
+      root.getElementById('nb_' + k)?.addEventListener('change', (e) => this._saveSettings({ notifications: { buttons: { [k]: e.target.checked } } }));
     });
     RETENTION.forEach(([v]) => root.getElementById('retention_' + v)?.addEventListener('change', () => this._onRetention(v)));
     UPLOAD_SIZES.forEach(([v]) => root.getElementById('upload_' + v)?.addEventListener('change', () => this._saveSettings({ max_upload_mb: v })));
@@ -14291,8 +14305,10 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     });
     const n = st?.notifications || {};
     const chk = (id, on) => { const el = r.getElementById(id); if (el) el.checked = on; };
-    ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action', 'call_alerts'].forEach(k => chk('n_' + k, n[k] !== false));
+    ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action'].forEach(k => chk('n_' + k, n[k] !== false));
     chk('n_badge', n.badge === true);
+    const nb = n.buttons || {};
+    ['tapbacks', 'mark_read', 'mute', 'home'].forEach(k => chk('nb_' + k, k === 'tapbacks' || k === 'mark_read' ? nb[k] !== false : nb[k] === true));
     const f = st?.features || {};
     ['link_previews', 'zones'].forEach(k => chk('f_' + k, f[k] !== false));
     const fw = r.getElementById('feat-wrap');
@@ -14301,7 +14317,7 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     RETENTION.forEach(([v]) => chk('retention_' + v, ret === v));
     const up = st?.max_upload_mb ?? 300;
     UPLOAD_SIZES.forEach(([v]) => chk('upload_' + v, up === v));
-    ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action', 'n_call_alerts', 'n_badge'].forEach(id => {
+    ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action', 'n_badge', 'nb_tapbacks', 'nb_mark_read', 'nb_mute', 'nb_home'].forEach(id => {
       const row = r.getElementById(id)?.closest('.toggle-item');
       if (row) row.style.opacity = n.enabled === false ? '0.4' : '1';
     });
