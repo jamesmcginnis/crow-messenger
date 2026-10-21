@@ -5,7 +5,8 @@ Off until an administrator turns on App Icon Badge in the card editor.
 iPhone and iPad: each Crow Messenger notification carries the number, and when it changes without
 a notification (you read a chat on another device, or a chat is muted or removed) a silent update
 ("delete_alert") sets it.
-Android shows a dot for each notification, so the notifications for a chat are cleared once it's read.
+Whether or not the badge is on, a chat's notifications are taken away on every phone and tablet once
+it's been read (on Android that's also what makes the app's dot go away).
 """
 from __future__ import annotations
 
@@ -65,16 +66,26 @@ class Badge:
             self._sent[uid] = n
         return n
 
-    def note_notified(self, uid: str, thread_id: str, tag: str) -> None:
-        if not self.enabled:
-            return
+    def note_notified(self, uid: str, thread_id: str, tag: str, ts: int) -> None:
         lst = self._tags.setdefault(uid, {}).setdefault(thread_id, [])
-        lst.append(tag)
+        lst.append((tag, ts))
         del lst[:-30]
+
+    @callback
+    def read(self, uid: str, thread_id: str, ts: int) -> None:
+        """Someone has just read a chat (opened it, or pressed Mark as Read or a tapback): take its
+        notifications away on all their phones and tablets."""
+        lst = (self._tags.get(uid) or {}).get(thread_id) or []
+        gone = [t for t, at in lst if at <= ts]
+        if not gone:
+            return
+        self._tags[uid][thread_id] = [(t, at) for t, at in lst if at > ts]
+        self.hass.async_create_task(self._clear(uid, gone))
 
     # ── a silent update when the number changes without a notification ───────
     @callback
     def changed(self, uid: str, now: bool = False) -> None:
+        """Something changed someone's unread messages: bring the badge up to date (when it's on)."""
         if not self.enabled or not uid:
             return
         if uid in self._timers:
@@ -105,7 +116,6 @@ class Badge:
             if n is None:
                 return
             if not force and self._sent.get(uid) == n:
-                await self._clear_read(uid)
                 return
             self._sent[uid] = n
         for device in devices_for_user(self.hass, self.messenger, uid):
@@ -116,31 +126,13 @@ class Badge:
                                                     {"message": "delete_alert", "data": {"push": {"badge": n}}})
             except Exception as err:  # noqa: BLE001
                 _LOGGER.debug("Crow Messenger couldn't update the badge on %s: %s", device["service"], err)
-        if not clear:
-            await self._clear_read(uid)
 
-    async def _clear_read(self, uid: str) -> None:
-        """Take away the Android notifications for chats that have now been read (the app's dot)."""
+    async def _clear(self, uid: str, tags: list[str]) -> None:
         from .notify import devices_for_user
-        mine = self._tags.get(uid) or {}
-        if not mine:
-            return
-        m = self.messenger
-        done = []
-        for tid, tags in mine.items():
-            t = m.data.get("threads", {}).get(tid)
-            v = m.thread_view(t, uid) if t and uid in t["participants"] else None
-            if v is None or not (v.get("unread") or 0):
-                done.append(tid)
-        if not done:
-            return
-        androids = [d["service"] for d in devices_for_user(self.hass, m, uid) if d["platform"] == "android"]
-        for tid in done:
-            tags = mine.pop(tid, [])
-            for service in androids:
-                for tag in tags[-20:]:
-                    try:
-                        await self.hass.services.async_call("notify", service, {"message": "clear_notification",
-                                                                                "data": {"tag": tag}})
-                    except Exception:  # noqa: BLE001
-                        pass
+        for device in devices_for_user(self.hass, self.messenger, uid):
+            for tag in tags[-20:]:
+                try:
+                    await self.hass.services.async_call("notify", device["service"], {"message": "clear_notification",
+                                                                                      "data": {"tag": tag}})
+                except Exception:  # noqa: BLE001
+                    pass

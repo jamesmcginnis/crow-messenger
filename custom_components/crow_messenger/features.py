@@ -403,7 +403,9 @@ class FeaturesMixin:
             msg.pop("reactions", None)
         self._save()
         self._push_update(thread, msg)
-        if emoji and msg["sender"] not in (uid, HA_SENDER_ID):
+        # the sender is told - and in a chat with yourself you're told too, so tapbacks can be tried out
+        self_chat = thread["participants"] == [uid]
+        if emoji and msg["sender"] != HA_SENDER_ID and (msg["sender"] != uid or self_chat):
             users = await self.async_user_map()
             name = users.get(uid, {}).get("name", "Someone")
             word = TAPBACK_WORDS.get(emoji)

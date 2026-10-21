@@ -27,9 +27,10 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_integration
 
 from .const import CLEANUP_INTERVAL_MINUTES, DOMAIN, HA_SENDER_ID, SERVICE_SEND_MESSAGE
-from .http import MediaView, PushMediaView, UploadView
+from .http import MediaView, PushMediaView, UploadView, PushImageView
 from .manager import Messenger, MessengerError, new_id, now_ms
 from .const import ACTION_PREFIX
+from . import pushplus
 from .notify import REPLY_ACTION_PREFIX, TAG_PREFIX, async_alert, async_clear_android, async_push
 from . import websocket
 
@@ -97,6 +98,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.http.register_view(UploadView(hass))
         hass.http.register_view(MediaView(hass))
         hass.http.register_view(PushMediaView(hass))
+        hass.http.register_view(PushImageView(hass))
         websocket.async_register(hass)
         hass.data[f"{DOMAIN}_views_registered"] = True
 
@@ -120,6 +122,13 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         action = str(data.get("action") or "")
         text = str(data.get("reply_text") or "").strip()
         uid = event.context.user_id
+        # Tapbacks, Mark as Read, suggested replies, Hide Alerts, I'm Home / On My Way
+        if action.startswith(pushplus.PREFIX) and uid:
+            try:
+                await pushplus.async_handle(messenger, uid, action)
+            except MessengerError as err:
+                _LOGGER.info("Crow Messenger notification button: %s", err)
+            return
         if action.startswith(ACTION_PREFIX) and uid:
             try:
                 await messenger.async_push_action(uid, action)
@@ -188,27 +197,55 @@ async def _async_service_send(hass: HomeAssistant, messenger: Messenger, call: S
         thread = await messenger.async_create_thread(sender, recipients, call.data.get("group_name", ""))
         attachment_ids = []
         if call.data.get("attachment"):
-            attachment_ids.append(await _async_import_file(hass, messenger, sender, thread["id"], call.data["attachment"]))
+            attachment_ids.append(await _async_import_file(hass, messenger, sender, thread["id"], call.data["attachment"],
+                                                           caller=call.context.user_id))
         extra = {"actions": call.data["actions"]} if call.data.get("actions") else None
         await messenger.async_send(sender, thread["id"], call.data["message"], attachment_ids, extra=extra)
     except MessengerError as err:
         raise HomeAssistantError(f"Crow Messenger: {err}") from err
 
 
-async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: str, thread_id: str, source: str) -> str:
-    """Copy a file named in a service call into Crow Messenger's private folder."""
-    if source.startswith("/local/"):
-        path = hass.config.path("www", source[len("/local/"):].split("?")[0])
-    elif source.startswith("/media/local/"):
-        path = hass.config.path("media", source[len("/media/local/"):].split("?")[0])
-    else:
-        path = source
-    path = os.path.realpath(path)
-    if not hass.config.is_allowed_path(path):
-        raise HomeAssistantError(
-            f"Crow Messenger: {source} is not in an allowed folder (see allowlist_external_dirs)")
-    if not await hass.async_add_executor_job(os.path.isfile, path):
-        raise HomeAssistantError(f"Crow Messenger: file not found: {source}")
+async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: str, thread_id: str, source: str,
+                             caller: str | None = None) -> str:
+    """Copy a file named in a service call into Crow Messenger's private folder.
+
+    Automations and administrators can attach from any folder Home Assistant allows
+    (allowlist_external_dirs). Everyone else can only attach from the www and media folders,
+    so a family member can't copy private files (secrets.yaml, .storage) into a chat."""
+    restricted = False
+    if caller:
+        user = await hass.auth.async_get_user(caller)
+        restricted = not (user and user.is_admin)
+    media_dirs = dict(hass.config.media_dirs or {})
+    www = hass.config.path("www")
+
+    def resolve() -> str:
+        src = source.split("?")[0]
+        if src.startswith("/local/"):
+            path = os.path.join(www, src[len("/local/"):])
+        elif src.startswith("/media/"):
+            key, _, rest = src[len("/media/"):].partition("/")
+            if key not in media_dirs:
+                raise HomeAssistantError(f"Crow Messenger: there's no media folder called '{key}'")
+            path = os.path.join(media_dirs[key], rest)
+        else:
+            path = src
+        # the real location, after following any links and ../
+        path = os.path.realpath(path)
+        if restricted:
+            roots = [os.path.realpath(r) for r in (www, *media_dirs.values())]
+            if not any(path == r or path.startswith(r.rstrip(os.sep) + os.sep) for r in roots):
+                raise HomeAssistantError(
+                    f"Crow Messenger: {source} can't be attached. Only files in the www folder (/local/...) "
+                    "or a media folder (/media/local/...) can be attached by people who aren't administrators")
+        if not hass.config.is_allowed_path(path):
+            raise HomeAssistantError(
+                f"Crow Messenger: {source} is not in an allowed folder (see allowlist_external_dirs)")
+        if not os.path.isfile(path):
+            raise HomeAssistantError(f"Crow Messenger: file not found: {source}")
+        return path
+
+    path = await hass.async_add_executor_job(resolve)
     aid = new_id()
     name = os.path.basename(path)
     file_name = f"{aid}_{name[-80:]}"

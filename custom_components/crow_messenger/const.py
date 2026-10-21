@@ -82,10 +82,10 @@ DEFAULT_SETTINGS = {
         "show_attachment": True,
         "sound": True,
         "reply_action": True,
-        # "James is FaceTiming you": calls started from the card alert the other person, through Focus
-        "call_alerts": True,
         # the red number on the Home Assistant app's icon (unread messages)
         "badge": False,
+        # the buttons on a message notification (press and hold it)
+        "buttons": {"tapbacks": True, "mark_read": True, "mute": False, "home": False},
     },
     # Messages extras: link previews (fetched by Home Assistant)
     "features": {"link_previews": True},

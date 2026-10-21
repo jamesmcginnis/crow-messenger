@@ -15,6 +15,7 @@ from homeassistant.util import slugify
 
 from .const import ACTION_PREFIX, ANDROID_CHANNEL, ANDROID_CHANNEL_SILENT, HA_SENDER_ID
 from .manager import Messenger, now_ms
+from . import pushplus
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -130,14 +131,12 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
 
     # In a chat with yourself you're notified of your own messages, so notifications can be tested
     self_chat = len(thread["participants"]) == 1
-    # a call started from the card gets through Hide Alerts and Focus, like a ringing phone
-    ringing = kind == "call" and settings.get("call_alerts", True)
     for uid in thread["participants"]:
         if uid == HA_SENDER_ID or (uid == msg["sender"] and not self_chat):
             continue
         # @mentions reach people even when they've hidden alerts for the chat
         mentioned = uid in (msg.get("mentions") or [])
-        if messenger.is_muted(thread, uid) and not mentioned and not ringing:
+        if messenger.is_muted(thread, uid) and not mentioned:
             continue
         ucfg = messenger.settings.get("users", {}).get(uid, {}) or {}
         if ucfg.get("notify") is False:
@@ -155,38 +154,45 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
         tag = f"{TAG_PREFIX}{thread['id']}_{msg['id']}"
         messenger.last_notified[uid] = {"thread": thread["id"], "title": title, "ts": now_ms()}
 
+        # the picture: a photo or video that was sent, otherwise a sticker, link preview, map,
+        # camera view or the sender's own photo
+        media_ok = settings.get("show_attachment", True) and settings.get("show_text", True)
+        picture: dict[str, Any] = {}
+        if not (first and media_ok):
+            try:
+                if media_ok and msg.get("effect") != "invisible" and not msg.get("view_once"):
+                    picture = await pushplus.async_picture(messenger, hass, thread, msg, uid, users)
+                else:
+                    pic = pushplus.sender_photo(messenger, uid, msg["sender"], users)
+                    picture = {"image": pic} if pic else {}
+            except Exception as err:  # noqa: BLE001 - a picture is a nice-to-have
+                _LOGGER.debug("Crow Messenger notification picture: %s", err)
+        subtitle = "" if group_title else pushplus.subtitle_for(messenger, thread, msg)
+        reply = settings.get("reply_action", True) and not msg.get("actions")
+
         for device in devices:
             data: dict[str, Any] = {}
             message_text = body
-            if device["platform"] == "ios":
+            ios = device["platform"] == "ios"
+            data["group"] = f"{TAG_PREFIX}{thread['id']}"
+            data["tag"] = tag
+            messenger.badge.note_notified(uid, thread["id"], tag, msg["ts"])
+            if ios:
                 data["url"] = link
-                data["group"] = f"{TAG_PREFIX}{thread['id']}"
-                data["tag"] = tag
-                data["push"] = {"thread-id": f"{TAG_PREFIX}{thread['id']}",
-                                "sound": "default" if settings.get("sound", True) else "none"}
+                data["push"] = {"thread-id": f"{TAG_PREFIX}{thread['id']}", "sound": "default" if settings.get("sound", True) else "none",
+                                # "3 more messages from Sarah" under a stack of notifications
+                                "summary-arg": sender}
                 badge = messenger.badge.for_notification(uid)
                 if badge is not None:
                     data["push"]["badge"] = badge
                 if group_title:
                     data["subtitle"] = group_title if mentioned else sender
-                if mentioned or ringing:
+                elif subtitle:
+                    data["subtitle"] = subtitle
+                if mentioned:
                     data["push"]["interruption-level"] = "time-sensitive"
-                if ringing:
-                    data["push"]["sound"] = "default"
-                data["actions"] = _action_buttons(msg)
-                if settings.get("reply_action", True) and not msg.get("actions"):
-                    data["actions"] += [{
-                        "action": f"{REPLY_ACTION_PREFIX}{thread['id']}",
-                        "title": "Reply",
-                        "behavior": "textInput",
-                        "textInputButtonTitle": "Send",
-                        "textInputPlaceholder": "Message",
-                    }]
             else:
                 data["clickAction"] = link
-                data["group"] = f"{TAG_PREFIX}{thread['id']}"
-                data["tag"] = tag
-                messenger.badge.note_notified(uid, thread["id"], tag)
                 data["channel"] = ANDROID_CHANNEL if settings.get("sound", True) else ANDROID_CHANNEL_SILENT
                 data["importance"] = "high"
                 data["priority"] = "high"
@@ -194,13 +200,15 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
                 data["notification_icon"] = "mdi:message-text"
                 if group_title and not mentioned:
                     message_text = f"{sender}: {body}"
-                data["actions"] = _action_buttons(msg)[:3]
-                if settings.get("reply_action", True) and len(data["actions"]) < 3:
-                    data["actions"].append({"action": "REPLY", "title": "Reply"})
+            if msg.get("actions"):
+                # an automation's own buttons, as they were
+                data["actions"] = _action_buttons(msg)[: 10 if ios else 3]
+            else:
+                data["actions"] = pushplus.actions_for(messenger, thread, msg, uid, device["platform"], reply, users)
             if not data["actions"]:
                 data.pop("actions")
 
-            if first and settings.get("show_attachment", True) and settings.get("show_text", True):
+            if first and media_ok:
                 mime = first.get("mime") or ""
                 if mime.startswith("image/"):
                     data["image"] = messenger.push_media_path(first["id"])
@@ -209,8 +217,16 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
                         data["video"] = messenger.push_media_path(first["id"])
                     elif first.get("thumb"):
                         data["image"] = messenger.push_media_path(first["id"], thumb=True)
-                elif mime.startswith("audio/") and device["platform"] == "ios":
+                elif mime.startswith("audio/") and ios:
                     data["audio"] = messenger.push_media_path(first["id"])
+            elif picture:
+                # a live camera view is for iPhone and iPad; Android gets the sender's photo instead
+                if "entity_id" in picture and not ios:
+                    pic = pushplus.sender_photo(messenger, uid, msg["sender"], users)
+                    if pic:
+                        data["image"] = pic
+                else:
+                    data.update(picture)
 
             try:
                 await hass.services.async_call(

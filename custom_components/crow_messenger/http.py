@@ -181,3 +181,27 @@ class PushMediaView(HomeAssistantView):
             return web.Response(status=404)
         thumb = kind == "thumb"
         return await _file_response(self.hass, messenger.attachment_path(att, thumb), att, thumb)
+
+
+class PushImageView(HomeAssistantView):
+    """GET a notification picture from a signed, expiring link: a sender's photo, a sticker,
+    a link's preview image or a map of a shared place."""
+
+    url = "/api/crow_messenger/pushimg/{kind}/{key}/{exp}/{sig}"
+    name = "api:crow_messenger:pushimg"
+    requires_auth = False
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def get(self, request: web.Request, kind: str, key: str, exp: str, sig: str) -> web.Response:
+        from . import pushplus
+        messenger = _messenger(self.hass)
+        if kind not in ("avatar", "sticker", "link", "map") or not pushplus.verify(messenger, kind, key, exp, sig):
+            return web.Response(status=404)
+        got = await self.hass.async_add_executor_job(pushplus.image_bytes, messenger, kind, key)
+        if not got:
+            return web.Response(status=404)
+        body, ctype = got
+        return web.Response(body=body, content_type=ctype, headers={"Cache-Control": "private, max-age=86400"})
+

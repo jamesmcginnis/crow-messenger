@@ -385,6 +385,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
             "unread": unread,
             "muted": self.is_muted(thread, uid),
             "read": {p: thread["read"].get(p, 0) for p in thread["participants"]},
+            "self_read": int(thread.get("self_read") or 0),
             "visible": visible,
             "pinned": uid in thread.get("pinned", []),
             "marked_unread": uid in thread.get("marked_unread", []),
@@ -545,6 +546,15 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin):
         self.note_seen(thread, uid, last)
         self.note_read_time(thread, uid, last)
         self.note_active(uid)
+        # their notifications for this chat go from every phone (a chat with yourself counts as read
+        # as soon as you send, so this comes before the check below)
+        self.badge.read(uid, thread_id, last)
+        # a chat with yourself: your own messages show "Read" once you've read them (from the
+        # notification, or by opening the chat)
+        if thread["participants"] == [uid] and (thread.get("self_read") or 0) < last:
+            thread["self_read"] = last
+            self._save()
+            self._send_to(uid, {"type": "thread", "thread": self.thread_view(thread, uid)})
         if thread["read"].get(uid, 0) >= last:
             return
         thread["read"][uid] = last
