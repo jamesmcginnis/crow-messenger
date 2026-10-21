@@ -27,18 +27,20 @@ Everything is **private to your household** — nothing is stored in the cloud.
 - **Photos, Videos and Files** — up to 300 MB each by default, stored on your server
 - **Instant When You Come Back** — your chats show straight away, then only new messages are fetched
 - **Replies, Tapbacks, Edits and Undo Send** — press and hold any message
+- **Conversation Menus** — press and hold a chat, or open its ••• menu, for Pin, Hide Alerts, Mark as Unread, Find Me, Export as PDF, Archive, Delete and more
+- **Select Messages and Conversations** — copy, forward or delete several messages at once, or tidy away several chats
 - **Bubble and Screen Effects** — Invisible Ink, Fireworks, Confetti, Balloons and more
 - **Send Later and Disappearing Messages**
 - **Archive, Remind Me Later and Send a Nudge**
-- **Pinned and Starred Messages, Search and Export as PDF**
+- **Pinned and Starred Messages, Search and Export as PDF** — send an exported PDF straight into a chat
 - **Polls, Check In, Where Are You?, Live Location and Shared Places**
 - **Share a Device and Home Status** — live Home Assistant cards in the conversation
 - **Checklists, Events and Shared Timers**
 - **Games** — Noughts and Crosses, Connect Four, Reversi, Draughts and Sea Battle
 - **Skins** — iPhone, WhatsApp, Messenger, Telegram, Signal, Discord, Material You and old-school MSN, ICQ, AIM, Yahoo!, Windows 98, Windows XP, Mac OS X Aqua, BlackBerry, Nokia SMS and IRC
-- **Chat Backgrounds and Live Wallpapers**
+- **Chat Backgrounds and Live Wallpapers** — or set any photo someone sent as the background
 - **Private Contacts** — each person's own address book, with vCard import
-- **People Map** — where everyone is, with Find Me and zones
+- **People Map** — where everyone is, with Find Me and zones, and for each person how long they've been there, the weather there, what they're doing, Focus, charging and Wi-Fi, plus Find Nearby for places around them, with saved places kept on the map
 
 ## AI Features
 
@@ -56,6 +58,8 @@ All optional, and each can be switched off individually:
 
 - **Phone Notifications** — through the Companion app, with Reply from the notification
 - **App Icon Badge** — optional: a red number on the app's icon showing unread messages
+- **Notification Buttons** — Tapbacks, Mark as Read, Hide Alerts, and I'm Home or On My Way
+- **Richer Notifications** — the sender's photo, stickers, link previews, maps and live camera views
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from automations
 - **`crow_messenger_message_received` event** — for automations around new messages
 - **`crow_messenger_action` event** — when someone taps a button sent by an automation

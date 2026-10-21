@@ -71,9 +71,14 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 ### Messaging
 
 - **iPhone Messages design** — Liquid Glass bars, bubbles with tails, swipe actions and smooth page transitions
+- **Press and hold a conversation** — Mark as Read or Unread, Pin, Hide Alerts (for 1 hour, 8 hours, a week or always), Call (FaceTime, FaceTime Audio or a phone number from their contact card), Location (Find Me, or Find in a group, and Ask Where They Are), Details, Search in Conversation, Export as PDF, Add to Contacts (for someone who isn't in your address book yet), Archive, Leave Conversation (groups) and Delete, in a menu that matches your skin and light or dark mode
+- **The conversation's ••• menu** — Details, Search & Ask, Export as PDF, Find Me, Ask Where They Are, Pin, Hide Alerts, Mark as Unread, Background, Skin, Archive, Leave Conversation (groups) and Delete, without going back to the list
+- **Select Messages** — tick several messages, then copy, forward or delete them together
+- **Select Conversations** — from the Messages ••• menu, to archive, delete or mark several chats as read at once
 - **One-to-one and group chats** — group names and photos, mentions, nicknames and member management
 - **Photos, videos and files** — up to 300 MB each by default, stored on your Home Assistant server
-- **Replies, tapbacks, edits and Undo Send** — press and hold any message for the full menu
+- **Replies, tapbacks, edits and Undo Send** — press and hold any message for the full menu, which also has Share where the browser offers a share sheet
+- **Photo viewer** — save a photo, copy it, or set it as the background for one chat or all of them
 - **Instant when you come back** — your conversations, the newest messages of your recent chats and photo thumbnails are kept on your device, so opening the card or coming back to the app shows them straight away, then quietly fetches anything new. Each person's copy is separate, and it is cleared when someone else signs in on that device
 - **Bubble and screen effects** — Slam, Loud, Gentle, Invisible Ink, Fireworks, Confetti, Balloons and many more
 - **Text formatting** — bold, italic, underline and strikethrough
@@ -82,11 +87,11 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **Send Later** — at a time you choose, or when you arrive at or leave a place
 - **Disappearing messages** — press and hold Send to send one that disappears
 - **Pinned conversations, pinned messages and starred messages**
-- **Archive** — tidy chats away; they come back when a new message arrives, unless you keep them archived
+- **Archive** — tidy chats away, with a confirmation first; they come back when a new message arrives, unless you keep them archived
 - **Remind Me Later** — be reminded about any message at a time you choose
 - **Send a Nudge** — a friendly follow-up, worded to suit the message
 - **Search** — across every conversation, or within one, with filters for photos, links, files and locations
-- **Export as PDF** — a conversation, a contact or your whole address book
+- **Export as PDF** — a conversation, a contact or your whole address book, then download it or send it straight into one or more conversations
 - **Drafts** — whatever you've typed is kept when you leave a conversation
 - **Reopens your last chat** — come back to the app and you're where you left off
 
@@ -117,7 +122,9 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 
 - **Private address book** — each person has their own contacts, with vCard import
 - **My Card and Shared Name and Photo** — choose how you appear to everyone else
-- **People Map** — where everyone is, from their Home Assistant person, with Find Me
+- **People Map** — where everyone is, from their Home Assistant person, with Find Me. Tap someone to see their address, how long they've been there, the weather where they are, what they're doing (walking, driving and so on), whether Focus is on, their battery and whether it's charging, and the Wi-Fi network they're on, from the Companion app's sensors on their phone. People in the same place sit side by side on the map
+- **Find Nearby** — optional and off by default: toilets, cafés, restaurants, pubs, cash machines, pharmacies, supermarkets, petrol stations, EV chargers or parking near someone, or near the middle of the map, from OpenStreetMap. Each place shows its address, opening hours, phone and website (both ask before calling or opening), and wheelchair access, with Directions, Share (in a chat or through the share sheet) and Add Zone. Distances are from the person you're looking at. Closing a search stops it straight away
+- **Saved places** — places Find Nearby has found are remembered on each device for a week, two weeks or a month, and stay on the map as small pins you can tap to open without searching again. Press and hold a pin for Directions, Share or Remove from Map. The map style menu can show, hide or clear saved places
 - **Zones** — create Home Assistant zones straight from the map, Check In and shared locations
 
 ### AI Features
@@ -256,6 +263,15 @@ show_people_map: true
 | `contact_display` | `first` | Show contacts as First Last or Last, First |
 | `show_my_card` | `true` | Show My Card at the top of Contacts |
 | `show_people_map` | `true` | The People Map in Contacts and Find Me in conversations |
+| `people_here_since` | `true` | On the People Map, when someone arrived where they are, and for how long |
+| `people_weather` | `true` | On the People Map, the temperature and weather where someone is (from Open-Meteo) |
+| `people_activity` | `true` | On the People Map, whether someone is walking, running, cycling, driving or still |
+| `people_focus` | `true` | On the People Map, when someone has Focus (iPhone) or Do Not Disturb (Android) on |
+| `people_charging` | `true` | On the People Map, Charging or Full next to someone's battery level |
+| `people_wifi` | `true` | On the People Map, the Wi-Fi network someone's phone is on |
+| `people_nearby` | `false` | Find Nearby on the People Map: places near someone, or near the middle of the map, with their details (from OpenStreetMap) |
+| `people_nearby_keep` | `168` | How many hours places found by Find Nearby are remembered on each device: `168` (1 week), `336` (2 weeks) or `720` (1 month). The editor can also clear them |
+| `distance_units` | `auto` | How distances are shown: `auto` (as Home Assistant), `km` (kilometres and metres), `mi_m` (miles and metres), `mi_yd` (miles and yards) or `mi_ft` (miles and feet). Used on the People Map, when choosing a place, and for the size of a new zone |
 | `pdf_enabled` | `true` | Export as PDF |
 | `enter_sends` | `true` | On a computer keyboard, Return sends and Shift+Return starts a new line |
 
