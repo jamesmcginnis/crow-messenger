@@ -136,7 +136,10 @@ All optional, and each can be switched off individually in the editor:
 ### Integration
 
 - **Phone notifications** — through the Companion app on iPhone and Android, with Reply right from the notification
-- **App icon badge** — optional and off by default: a red number on the Home Assistant app's icon on iPhone and iPad showing unread messages (muted chats aren't counted), kept up to date even when you read a chat on another device. On Android, notifications for chats you've read are cleared, so the app's dot goes away
+- **App icon badge** — optional and off by default: a red number on the Home Assistant app's icon on iPhone and iPad showing unread messages (muted chats aren't counted), kept up to date even when you read a chat on another device
+- **Notification buttons** — press and hold a notification for Reply, Tapbacks (Heart, Thumbs Up and Ha Ha), Mark as Read, Hide Alerts for 1 Hour, and I'm Home or On My Way. Each can be switched on or off in the editor. Android shows three at most: Reply, Mark as Read and Thumbs Up
+- **Richer notifications** — the sender's photo, or what was sent: a photo or video, a sticker, a link's preview image, a map of a shared place, or the live view of a shared camera. One-to-one chats show a note such as "Sent with Slam" or "Replied to …", and a stack of notifications says how many more messages there are
+- **Cleared once read** — when you read a conversation anywhere, its notifications are removed from all your phones and tablets
 - **Focus aware** — see when someone has notifications silenced, and choose Notify Anyway
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from your automations
 - **`crow_messenger_message_received` event** — build automations around new messages
@@ -154,7 +157,7 @@ All optional, and each can be switched off individually in the editor:
 |--------|-------------|
 | `crow_messenger.send_message` | Sends a message from Home Assistant to one or more people, optionally with a photo or file and buttons. `to` takes names, user IDs or `person.` entities; `group_name` sends to a named group; `actions` adds buttons (a title, or a `title` and `action`) |
 
-> **Attachments** can be under `/local/` (your `www` folder), `/media/local/`, or any folder listed in `allowlist_external_dirs`. The file is copied into Crow Messenger's own private folder when it's sent.
+> **Attachments** can be under `/local/` (your `www` folder) or `/media/local/`. Automations and administrators can also attach from any folder listed in `allowlist_external_dirs`; people who aren't administrators can only attach from `www` and the media folders, so private files such as `secrets.yaml` can never be shared. The file is copied into Crow Messenger's own private folder when it's sent.
 
 ### Events
 
@@ -265,6 +268,7 @@ show_people_map: true
 | Delete Photos & Files from the Server | 90 Days | Clears out older attachments when you choose |
 | One Dashboard for Everyone | On | Every notification opens the same dashboard |
 | App Icon Badge | Off | A red number on the Home Assistant app's icon showing unread messages |
+| Notification Buttons | Tapbacks and Mark as Read on | Which buttons appear when a notification is pressed and held |
 | AI Features | Off | Turns on the AI features for everyone |
 
 ---
