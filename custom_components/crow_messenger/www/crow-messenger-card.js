@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.1.5';
+const CM_VERSION = '2.2.5';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '21 Oct 2026 06:45';
+const CM_BUILD = '21 Oct 2026 14:55';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -51,6 +51,7 @@ const ICON = {
   contacts: _s('<circle cx="12" cy="12" r="9.5"/><circle cx="12" cy="10" r="3.3"/><path d="M6 18.6c1.3-2.3 3.5-3.5 6-3.5s4.7 1.2 6 3.5"/>'),
   addPerson: _s('<circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3.1-6.8 7-6.8s7 2.8 7 6.8M19 8v6M16 11h6"/>'),
   check: _s('<path d="M5 12.5l4.5 4.5L19 7"/>', 'stroke-width="2.6"'),
+  checkCircle: _s('<circle cx="12" cy="12" r="9"/><path d="M8 12.3l2.7 2.7L16 9.5"/>'),
   trash: _s('<path d="M3.5 6h17M9 6V4h6v2M6 6l1 14.5h10L18 6M10 10.5v6M14 10.5v6"/>'),
   bellOff: _s('<path d="M13.7 21a2 2 0 01-3.4 0M18.6 13A17.9 17.9 0 0118 8M6.3 6.3A6 6 0 006 8c0 7-3 9-3 9h14M18 8a6 6 0 00-9.3-5M2 2l20 20"/>'),
   bell: _s('<path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0"/>'),
@@ -409,6 +410,50 @@ function mapsUrl(addr) {
   if (isAndroid()) return `geo:0,0?q=${q}`;
   return `https://www.google.com/maps/search/?api=1&query=${q}`;
 }
+// copy text: the modern way where allowed, otherwise the older way (which works in the Home Assistant app)
+async function copyText(text) {
+  try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(text); return true; } } catch (e) { /* fall through */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.setAttribute('readonly', '');
+    ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;font-size:16px;';
+    document.body.appendChild(ta);
+    ta.select(); ta.setSelectionRange(0, text.length);
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  } catch (e) { return false; }
+}
+// copy a photo: as a picture where the browser allows it, otherwise by selecting it on the page
+// (the way the Home Assistant app allows)
+async function copyImage(img) {
+  try {
+    if (navigator.clipboard?.write && window.ClipboardItem && window.isSecureContext) {
+      const png = new Promise((res, rej) => {
+        const c = document.createElement('canvas');
+        c.width = img.naturalWidth; c.height = img.naturalHeight;
+        c.getContext('2d').drawImage(img, 0, 0);
+        c.toBlob(b => (b ? res(b) : rej(new Error('png'))), 'image/png');
+      });
+      await navigator.clipboard.write([new ClipboardItem({ 'image/png': png })]);
+      return true;
+    }
+  } catch (e) { /* fall through */ }
+  try {
+    const box = document.createElement('div');
+    box.contentEditable = 'true';
+    box.style.cssText = 'position:fixed;top:0;left:0;opacity:0;pointer-events:none;';
+    const copy = document.createElement('img');
+    copy.src = img.src;
+    box.appendChild(copy);
+    document.body.appendChild(box);
+    const r = document.createRange(); r.selectNode(copy);
+    const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    const ok = document.execCommand('copy');
+    sel.removeAllRanges(); box.remove();
+    return ok;
+  } catch (e) { return false; }
+}
 function telValue(v) { return String(v || '').replace(/[^\d+*#,;]/g, ''); }
 
 // Open tel:/mailto:/facetime:/maps etc.
@@ -584,11 +629,17 @@ svg { display: block; }
 .cb { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
   transition: transform 0.15s ease, background 0.2s; }
 .cb svg { width: 21px; height: 21px; }
+/* the small grey close ✕ used on sheets */
+.cb.xsm { width: 32px; height: 32px; background: var(--cm-fill); color: var(--cm-text2); box-shadow: none; border: 0; backdrop-filter: none; -webkit-backdrop-filter: none; border-radius: 50%; }
+.cb.xsm svg { width: 15px; height: 15px; }
 .cb:active, .pill:active, .capsule button:active { transform: scale(0.92); }
 .pill { height: 44px; padding: 0 18px; border-radius: 22px; font-size: 17px; font-weight: 500; display: inline-flex; align-items: center; gap: 6px;
   transition: transform 0.15s ease; white-space: nowrap; }
 .pill.accent { color: #fff; background: var(--cm-accent); border-color: transparent; box-shadow: 0 4px 14px color-mix(in srgb, var(--cm-accent) 40%, transparent); }
 .pill[disabled] { opacity: 0.45; pointer-events: none; }
+/* the text buttons along the top of a page or sheet (Done, Options, Edit, Cancel, Save…) are compact */
+:is(.top, .xhd, .skt, .shead) .pill { height: 34px; padding: 0 14px; border-radius: 17px; font-size: 15px; font-weight: 600; }
+:is(.top, .xhd, .skt, .shead) .pill svg { width: 17px; height: 17px; }
 .capsule { display: flex; align-items: center; height: 44px; border-radius: 22px; padding: 0 4px; }
 .capsule button { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: transform .15s; }
 .capsule button svg { width: 21px; height: 21px; }
@@ -619,6 +670,8 @@ svg { display: block; }
 /* ── Conversation list ─────────────────────────────── */
 .list-pad { padding-bottom: 96px; }
 .row { position: relative; display: flex; align-items: center; gap: 12px; padding: 10px 16px 10px 4px; overflow: hidden; touch-action: pan-y; }
+/* press and hold opens the conversation's menu, not the iPhone's own (Save Image, Copy) */
+.row, .row img, [data-pin], [data-pin] img { -webkit-touch-callout: none; }
 .row-inner { display: flex; align-items: center; gap: 12px; width: 100%; transition: transform 0.25s ease; position: relative; z-index: 1; }
 .row .dot { width: 12px; flex-shrink: 0; display: flex; justify-content: center; }
 .row .dot i { width: 10px; height: 10px; border-radius: 50%; background: var(--cm-accent); display: block; }
@@ -658,6 +711,20 @@ svg { display: block; }
 .sys { text-align: center; font-size: 12px; color: var(--cm-text2); margin: 10px 30px; line-height: 1.35; }
 .mrow { display: flex; align-items: flex-end; gap: 8px; margin-top: 2px; position: relative; }
 .mrow.first { margin-top: 8px; }
+/* Select Messages: a circle beside each message, and a bar in place of the message box */
+.thread.selecting .composer { display: none; }
+.thread.selecting .mrow { padding-left: 34px; cursor: pointer; }
+.thread.selecting .mrow * { pointer-events: none; }
+.selck { position: absolute; left: 4px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid var(--cm-text2); box-sizing: border-box; display: flex; align-items: center; justify-content: center; color: #fff; }
+.selck svg { width: 13px; height: 13px; display: none; }
+.mrow.picked .selck { background: var(--cm-accent); border-color: var(--cm-accent); }
+.mrow.picked .selck svg { display: block; }
+.selbar { position: absolute; left: 12px; right: 12px; bottom: 12px; z-index: 7; height: 56px; border-radius: 28px; display: flex; align-items: center; gap: 4px; padding: 0 8px 0 6px; }
+.selbar .sb-n { flex: 1; text-align: center; font-weight: 600; font-size: 15px; white-space: nowrap; }
+.selbar .sb-done { height: 34px; padding: 0 14px; font-size: 15px; font-weight: 600; color: var(--cm-accent); background: transparent; }
+.selbar .cb { width: 42px; height: 42px; background: transparent; color: var(--cm-accent); }
+.selbar .cb.red { color: #FF453A; }
+.selbar .cb[disabled] { opacity: 0.35; pointer-events: none; }
 .mrow.me { justify-content: flex-end; }
 .mrow .mav { width: 28px; height: 28px; flex-shrink: 0; }
 .mrow .buddy { display: none; }
@@ -1022,9 +1089,12 @@ svg { display: block; }
   box-shadow: inset 0 1px 0 #ffffff, 0 1px 3px rgba(0,0,0,0.08); color: #000;
 }
 
-/* menus: the same Liquid Glass panel */
+/* menus: the same Liquid Glass panel. While a menu is open the card behind it is gently dimmed,
+   so the glass reads clearly while what's underneath still shows */
+:host([data-popups="glass"]) .menu-wrap { background: rgba(0,0,0,0.28); animation: cm-fade 0.2s; }
+:host([data-popups="glass"][data-mode="light"]) .menu-wrap { background: rgba(255,255,255,0.22); }
 :host([data-popups="glass"]) .menu {
-  background: linear-gradient(160deg, rgba(255,255,255,0.16), rgba(255,255,255,0.05));
+  background: linear-gradient(160deg, rgba(72,72,78,0.62), rgba(40,40,44,0.58));
   backdrop-filter: blur(26px) saturate(2.1) brightness(0.92); -webkit-backdrop-filter: blur(26px) saturate(2.1) brightness(0.92);
   border: 1px solid rgba(255,255,255,0.22);
   box-shadow: 0 30px 70px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.38), inset 0 -1px 0 rgba(255,255,255,0.08), inset 0 0 24px rgba(255,255,255,0.05);
@@ -1035,7 +1105,7 @@ svg { display: block; }
 }
 :host([data-popups="glass"]) .menu > * { position: relative; }
 :host([data-popups="glass"][data-mode="light"]) .menu {
-  background: linear-gradient(160deg, rgba(255,255,255,0.62), rgba(255,255,255,0.38));
+  background: linear-gradient(160deg, rgba(255,255,255,0.8), rgba(255,255,255,0.66));
   backdrop-filter: blur(26px) saturate(2.1) brightness(1.05); -webkit-backdrop-filter: blur(26px) saturate(2.1) brightness(1.05);
   border-color: rgba(255,255,255,0.75);
   box-shadow: 0 30px 70px rgba(0,0,0,0.22), inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 0 rgba(255,255,255,0.35), inset 0 0 24px rgba(255,255,255,0.25);
@@ -1483,7 +1553,7 @@ const CM_EXTRA_CSS = `
 /* ── Sketch & Markup ──────────────────────────────── */
 .sketch { position: absolute; inset: 0; z-index: 45; display: flex; flex-direction: column; background: #111; color: #fff; }
 .sketch .skt { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; gap: 8px; }
-.sketch .skt .pill { height: 38px; font-size: 16px; padding: 0 16px; }
+.sketch .skt .pill { height: 34px; font-size: 15px; padding: 0 14px; }
 .sketch .skt .g { color: #fff; background: rgba(255,255,255,0.14); border-color: rgba(255,255,255,0.16); }
 .sketch .skt .g.accent { background: var(--cm-accent); border-color: transparent; }
 .sketch .skc { flex: 1; min-height: 0; position: relative; display: flex; align-items: center; justify-content: center; padding: 0 12px; }
@@ -1869,6 +1939,8 @@ const CM_DEFAULTS = {
   card_liquid_glass: true, appearance: 'auto', use_ha_theme: false, default_skin: '',
   glass_popups: true, glass_bars: true, contact_blur: true, animations: true, effect_words: true,
   glass: 50, card_height: 700, pdf_enabled: true, pdf_conversations: true, pdf_contact: true, pdf_contacts: true, enter_sends: true, contact_sort: 'last', contact_display: 'first', show_my_card: true, show_people_map: true,
+  people_here_since: true, people_weather: true, people_activity: true, people_focus: true, people_charging: true, people_wifi: true, people_nearby: false, people_nearby_keep: 168,
+  distance_units: 'auto',
 };
 
 class CrowMessengerCard extends HTMLElement {
@@ -2537,6 +2609,8 @@ class CrowMessengerCard extends HTMLElement {
       if (a === 'contacts') { this._nav('contacts'); return; }
       if (a === 'filter') {
         const v = await this._menu(e.target.closest('button'), [
+          ...([...s.threads.values()].some(t => t.visible !== false && t.last && !!t.archived === !!s.archivedView)
+            ? [{ text: 'Select Conversations', value: 'select', icon: ICON.checkCircle }, { sep: true }] : []),
           { header: 'Filter' },
           { text: 'All Messages', value: 'all', checked: s.filter === 'all', icon: ICON.bubble },
           { text: 'Unread Messages', value: 'unread', checked: s.filter === 'unread', icon: ICON.mailO },
@@ -2546,6 +2620,7 @@ class CrowMessengerCard extends HTMLElement {
         ]);
         if (v?.startsWith?.('skin:')) { this._setSkin(v.slice(5)); return; }
         if (v === 'starred') { this._nav('starred'); return; }
+        if (v === 'select') { s.editing = true; s.selected.clear(); page.refresh('list'); return; }
         if (v) { s.filter = v; page.refresh('list'); }
         return;
       }
@@ -2585,6 +2660,7 @@ class CrowMessengerCard extends HTMLElement {
       const row = e.target.closest('.row');
       if (row && Date.now() - (page.swipeClosedAt || 0) < 700) return;
       if (row) {
+        if (row.dataset.held) { delete row.dataset.held; return; }   // the press and hold opened the menu
         if (row.classList.contains('swiped') || row.classList.contains('swiped-l')) { this._closeSwipes(el); return; }
         if (s.editing) { s.selected.has(row.dataset.tid) ? s.selected.delete(row.dataset.tid) : s.selected.add(row.dataset.tid); page.refresh('list'); return; }
         const rt = s.threads.get(row.dataset.tid);
@@ -2601,31 +2677,100 @@ class CrowMessengerCard extends HTMLElement {
       // the tap only closes it: it doesn't also open whatever was tapped
       page.swipeClosedAt = Date.now();
     }, true);
-    // press and hold a pinned conversation: Unpin, Mark as Unread
-    let pinTimer = null;
-    const pinMenu = async (pin) => {
-      const tid = pin.dataset.pin, t = s.threads.get(tid);
-      pin.dataset.held = '1';
-      const v = await this._menu(pin, [
-        { text: 'Unpin', value: 'unpin', icon: XICON.pushpin },
-        t?.unread || t?.marked_unread ? { text: 'Mark as Read', value: 'read', icon: ICON.mailO } : { text: 'Mark as Unread', value: 'unread', icon: ICON.bubble },
-        { text: t?.muted ? 'Show Alerts' : 'Hide Alerts', value: 'mute', icon: t?.muted ? ICON.bell : ICON.bellOff },
-        { text: 'Archive', value: 'archive', icon: ARCH_ICON },
-        { sep: true }, { text: 'Delete', value: 'delete', icon: ICON.trash, red: true },
-      ], { align: 'left' });
-      if (v === 'archive') { this._archive(tid, true); return; }
-      setTimeout(() => { delete pin.dataset.held; }, 50);
+    // press and hold a conversation (pinned or in the list): the swipe actions and more, in one menu,
+    // with Hide Alerts, Call and Location in their own folders
+    let holdTimer = null, holdAt = null;
+    const chatMenu = async (anchor, tid) => {
+      const t = s.threads.get(tid);
+      if (!t) return;
+      anchor.dataset.held = '1';
+      setTimeout(() => { delete anchor.dataset.held; }, 900);
+      navigator.vibrate?.(10);
+      const unread = t.unread || t.marked_unread;
+      const other = !t.is_group ? this._other(tid) : null;
+      const items = [
+        unread ? { text: 'Mark as Read', value: 'read', icon: ICON.mailO } : { text: 'Mark as Unread', value: 'unread', icon: ICON.bubble },
+        { text: t.pinned ? 'Unpin' : 'Pin', value: 'pin', icon: XICON.pushpin },
+        t.muted ? { text: 'Show Alerts', value: 'unmute', icon: ICON.bell }
+          : { text: 'Hide Alerts', icon: ICON.bellOff, sub: MUTE_OPTS.map(o => ({ text: o.name, value: `mute:${o.m}` })) },
+        { sep: true },
+      ];
+      // Call: FaceTime, FaceTime Audio and their phone numbers, from their contact card (one-to-one chats)
+      const c = other && other !== HA_ID ? this._contactForUser(other) : null;
+      if (c) {
+        const hd = this._callHandles(c), calls = [];
+        if (hd.ft && isApple()) calls.push({ text: 'FaceTime', value: 'call:facetime', icon: ICON.video }, { text: 'FaceTime Audio', value: 'call:facetime_audio', icon: ICON.phone });
+        // each number by its label only (iPhone, Mobile, Home…), numbered if two share a label
+        const lbl = (ph) => ph.label ? (ph.label === ph.label.toLowerCase() ? ph.label.replace(/^./, x => x.toUpperCase()) : ph.label) : 'Phone';
+        const seen = {};
+        hd.phones.forEach((ph, i) => {
+          const l = lbl(ph), n = (seen[l] = (seen[l] || 0) + 1), dup = hd.phones.filter(x => lbl(x) === l).length > 1;
+          calls.push({ text: dup ? `${l} ${n}` : l, value: `tel:${i}`, icon: ICON.phone });
+        });
+        if (calls.length) items.push({ text: 'Call', icon: ICON.phone, sub: calls });
+      }
+      // Location: Find Me on the People Map (in a group, choose who) and Ask Where They Are
+      const loc = [];
+      if (this._config.show_people_map !== false) {
+        const ppl = this._people();
+        const found = t.participants.filter(u => u !== s.me && u !== HA_ID).map(u => ppl.find(p => p.uid === u && p.has)).filter(Boolean);
+        if (!t.is_group && found.length) loc.push({ text: 'Find Me', value: `find:${found[0].eid}`, icon: ICON.pin });
+        else if (found.length) loc.push({ text: 'Find', icon: ICON.pin, sub: found.map(p => ({ text: p.name, value: `find:${p.eid}` })) });
+      }
+      if (t.participants.some(u => u !== s.me && u !== HA_ID)) loc.push({ text: 'Ask Where They Are', value: 'locreq', icon: MICON.locate });
+      if (loc.length) items.push({ text: 'Location', icon: ICON.pin, sub: loc });
+      items.push({ text: 'Details', value: 'info', icon: ICON.info },
+        { text: s.ai?.ask ? 'Search & Ask' : 'Search in Conversation', value: 'search', icon: ICON.search });
+      if (this._pdfOn('conversations')) items.push({ text: 'Export as PDF', value: 'pdf', icon: ICON.doc });
+      // Add to Contacts: only for someone who isn't in your address book yet
+      if (other && other !== HA_ID && s.users.has(other) && !c) items.push({ text: 'Add to Contacts', value: 'addcontact', icon: ICON.addPerson });
+      items.push({ sep: true }, { text: t.archived ? 'Unarchive' : 'Archive', value: 'archive', icon: ARCH_ICON });
+      if (t.is_group) items.push({ text: 'Leave Conversation', value: 'leave', icon: ICON.leave, red: true });
+      items.push({ text: 'Delete', value: 'delete', icon: ICON.trash, red: true });
+      const v = await this._menu(anchor, items, { align: 'left' });
+      if (!v) return;
       try {
-        if (v === 'unpin') await this._ws('flag', { thread_id: tid, flag: 'pinned', on: false });
-        if (v === 'unread') await this._ws('flag', { thread_id: tid, flag: 'marked_unread', on: true });
-        if (v === 'read') await this._ws('mark_read', { thread_id: tid });
-        if (v === 'mute') await this._ws('update_thread', { thread_id: tid, muted: !t?.muted });
-        if (v === 'delete') this._confirmDeleteThread(tid);
+        if (v === 'read') { t.marked_unread = false; await this._ws('mark_read', { thread_id: tid }); }
+        else if (v === 'unread') await this._ws('flag', { thread_id: tid, flag: 'marked_unread', on: true });
+        else if (v === 'pin') await this._ws('flag', { thread_id: tid, flag: 'pinned', on: !t.pinned });
+        else if (v === 'unmute') await this._ws('mute', { thread_id: tid });
+        else if (v.startsWith('mute:')) await this._ws('mute', { thread_id: tid, minutes: +v.slice(5) });
+        else if (v.startsWith('call:')) this._startCall(tid, v.slice(5));
+        else if (v.startsWith('tel:')) this._startCall(tid, 'phone', this._callHandles(c).phones[+v.slice(4)]?.value);
+        else if (v.startsWith('find:')) this._nav('people', { focus: v.slice(5) });
+        else if (v === 'locreq') { this._sendMessage(tid, '', [], { type: 'locreq' }); this._toast('Asked where they are'); }
+        else if (v === 'info') this._nav('info', { tid });
+        else if (v === 'search') this._nav('tsearch', { tid });
+        else if (v === 'pdf') this._nav('pdfOptions', { tid });
+        else if (v === 'addcontact') this._addContactFor(other);
+        else if (v === 'archive') this._archive(tid, !t.archived);
+        else if (v === 'leave') {
+          const r = await this._alert({ title: 'Leave this Conversation?', message: 'You won’t get any more messages from this group.', buttons: [{ text: 'Leave', style: 'destructive', value: true }, { text: 'Cancel', style: 'cancel' }] });
+          if (r.value) await this._ws('leave_thread', { thread_id: tid });
+        }
+        else if (v === 'delete') this._confirmDeleteThread(tid);
       } catch (err) { this._toast(err.message); }
     };
-    lst.addEventListener('pointerdown', (e) => { const pin = e.target.closest('[data-pin]'); if (!pin) return; pinTimer = setTimeout(() => { pinTimer = null; pinMenu(pin); }, 480); });
-    ['pointerup', 'pointercancel', 'pointermove'].forEach(ev => lst.addEventListener(ev, (e) => { if (ev === 'pointermove' && Math.abs(e.movementX) + Math.abs(e.movementY) < 4) return; clearTimeout(pinTimer); }));
-    lst.addEventListener('contextmenu', (e) => { const pin = e.target.closest('[data-pin]'); if (pin) { e.preventDefault(); pinMenu(pin); } });
+    const holdTarget = (e) => {
+      if (s.editing || e.target.closest('.swipe-actions, .swipe-lead, [data-smid], .hit')) return null;
+      const pin = e.target.closest('[data-pin]');
+      if (pin) return { el: pin, tid: pin.dataset.pin };
+      const row = e.target.closest('.row[data-tid]');
+      if (!row || row.classList.contains('swiped') || row.classList.contains('swiped-l')) return null;
+      return { el: row, tid: row.dataset.tid };
+    };
+    lst.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse' && e.button !== 0) return;
+      const h = holdTarget(e);
+      if (!h) return;
+      holdAt = { x: e.clientX, y: e.clientY };
+      clearTimeout(holdTimer);
+      holdTimer = setTimeout(() => { holdTimer = null; if (h.el.classList.contains('swiping')) return; chatMenu(h.el, h.tid); }, 480);
+    });
+    // moving the finger (scrolling, or swiping the row) is not a press and hold
+    lst.addEventListener('pointermove', (e) => { if (holdTimer && holdAt && Math.hypot(e.clientX - holdAt.x, e.clientY - holdAt.y) > 8) { clearTimeout(holdTimer); holdTimer = null; } });
+    ['pointerup', 'pointercancel'].forEach(ev => lst.addEventListener(ev, () => { clearTimeout(holdTimer); holdTimer = null; }));
+    lst.addEventListener('contextmenu', (e) => { const h = holdTarget(e); if (h) { e.preventDefault(); clearTimeout(holdTimer); holdTimer = null; chatMenu(h.el, h.tid); } });
 
     page.refresh = (what) => {
       if (!['all', 'list', 'messages', 'thread', 'read', 'contacts', 'typing'].includes(what)) return;
@@ -2638,7 +2783,8 @@ class CrowMessengerCard extends HTMLElement {
       // Archived: the same list, showing only the archived chats, with a way back
       const av = !!s.archivedView;
       el.querySelector('[data-a="archback"]').hidden = !av || s.editing;
-      el.querySelector('[data-a="edit"]').hidden = av && !s.editing;
+      // Edit lives in the ••• menu (Select Conversations); the header only shows Done while selecting
+      el.querySelector('[data-a="edit"]').hidden = !s.editing;
       el.querySelector('.large-title').textContent = av ? 'Archived' : 'Messages';
       smallTitle.textContent = av ? 'Archived' : 'Messages';
       el.querySelector('.cap-normal').hidden = s.editing;
@@ -2905,16 +3051,57 @@ class CrowMessengerCard extends HTMLElement {
       if (a === 'call') { this._callMenu(e.target.closest('button'), tid); return; }
       if (a === 'addcontact') { this._addContactFor(this._other(tid)); return; }
       if (a === 'more') {
+        // Find Me: the other person on the People Map (in a group, choose who)
+        const th = s.threads.get(tid);
+        const findItems = [];
+        if (this._config.show_people_map !== false && th) {
+          const ppl = this._people();
+          const found = th.participants.filter(u => u !== s.me && u !== HA_ID).map(u => ppl.find(p => p.uid === u && p.has)).filter(Boolean);
+          if (!th.is_group && found.length) findItems.push({ text: 'Find Me', value: `find:${found[0].eid}`, icon: ICON.pin });
+          else if (found.length) findItems.push({ text: 'Find', icon: ICON.pin, sub: found.map(p => ({ text: p.name, value: `find:${p.eid}` })) });
+        }
         const v = await this._menu(e.target.closest('button'), [
           { text: 'Details', value: 'info', icon: ICON.info },
           { text: s.ai?.ask ? 'Search & Ask' : 'Search', value: 'search', icon: ICON.search },
-          ...((s.threads.get(tid)?.participants || []).some(p => p !== s.me && p !== HA_ID) ? [{ text: 'Ask Where They Are', value: 'locreq', icon: MICON.locate }] : []),
+          ...(this._pdfOn('conversations') ? [{ text: 'Export as PDF', value: 'pdf', icon: ICON.doc }] : []),
+          ...findItems,
+          ...((th?.participants || []).some(p => p !== s.me && p !== HA_ID) ? [{ text: 'Ask Where They Are', value: 'locreq', icon: MICON.locate }] : []),
+          { sep: true },
+          { text: th?.pinned ? 'Unpin' : 'Pin', value: 'pin', icon: XICON.pushpin },
+          th?.muted ? { text: 'Show Alerts', value: 'unmute', icon: ICON.bell }
+            : { text: 'Hide Alerts', icon: ICON.bellOff, sub: MUTE_OPTS.map(o => ({ text: o.name, value: `mute:${o.m}` })) },
+          { text: 'Mark as Unread', value: 'unread', icon: ICON.bubble },
           { sep: true }, { text: 'Background', sub: this._bgItems(tid), icon: ICON.photo },
           { text: 'Skin', sub: this._skinItems(), icon: ICON.palette },
+          { sep: true }, { text: th?.archived ? 'Unarchive' : 'Archive', value: 'archive', icon: ARCH_ICON },
+          ...(th?.is_group ? [{ text: 'Leave Conversation', value: 'leave', icon: ICON.leave, red: true }] : []),
+          { text: 'Delete', value: 'delete', icon: ICON.trash, red: true },
         ]);
+        try {
+          if (v === 'pin') { await this._ws('flag', { thread_id: tid, flag: 'pinned', on: !th?.pinned }); this._toast(th?.pinned ? 'Unpinned' : 'Pinned'); return; }
+          if (v === 'unmute') { await this._ws('mute', { thread_id: tid }); this._toast('Alerts on'); return; }
+          if (v?.startsWith?.('mute:')) { await this._ws('mute', { thread_id: tid, minutes: +v.slice(5) }); this._toast('Alerts hidden'); return; }
+          // these take you back to the list, as the conversation is done with for now
+          if (v === 'unread') { composer.saveDraft(); this._back(); await this._ws('flag', { thread_id: tid, flag: 'marked_unread', on: true }); return; }
+          if (v === 'archive') {
+            const on = !th?.archived;
+            if (on && !(await this._confirmArchive(tid))) return;
+            composer.saveDraft(); if (on) this._back();
+            await this._archive(tid, on, false, true);
+            return;
+          }
+          if (v === 'leave') {
+            const r = await this._alert({ title: 'Leave this Conversation?', message: 'You won’t get any more messages from this group.', buttons: [{ text: 'Leave', style: 'destructive', value: true }, { text: 'Cancel', style: 'cancel' }] });
+            if (r.value) { await this._ws('leave_thread', { thread_id: tid }); this._closeThreadPages(tid); }
+            return;
+          }
+          if (v === 'delete') { if (await this._confirmDeleteThread(tid)) this._closeThreadPages(tid); return; }
+        } catch (err) { this._toast(err.message); return; }
         if (v === 'info') this._nav('info', { tid });
         else if (v === 'search') this._nav('tsearch', { tid });
+        else if (v === 'pdf') this._nav('pdfOptions', { tid });
         else if (v === 'locreq') this._sendMessage(tid, '', [], { type: 'locreq' });
+        else if (v?.startsWith?.('find:')) this._nav('people', { focus: v.slice(5) });
         else if (v?.startsWith?.('bg:')) this._bgChoice(tid, v.slice(3));
         else if (v?.startsWith?.('skin:')) this._setSkin(v.slice(5));
         return;
@@ -3125,7 +3312,20 @@ class CrowMessengerCard extends HTMLElement {
 
   // ── Chat backgrounds & themes (each person's own) ──────────────────────────
   // ── Archive ────────────────────────────────────────────────────────────────
-  async _archive(tid, on, quiet = false) {
+  // the same confirmation popup as Delete and Leave, before a conversation is archived
+  async _confirmArchive(tid) {
+    const t = this._s.threads.get(tid);
+    const keep = !!this._s.profile?.keep_archived;
+    const r = await this._alert({
+      title: 'Archive Conversation?',
+      message: `This conversation with ${this._threadTitle(t)} moves to Archived. ${keep ? 'It stays there when new messages arrive.' : 'It comes back to Messages when a new message arrives.'}`,
+      buttons: [{ text: 'Archive', style: 'ok', value: true }, { text: 'Cancel', style: 'cancel' }],
+    });
+    return !!r.value;
+  }
+
+  async _archive(tid, on, quiet = false, confirmed = false) {
+    if (on && !quiet && !confirmed && !(await this._confirmArchive(tid))) return false;
     const t = this._s.threads.get(tid);
     if (t) { t.archived = on; if (on) t.pinned = false; this._refresh('list'); }
     try {
@@ -3597,6 +3797,7 @@ class CrowMessengerCard extends HTMLElement {
   async _bubbleMenu(target, tid) {
     const row = target.closest('.mrow');
     if (!row) return;
+    if (this._stack.find(p => p.type === 'thread' && p.data.tid === tid)?.selecting) return;
     const box = this._s.msgs.get(tid);
     const m = box?.list.find(x => x.id === row.dataset.mid);
     if (!m) return;
@@ -3632,6 +3833,8 @@ class CrowMessengerCard extends HTMLElement {
     }
     if (live && tt?.is_group && !mine && m.sender !== HA_ID) share.push({ text: 'Reply Privately', value: 'private', icon: MICON.privately });
     if (aid && !gone) share.push({ text: 'Save', value: 'save', icon: ICON.download });
+    // Share: the phone's share sheet (where the browser or app offers one)
+    if (live && navigator.share && (m.text || (m.attachments || []).some(x => !x.removed) || m.type === 'location')) share.push({ text: 'Share…', value: 'share', icon: ICON.share });
     // AI: turn a message into a calendar event or a reminder
     if (onText && ai.actions) addTo.push({ text: 'Calendar', full: 'Add to Calendar', value: 'event', icon: ICON.cal }, { text: 'Reminders', full: 'Add Reminder', value: 'reminder', icon: ICON.todo });
     if (onText && ai.translate) more.push(this._translations.has(m.id) ? { text: 'Show Original', value: 'untranslate', icon: ICON.globe } : { text: 'Translate', value: 'translate', icon: ICON.globe });
@@ -3641,6 +3844,7 @@ class CrowMessengerCard extends HTMLElement {
         { text: starred ? 'Unstar' : 'Star', value: 'star', icon: starred ? MICON.starFill : MICON.star });
       if (mine && (tt?.participants || []).some(p => p !== me && p !== HA_ID)) more.push({ text: 'Info', value: 'info', icon: MICON.info });
     }
+    if (live) danger.push({ text: 'Select Messages', value: 'select', icon: ICON.checkCircle });
     danger.push({ text: 'Delete', value: 'delete', icon: ICON.trash, red: true });
     // whoever sent a photo or file (or an administrator) can also take it off the server for everyone
     if (aid && !gone && !m.pending && (mine || this._s.isAdmin)) danger.push({ text: 'Remove from Server', value: 'server', icon: ICON.trash, red: true });
@@ -3664,11 +3868,13 @@ class CrowMessengerCard extends HTMLElement {
     if (v === 'star') this._ws('star', { thread_id: tid, message_id: m.id, on: !tt?.starred?.includes(m.id) }).catch(err => this._toast(err.message));
     if (v === 'pinmsg') this._ws('pin_message', { thread_id: tid, message_id: m.id, on: !tt?.pinned_messages?.some(p => p.id === m.id) }).catch(err => this._toast(err.message));
     if (v === 'forward') this._openForward(tid, m);
+    if (v === 'select') this._selectMessages(tid, m);
+    if (v === 'share') this._shareMessage(m, aid);
     if (v === 'private') this._replyPrivately(tid, m);
     if (v === 'info') this._openInfo(tid, m);
     if (v === 'edit') tpage?.composer?.startEdit(m);
     if (v === 'sticker') this._openStickers({ tid, place: m });
-    if (v === 'copy') { try { await navigator.clipboard.writeText(m.text); this._toast('Copied'); } catch (e) { this._toast('Copy not available here'); } }
+    if (v === 'copy') { this._toast((await copyText(m.text)) ? 'Copied' : 'Copy not available here'); }
     if (v === 'save') { const a = m.attachments.find(x => x.id === aid); this._saveAttachment(aid, a?.name); }
     if (v === 'unsend') {
       try { await this._ws('unsend', { thread_id: tid, message_id: m.id }); } catch (err) { this._toast(err.message); }
@@ -3837,7 +4043,29 @@ class CrowMessengerCard extends HTMLElement {
     v.addEventListener('click', async (e) => {
       const act = e.target.closest('[data-a]')?.dataset.a;
       if (act === 'close' || e.target === v) { media.pause?.(); v.remove(); }
-      if (act === 'save') this._saveAttachment(aid, a.name);
+      if (act === 'save') {
+        if (video) { this._saveAttachment(aid, a.name); return; }
+        // a photo: save it, copy it, or use it as a chat background
+        const pick = await this._menu(e.target.closest('button'), [
+          { text: navigator.share ? 'Share or Save' : 'Save', value: 'save', icon: ICON.download },
+          { text: 'Copy Photo', value: 'copy', icon: ICON.copy },
+          { sep: true },
+          { text: 'Set as Background', icon: ICON.photo, sub: [{ text: 'This Chat', value: 'bg:chat' }, { text: 'All Chats', value: 'bg:all' }] },
+        ], { align: 'left', above: true });
+        if (pick === 'save') this._saveAttachment(aid, a.name);
+        if (pick === 'copy') this._toast((await copyImage(media)) ? 'Photo copied' : 'Copy not available here');
+        if (pick?.startsWith?.('bg:')) {
+          try {
+            this._toast('Setting background…');
+            const blob = await (await fetch(media.src)).blob();
+            const image = await fileToBackground(new File([blob], a.name || 'photo.jpg', { type: blob.type || 'image/jpeg' }));
+            const key = pick === 'bg:all' ? '*' : tid;
+            await this._ws('background/set', { key, image });
+            this._toast(key === '*' ? 'Background set for all chats' : 'Background set for this chat');
+          } catch (err) { this._toast(err.message || 'Couldn’t use that photo'); }
+        }
+        return;
+      }
       if (act === 'desc') {
         // a description of the photo from the AI, shown along the bottom
         let cap = v.querySelector('.vcap');
@@ -4343,7 +4571,7 @@ class CrowMessengerCard extends HTMLElement {
     const s = this._s;
     const wrap = this._el(`<div class="sheet-wrap"><div class="sheet">
       <div class="grab"></div>
-      <div class="shead"><div style="width:44px"></div><h3>New Message</h3><button class="cb g" data-a="close" aria-label="Cancel">${ICON.x}</button></div>
+      <div class="shead"><div style="width:32px"></div><h3>New Message</h3><button class="cb xsm" data-a="close" aria-label="Cancel">${ICON.x}</button></div>
       <div class="to-field"><span class="lbl">To:</span><span class="chips" style="display:contents"></span><input type="text" autocomplete="off" enterkeyhint="next"><button class="addbtn" data-a="all" aria-label="Choose people">${ICON.plus}</button></div>
       <div class="gname" hidden><input type="text" placeholder="Group Name (optional)" maxlength="80"></div>
       <div class="suggest"></div>
@@ -5622,8 +5850,8 @@ Object.assign(CrowMessengerCard.prototype, {
   // A bottom sheet: Cancel, a title, and an optional action on the right.
   _xsheet({ title, body, action, onAction }) {
     const wrap = this._el(`<div class="xs-wrap"><div class="xsheet" role="dialog" aria-label="${esc(title)}">
-      <div class="xhd"><button class="cb g" data-xs="close" aria-label="Cancel">${ICON.x}</button><h3>${esc(title)}</h3>
-        ${action ? `<button class="pill g accent" data-xs="act" style="height:38px;font-size:16px">${esc(action)}</button>` : '<div style="width:44px"></div>'}</div>
+      <div class="xhd"><button class="cb xsm" data-xs="close" aria-label="Cancel">${ICON.x}</button><h3>${esc(title)}</h3>
+        ${action ? `<button class="pill g accent" data-xs="act">${esc(action)}</button>` : '<div style="width:32px"></div>'}</div>
       <div class="xbody">${body}</div></div></div>`);
     const api = {
       wrap, el: wrap.querySelector('.xbody'), actBtn: wrap.querySelector('[data-xs="act"]'),
@@ -5925,7 +6153,6 @@ Object.assign(CrowMessengerCard.prototype, {
     let recent = load(REC), pinned = load(PIN);
     // where you are, from your Home Assistant person, for "2.3 miles away"
     const me = Object.values(h.states).find(st => st.entity_id.startsWith('person.') && st.attributes.user_id === s.me && st.attributes.latitude != null);
-    const miles = h.config?.unit_system?.length === 'mi';
     const kmTo = (z) => {
       if (!me || z.lat == null) return null;
       const R = 6371, rad = (d) => d * Math.PI / 180;
@@ -5933,7 +6160,7 @@ Object.assign(CrowMessengerCard.prototype, {
       const a = Math.sin(dLat / 2) ** 2 + Math.cos(rad(me.attributes.latitude)) * Math.cos(rad(z.lat)) * Math.sin(dLon / 2) ** 2;
       return 2 * R * Math.asin(Math.sqrt(a));
     };
-    const distText = (km) => { const d = miles ? km / 1.609 : km; return `${d < 10 ? d.toFixed(1) : Math.round(d).toLocaleString()} ${miles ? (d === 1 ? 'mile' : 'miles') : 'km'} away`; };
+    const distText = (km) => `${this._fmtDist(km * 1000, true)} away`;
     const away = (z, km) => {
       if (km == null) return '';
       const radius = (h.states[z.entity_id]?.attributes.radius || 100) / 1000;
@@ -6090,14 +6317,13 @@ Object.assign(CrowMessengerCard.prototype, {
     try { zones = (await this._ws('zones')).zones || []; } catch (e) { /* none */ }
     const h = this._hass, s = this._s;
     const me = Object.values(h.states).find(st => st.entity_id.startsWith('person.') && st.attributes.user_id === s.me && st.attributes.latitude != null);
-    const miles = h.config?.unit_system?.length === 'mi';
     const kmTo = (z) => {
       if (!me || z.lat == null) return null;
       const rad = (d) => d * Math.PI / 180, la = me.attributes.latitude, lo = me.attributes.longitude;
       const a = Math.sin(rad(z.lat - la) / 2) ** 2 + Math.cos(rad(la)) * Math.cos(rad(z.lat)) * Math.sin(rad(z.lon - lo) / 2) ** 2;
       return 2 * 6371 * Math.asin(Math.sqrt(a));
     };
-    const distText = (km) => { const d = miles ? km / 1.609 : km; return `${d < 10 ? d.toFixed(1) : Math.round(d).toLocaleString()} ${miles ? (d === 1 ? 'mile' : 'miles') : 'km'} away`; };
+    const distText = (km) => `${this._fmtDist(km * 1000, true)} away`;
     return zones.map(z => {
       const km = kmTo(z), st = h.states[z.entity_id];
       const here = km != null && km <= (st?.attributes.radius || 100) / 1000;
@@ -7540,7 +7766,7 @@ const SKIN_CSS = `
 :host([data-skin]) :is(.clist, .thread) > .top { height: var(--sk-bar-h, 56px); min-height: 0; padding: 0 6px; gap: 2px; background: var(--sk-bar, var(--cm-bg2)); color: var(--sk-bar-text, var(--cm-text));
   border-bottom: var(--sk-bar-bd, 0.5px solid var(--cm-sep)); box-shadow: var(--sk-bar-sh, none); pointer-events: auto; }
 :host([data-skin]) :is(.clist, .thread) > .top :is(.cb, .pill, .capsule, .capsule button) { background: none; border: 0; box-shadow: none; color: inherit; }
-:host([data-skin]) :is(.clist, .thread) > .top .pill { height: 36px; padding: 0 10px; font-size: 15px; }
+:host([data-skin]) :is(.clist, .thread) > .top .pill { height: 34px; padding: 0 10px; font-size: 15px; }
 :host([data-skin]) :is(.clist, .thread) > .top .cb { width: 40px; height: 40px; }
 :host([data-skin]) .clist > .top .title { opacity: 1 !important; position: static; transform: none; flex: 1; order: -1; max-width: none; padding-left: 10px; text-align: left;
   font-size: var(--sk-title-fs, 21px); font-weight: var(--sk-title-fw, 700); font-family: var(--sk-title-ff, inherit); font-style: var(--sk-title-fst, normal); letter-spacing: var(--sk-title-ls, normal); }
@@ -9126,14 +9352,184 @@ Object.assign(CrowMessengerCard.prototype, {
   _openForward(tid, m) {
     const s = this._s;
     const chosen = new Set();
+    const many = Array.isArray(m) ? m : [m];
     const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => b.updated_at - a.updated_at);
     const sh = this._xsheet({
-      title: 'Forward', action: 'Send',
+      title: many.length > 1 ? `Forward ${many.length} Messages` : 'Forward', action: 'Send',
       body: `<input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>`,
       onAction: async () => {
         if (!chosen.size) { this._toast('Choose who to send it to'); return false; }
-        await this._ws('forward', { thread_id: tid, message_id: m.id, to: [...chosen] });
+        for (const x of many) await this._ws('forward', { thread_id: tid, message_id: x.id, to: [...chosen] });
         this._toast(chosen.size === 1 ? 'Forwarded' : `Forwarded to ${chosen.size} conversations`);
+      },
+    });
+    const list = sh.el.querySelector('.fwlist'), q = sh.el.querySelector('.q');
+    const render = () => {
+      const w = q.value.toLowerCase();
+      list.innerHTML = threads.filter(t => !w || this._threadTitle(t).toLowerCase().includes(w)).map(t =>
+        `<div class="pick-row${chosen.has(t.id) ? ' on' : ''}" data-t="${esc(t.id)}">${this._threadAv(t, 36)}<div class="pn">${esc(this._threadTitle(t))}</div><span class="pck2">${chosen.has(t.id) ? ICON.check : ''}</span></div>`).join('')
+        || `<div class="pick-row"><div class="pn" style="color:var(--cm-text2)">No conversations</div></div>`;
+    };
+    q.addEventListener('input', render);
+    list.addEventListener('click', (e) => { const r = e.target.closest('[data-t]'); if (!r) return; chosen.has(r.dataset.t) ? chosen.delete(r.dataset.t) : chosen.add(r.dataset.t); render(); });
+    render();
+  },
+
+  // Share… from a message: its text, photos and files, or a location as a maps link
+  async _shareMessage(m, aid) {
+    try {
+      if (m.type === 'location' && m.location) {
+        const l = m.location;
+        await navigator.share({ title: l.label || 'Location', url: isApple() ? `https://maps.apple.com/?ll=${l.lat},${l.lon}&q=${encodeURIComponent(l.label || 'Location')}` : `https://www.google.com/maps/search/?api=1&query=${l.lat},${l.lon}` });
+        return;
+      }
+      const atts = (m.attachments || []).filter(x => !x.removed && (!aid || x.id === aid));
+      if (atts.length) {
+        const files = [];
+        for (const a of atts.slice(0, 10)) {
+          const blob = await (await fetch(await this._media(a.id, false))).blob();
+          files.push(new File([blob], a.name || 'attachment', { type: blob.type || a.mime || '' }));
+        }
+        if (navigator.canShare?.({ files })) { await navigator.share({ files, ...(m.text && !aid ? { text: m.text } : {}) }); return; }
+      }
+      if (m.text) await navigator.share({ text: m.text });
+    } catch (err) { if (err?.name !== 'AbortError') this._toast('Couldn’t share that'); }
+  },
+
+  // Select Messages: tick several, then Copy, Forward or Delete them together
+  _selectMessages(tid, first) {
+    const page = this._stack.find(p => p.type === 'thread' && p.data.tid === tid);
+    if (!page || page.selecting) return;
+    const el = page.el, s = this._s;
+    const sel = page.selecting = new Set(first && !first.pending ? [first.id] : []);
+    el.classList.add('selecting');
+    const bar = this._el(`<div class="selbar g"><button class="pill sb-done" data-sel="done">Done</button><span class="sb-n"></span>
+      <button class="cb" data-sel="copy" aria-label="Copy">${ICON.copy}</button><button class="cb" data-sel="fwd" aria-label="Forward">${MICON.fwd}</button><button class="cb red" data-sel="del" aria-label="Delete">${ICON.trash}</button></div>`);
+    el.appendChild(bar);
+    const list = () => s.msgs.get(tid)?.list || [];
+    const picked = () => list().filter(x => sel.has(x.id)).sort((a, b) => a.ts - b.ts);
+    const fwdable = (x) => !['poll', 'checkin', 'checklist', 'event', 'call', 'system'].includes(x.type) && !x.view_once;
+    const paint = () => {
+      el.querySelectorAll('.mrow[data-mid]').forEach(r => {
+        if (!r.querySelector(':scope > .selck')) r.prepend(this._el(`<span class="selck">${ICON.check}</span>`));
+        r.classList.toggle('picked', sel.has(r.dataset.mid));
+      });
+      const ms = picked();
+      bar.querySelector('.sb-n').textContent = ms.length ? `${ms.length} Selected` : 'Select Messages';
+      bar.querySelector('[data-sel="copy"]').disabled = !ms.some(x => x.text);
+      bar.querySelector('[data-sel="fwd"]').disabled = !ms.length || !ms.every(fwdable);
+      bar.querySelector('[data-sel="del"]').disabled = !ms.length;
+    };
+    const mo = new MutationObserver(() => { if (page.selecting) paint(); });
+    mo.observe(el.querySelector('.msgs'), { childList: true, subtree: true });
+    const stop = () => {
+      page.selecting = null; page.stopSelect = null;
+      el.classList.remove('selecting');
+      mo.disconnect(); bar.remove();
+      el.removeEventListener('click', onClick, true);
+      el.querySelectorAll('.selck').forEach(x => x.remove());
+      el.querySelectorAll('.mrow.picked').forEach(r => r.classList.remove('picked'));
+    };
+    const onClick = async (e) => {
+      if (e.target.closest('.top')) { if (e.target.closest('[data-a="back"]')) stop(); return; }   // the header still works
+      const b = e.target.closest('[data-sel]');
+      e.preventDefault(); e.stopPropagation();
+      if (b) {
+        const ms = picked(), act = b.dataset.sel;
+        if (act === 'done') { stop(); return; }
+        if (act === 'copy') {
+          const several = new Set(ms.map(x => x.sender)).size > 1;
+          const text = ms.filter(x => x.text).map(x => several ? `${this._userName(x.sender)}: ${x.text}` : x.text).join('\n\n');
+          this._toast((await copyText(text)) ? (ms.length === 1 ? 'Copied' : `Copied ${ms.length} messages`) : 'Copy not available here');
+          return;
+        }
+        if (act === 'fwd') { stop(); this._openForward(tid, ms); return; }
+        if (act === 'del') {
+          const t = s.threads.get(tid);
+          const others = (t?.participants || []).filter(p => p !== s.me && p !== HA_ID);
+          const n = ms.length;
+          const r = await this._alert({
+            title: n === 1 ? 'Delete Message?' : `Delete ${n} Messages?`,
+            message: !others.length ? `${n === 1 ? 'This message' : 'These messages'} will be deleted.`
+              : `${n === 1 ? 'This message' : 'These messages'} will be deleted from your conversation. ${others.length === 1 ? this._userName(others[0], true) + ' will still have them' : 'Others in the conversation will still have them'}.`,
+            buttons: [{ text: 'Delete', style: 'destructive', value: true }, { text: 'Cancel', style: 'cancel' }],
+          });
+          if (!r.value) return;
+          stop();
+          const box = s.msgs.get(tid);
+          if (box) { box.list = box.list.filter(x => !sel.has(x.id) && !ms.includes(x)); this._refresh('messages', tid); }
+          try { for (const x of ms) await this._ws('delete_message', { thread_id: tid, message_id: x.id }); }
+          catch (err) { this._toast(err.message); this._loadMsgs(tid, { reset: true }); }
+        }
+        return;
+      }
+      const row = e.target.closest('.mrow[data-mid]');
+      if (!row) return;
+      const m = list().find(x => x.id === row.dataset.mid);
+      if (!m || m.pending || m.type === 'system') return;
+      sel.has(m.id) ? sel.delete(m.id) : sel.add(m.id);
+      paint();
+    };
+    el.addEventListener('click', onClick, true);
+    page.stopSelect = stop;
+    paint();
+  },
+
+  // a file (such as a PDF export) sent as an attachment to the chats you choose
+  _sendFileToChats(file) {
+    this._chatPicker({
+      title: 'Send in a Chat', note: file.name,
+      send: async (tid) => {
+        const item = { name: file.name, mime: file.type, status: 'uploading', progress: 0 };
+        const up = await this._prepareAndUpload(file, item, tid, () => {});
+        await this._ws('send', { thread_id: tid, text: '', attachments: [up.id] });
+      },
+    });
+  },
+
+  // choose one or more conversations (with search), then send something to each
+  _chatPicker({ title, note, send }) {
+    const s = this._s;
+    const chosen = new Set();
+    const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => b.updated_at - a.updated_at);
+    const sh = this._xsheet({
+      title, action: 'Send',
+      body: `${note ? `<div class="xnote" style="margin:0 4px 10px">${esc(note)}</div>` : ''}<input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>`,
+      onAction: async () => {
+        if (!chosen.size) { this._toast('Choose who to send it to'); return false; }
+        this._toast('Sending…');
+        try {
+          for (const tid of chosen) await send(tid);
+          this._toast(chosen.size === 1 ? 'Sent' : `Sent to ${chosen.size} conversations`);
+        } catch (err) { this._toast(err.message || 'Couldn’t send that'); return false; }
+      },
+    });
+    const list = sh.el.querySelector('.fwlist'), q = sh.el.querySelector('.q');
+    const render = () => {
+      const w = q.value.toLowerCase();
+      list.innerHTML = threads.filter(t => !w || this._threadTitle(t).toLowerCase().includes(w)).map(t =>
+        `<div class="pick-row${chosen.has(t.id) ? ' on' : ''}" data-t="${esc(t.id)}">${this._threadAv(t, 36)}<div class="pn">${esc(this._threadTitle(t))}</div><span class="pck2">${chosen.has(t.id) ? ICON.check : ''}</span></div>`).join('')
+        || `<div class="pick-row"><div class="pn" style="color:var(--cm-text2)">No conversations</div></div>`;
+    };
+    q.addEventListener('input', render);
+    list.addEventListener('click', (e) => { const r = e.target.closest('[data-t]'); if (!r) return; chosen.has(r.dataset.t) ? chosen.delete(r.dataset.t) : chosen.add(r.dataset.t); render(); });
+    render();
+  },
+
+  // a place (from Find Nearby) sent as a location pin to the chats you choose
+  _sendPlace(loc) {
+    const s = this._s;
+    const chosen = new Set();
+    const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => b.updated_at - a.updated_at);
+    const sh = this._xsheet({
+      title: 'Send Location', action: 'Send',
+      body: `<div class="xnote" style="margin:0 4px 10px">${esc(loc.label)}</div><input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>`,
+      onAction: async () => {
+        if (!chosen.size) { this._toast('Choose who to send it to'); return false; }
+        try {
+          for (const tid of chosen) await this._ws('send', { thread_id: tid, text: '', extra: { type: 'location', location: { lat: loc.lat, lon: loc.lon, label: loc.label, live_minutes: 0 } } });
+          this._toast(chosen.size === 1 ? 'Sent' : `Sent to ${chosen.size} conversations`);
+        } catch (err) { this._toast(err.message); return false; }
       },
     });
     const list = sh.el.querySelector('.fwlist'), q = sh.el.querySelector('.q');
@@ -9488,7 +9884,7 @@ Object.assign(CrowMessengerCard.prototype, {
       if (e.target.closest('[data-a="back"]')) { this._back(); return; }
       if (e.target.closest('[data-a="askthis"]')) { res.innerHTML = ''; showAnswer(q.value); return; }
       if (e.target.closest('[data-a="askcopy"]')) {
-        try { await navigator.clipboard.writeText(el.querySelector('.ask-card')?.dataset.answer || ''); this._toast('Copied'); } catch (err) { this._toast('Copy not available here'); }
+        this._toast((await copyText(el.querySelector('.ask-card')?.dataset.answer || '')) ? 'Copied' : 'Copy not available here');
         return;
       }
       const k = e.target.closest('[data-k]');
@@ -9820,7 +10216,7 @@ Object.assign(CrowMessengerCard.prototype, {
       this._lpFired = true;
       const v = await this._menu(row, [{ text: 'Copy', value: 'copy', icon: ICON.copy }], { align: 'left' });
       this._lpFired = false;
-      if (v === 'copy') { try { await navigator.clipboard.writeText(value); this._toast('Copied'); } catch (err) { this._toast('Copy not available here'); } }
+      if (v === 'copy') { this._toast((await copyText(value)) ? 'Copied' : 'Copy not available here'); }
     });
     page.onShow = () => { if (!s.contacts.get(cid)) setTimeout(() => this._back(), 50); };
     return page;
@@ -10296,6 +10692,52 @@ async function mapLibreCss() {
   return _fmCss;
 }
 
+// Weather where someone is (Open-Meteo: free, no account), by the WMO weather code
+const FM_WX = { 0: 'Clear', 1: 'Mostly Clear', 2: 'Partly Cloudy', 3: 'Cloudy', 45: 'Fog', 48: 'Freezing Fog',
+  51: 'Light Drizzle', 53: 'Drizzle', 55: 'Heavy Drizzle', 56: 'Freezing Drizzle', 57: 'Freezing Drizzle',
+  61: 'Light Rain', 63: 'Rain', 65: 'Heavy Rain', 66: 'Freezing Rain', 67: 'Freezing Rain',
+  71: 'Light Snow', 73: 'Snow', 75: 'Heavy Snow', 77: 'Snow Grains', 80: 'Showers', 81: 'Heavy Showers', 82: 'Violent Showers',
+  85: 'Snow Showers', 86: 'Heavy Snow Showers', 95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 99: 'Thunderstorm with Hail' };
+// Find Nearby: places from OpenStreetMap (the Overpass service, on whichever of its servers answers)
+const FM_OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+const FM_NEARBY = [
+  { id: 'toilets', name: 'Toilets', one: 'Toilets', emoji: '🚻', tags: ['amenity=toilets', 'toilets=yes'] },
+  { id: 'cafe', name: 'Cafés', one: 'Café', emoji: '☕', tags: ['amenity=cafe'] },
+  { id: 'food', name: 'Restaurants', one: 'Restaurant', emoji: '🍽️', tags: ['amenity=restaurant', 'amenity=fast_food'] },
+  { id: 'pub', name: 'Pubs & Bars', one: 'Pub', emoji: '🍺', tags: ['amenity=pub', 'amenity=bar'] },
+  // many cash machines are mapped on the bank or shop they're in (atm=yes) rather than on their own
+  { id: 'atm', name: 'Cash Machines', one: 'Cash Machine', emoji: '🏦', tags: ['amenity=atm', 'atm=yes'] },
+  { id: 'pharmacy', name: 'Pharmacies', one: 'Pharmacy', emoji: '💊', tags: ['amenity=pharmacy', 'shop=chemist'] },
+  { id: 'shop', name: 'Supermarkets', one: 'Supermarket', emoji: '🛒', tags: ['shop=supermarket', 'shop=convenience'] },
+  { id: 'fuel', name: 'Petrol Stations', one: 'Petrol Station', emoji: '⛽', tags: ['amenity=fuel'] },
+  { id: 'ev', name: 'EV Charging', one: 'EV Charger', emoji: '⚡', tags: ['amenity=charging_station'] },
+  { id: 'parking', name: 'Parking', one: 'Parking', emoji: '🅿️', tags: ['amenity=parking'] },
+];
+const fmIco = (cat, size = 20) => `<span class="fm-emo" style="font-size:${Math.round(size * 0.9)}px">${cat.emoji}</span>`;
+// places found are remembered on this device (Find Nearby → Remember Results in the editor)
+const FM_NEAR_KEY = 'crowMessengerNearby:';
+// an address on separate lines: street, town, postcode
+const fmAddr = (it) => {
+  if (Array.isArray(it.addrLines)) return it.addrLines.filter(Boolean).join('\n');
+  const parts = String(it.address || '').split(/\s*,\s*/).filter(Boolean);
+  const out = [];
+  for (const x of parts) {
+    const m = x.match(/^(.*?)\s*\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})$/i);
+    if (m && m[1]) out.push(m[1], m[2].toUpperCase()); else out.push(x);
+  }
+  return out.join('\n');
+};
+const fmSleep = (ms) => new Promise(r => setTimeout(r, ms));
+// OpenStreetMap's opening hours ("Mo-Sa 07:00-22:00; Su off") made easier to read
+const fmHours = (h) => {
+  if (!h) return '';
+  if (h.trim() === '24/7') return 'Open 24 Hours';
+  const days = { Mo: 'Mon', Tu: 'Tue', We: 'Wed', Th: 'Thu', Fr: 'Fri', Sa: 'Sat', Su: 'Sun', PH: 'Bank Holidays' };
+  return h.split(/\s*;\s*/).filter(Boolean).map(part => part
+    .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, d => days[d])
+    .replace(/(\d\d:\d\d)-(\d\d:\d\d)/g, '$1–$2').replace(/([A-Za-z])-([A-Za-z])/g, '$1–$2')
+    .replace(/\boff\b|\bclosed\b/gi, 'Closed').replace(/,/g, ', ')).join('\n');
+};
 const FM_ICON = {
   map: _f('<path d="M9 4.2L3.8 6A1.2 1.2 0 003 7.1v12.2a.8.8 0 001.1.8L9 18.4zM10.5 4.1v14.3l5 1.6V5.7zM17 5.7V20l4.2-1.5a1.2 1.2 0 00.8-1.1V5.2a.8.8 0 00-1.1-.8z"/>'),
   locate: _s('<path d="M20.5 3.5L3.8 10.6a.5.5 0 00.1.9l7 1.7 1.7 7a.5.5 0 00.9.1z"/>', 'stroke-width="2.1"'),
@@ -10353,6 +10795,9 @@ const FM_CSS = `
 .fm-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px 6px 22px; flex-shrink: 0; min-height: 64px; }
 .fm-head h2 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.01em; }
 .fm-head .cb { width: 46px; height: 46px; }
+.fm-head .cb.sm { width: 32px; height: 32px; background: var(--cm-fill); color: var(--cm-text2); box-shadow: none; border: 0; }
+.fm-head h2:empty + .cb.sm { margin-top: 6px; align-self: flex-start; }
+.fm-head .cb.sm svg { width: 15px; height: 15px; }
 .fm-list { flex: 1; overflow-y: auto; touch-action: pan-y; padding-bottom: 20px; scrollbar-width: none; }
 .fm-row { display: flex; align-items: center; gap: 14px; padding: 10px 20px; position: relative; cursor: pointer; }
 .fm-row + .fm-row::before { content: ''; position: absolute; top: 0; left: 86px; right: 20px; height: 1px; transform: scaleY(0.6); background: var(--cm-sep); }
@@ -10369,12 +10814,42 @@ const FM_CSS = `
 .fm-badge svg { width: 11px; height: 11px; }
 .fm-detail { padding: 0 20px 20px; }
 .fm-detail .fm-dn { font-size: 26px; font-weight: 700; }
+.fm-detail .fm-dn.pl { font-size: 21px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .fm-detail .fm-ds { font-size: 15px; color: var(--cm-text2); margin-top: 3px; }
 .fm-acts { display: flex; gap: 10px; margin: 16px 0; }
 .fm-acts button { flex: 1; height: 62px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--cm-accent); background: var(--cm-fill); }
 .fm-acts button svg { width: 21px; height: 21px; }
 .fm-acts button[disabled] { opacity: 0.4; pointer-events: none; }
 .fm-info { border-radius: 20px; background: var(--cm-fill2); overflow: hidden; }
+.fm-more { margin-top: 12px; }
+.fm-more .fi2 { cursor: pointer; }
+.fm-more .fi2 span:first-child { color: var(--cm-accent); }
+.fm-more .fi2 svg { width: 16px; height: 16px; color: var(--cm-text3); }
+.fm-nsub { font-size: 13px; color: var(--cm-text2); padding: 0 18px 6px; }
+.fm-nrow { display: flex; align-items: center; gap: 12px; padding: 9px 16px; cursor: pointer; border-radius: 14px; }
+.fm-nrow.sel, .fm-nrow:active { background: var(--cm-fill2); }
+.fm-nic { width: 40px; height: 40px; border-radius: 50%; background: var(--cm-fill2); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
+.fm-ndir { width: 36px; height: 36px; border-radius: 50%; background: var(--cm-fill2); color: var(--cm-accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.fm-ndir svg { width: 18px; height: 18px; }
+.fm-emo { line-height: 1; width: 1.2em; height: 1.2em; text-align: center; display: flex; align-items: center; justify-content: center; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.fm-poi.saved { width: 22px; height: 22px; border-width: 1.5px; }
+.fm-poi.saved .fm-emo { font-size: 11px !important; }
+.fm-poi .fm-emo { font-size: 13px !important; }
+.fm-poi { width: 26px; height: 26px; border-radius: 50%; background: rgba(28,28,30,0.85); color: #fff; border: 2px solid #fff; box-sizing: border-box; box-shadow: 0 2px 8px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform .2s; }
+.fm-nic { color: #fff; background: rgba(28,28,30,0.85); border: 2px solid #fff; box-sizing: border-box; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+.fm-link { color: var(--cm-accent); }
+/* on the glass sheet the blue is lightened (dark) or deepened (light), and buttons are a little more solid, so they stand out */
+:host([data-bars="glass"][data-mode="dark"]) .fm-sheet :is(.fm-acts button, .fm-ndir, .fm-link) { color: color-mix(in srgb, var(--cm-accent) 45%, #fff); }
+:host([data-bars="glass"][data-mode="dark"]) .fm-sheet :is(.fm-acts button, .fm-ndir) { background: rgba(255,255,255,0.16); font-weight: 600; }
+:host([data-bars="glass"]:not([data-mode="dark"])) .fm-sheet :is(.fm-acts button, .fm-ndir, .fm-link) { color: color-mix(in srgb, var(--cm-accent) 75%, #000); }
+:host([data-bars="glass"]:not([data-mode="dark"])) .fm-sheet :is(.fm-acts button, .fm-ndir) { background: rgba(255,255,255,0.6); font-weight: 600; }
+.fm-nic.big { width: 60px; height: 60px; }
+.fm-busy { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 20px; color: var(--cm-text2); font-size: 15px; }
+.fm-spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--cm-fill2); border-top-color: var(--cm-accent); animation: cm-spin 0.9s linear infinite; }
+.fm-info a.fi2 { color: inherit; text-decoration: none; }
+.fm-info a.fi2 b { color: var(--cm-accent); }
+.fm-src { font-size: 11px; color: var(--cm-text3); text-align: center; padding: 10px 0 4px; }
+.fm-poi.sel { transform: scale(1.35); box-shadow: 0 0 0 3px var(--cm-accent), 0 2px 10px rgba(0,0,0,0.4); }
 .fm-info .fi2 { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 15px; }
 .fm-info .fi2 + .fi2 { border-top: 1px solid var(--cm-sep); }
 .fm-info .fi2 span:first-child { color: var(--cm-text2); flex: 1; }
@@ -10482,6 +10957,60 @@ Object.assign(CrowMessengerCard.prototype, {
     }
     return null;
   },
+  // a sensor from the same phone as the person's location (the Companion app's own sensors)
+  _devState(p, re) {
+    const ents = this._hass.entities || {};
+    const dev = p.source && ents[p.source]?.device_id;
+    if (!dev) return null;
+    for (const e of Object.values(ents)) {
+      if (e.device_id === dev && re.test(e.entity_id)) {
+        const st = this._hass.states[e.entity_id];
+        if (st && !['unknown', 'unavailable'].includes(st.state)) return st;
+      }
+    }
+    return null;
+  },
+  // Charging / Full, from the phone's battery state
+  _charging(p) {
+    const st = this._devState(p, /^sensor\..*_battery_state$/);
+    const v = String(st?.state || '').toLowerCase().replace(/[\s-]+/g, '_');
+    if (v === 'charging') return 'Charging';
+    if (v === 'full') return 'Full';
+    if (this._devState(p, /^binary_sensor\..*_is_charging$/)?.state === 'on') return 'Charging';
+    return '';
+  },
+  // Walking, Running, Cycling, Driving or Still
+  _activity(p) {
+    const st = this._devState(p, /^sensor\..*_(activity|detected_activity)$/);
+    const v = String(st?.state || '').toLowerCase();
+    return { stationary: 'Still', still: 'Still', walking: 'Walking', on_foot: 'Walking', running: 'Running', automotive: 'Driving',
+      in_vehicle: 'Driving', cycling: 'Cycling', on_bicycle: 'Cycling' }[v] || '';
+  },
+  // Focus (iPhone) or Do Not Disturb (Android), when it's on
+  _focusOn(p) {
+    if (this._devState(p, /^binary_sensor\..*_focus$/)?.state === 'on') return 'Focus';
+    const dnd = String(this._devState(p, /^sensor\..*_do_not_disturb(_sensor)?$/)?.state || '').toLowerCase();
+    return dnd && dnd !== 'off' ? 'Do Not Disturb' : '';
+  },
+  // the Wi-Fi network the phone is on
+  _wifi(p) {
+    const st = this._devState(p, /^sensor\..*_(ssid|wifi_connection)$/);
+    if (!st) return null;
+    const v = String(st.state || '').trim();
+    return !v || /not connected|<not connected>/i.test(v) ? 'Not Connected' : v;
+  },
+  // when they arrived where they are (or left the last place they were)
+  _hereSince(p) {
+    const st = this._hass.states[p.eid];
+    if (!st?.last_changed || !p.has) return null;
+    const ts = new Date(st.last_changed).getTime();
+    const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
+    const dur = mins < 1 ? 'just now' : mins < 60 ? `${mins} min` : mins < 1440 ? `${Math.floor(mins / 60)} hr${mins % 60 ? ` ${mins % 60} min` : ''}` : `${Math.floor(mins / 1440)} day${mins >= 2880 ? 's' : ''}`;
+    const sameDayTs = new Date(ts).toDateString() === new Date().toDateString();
+    const when = new Date(ts).toLocaleString(locale(this._hass), sameDayTs ? { hour: 'numeric', minute: '2-digit', hour12: hour12(this._hass) }
+      : { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: hour12(this._hass) });
+    return { label: st.state === 'not_home' ? 'Away Since' : 'Here Since', value: `${when} · ${dur}` };
+  },
   _battery(p) {
     const tr = p.source && this._hass.states[p.source];
     const b = tr?.attributes?.battery_level ?? tr?.attributes?.battery;
@@ -10497,14 +11026,208 @@ Object.assign(CrowMessengerCard.prototype, {
     }
     return null;
   },
+  // the weather where someone is, kept for 15 minutes
+  _wxKey(lat, lon) { return `${(+lat).toFixed(2)},${(+lon).toFixed(2)},${this._hass?.config?.unit_system?.temperature === '°F'}`; },
+  async _weatherAt(lat, lon) {
+    const f = this._hass?.config?.unit_system?.temperature === '°F';
+    const key = this._wxKey(lat, lon);
+    this._wxCache = this._wxCache || new Map();
+    const hit = this._wxCache.get(key);
+    if (hit && Date.now() - hit.at < 15 * 60000) return hit.v;
+    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${(+lat).toFixed(4)}&longitude=${(+lon).toFixed(4)}&current=temperature_2m,weather_code&temperature_unit=${f ? 'fahrenheit' : 'celsius'}`);
+    if (!r.ok) throw new Error('weather');
+    const c = (await r.json()).current || {};
+    if (c.temperature_2m == null) throw new Error('weather');
+    const v = `${Math.round(c.temperature_2m)}° · ${FM_WX[c.weather_code] || 'Unknown'}`;
+    this._wxCache.set(key, { at: Date.now(), v });
+    return v;
+  },
+  // places near a point, nearest first. OpenStreetMap's Overpass service is busy at times, so
+  // each of its public servers is tried in turn (with a short pause between them), then
+  // OpenStreetMap's own search (Nominatim), which asks for a second between requests.
+  // Results are remembered on this device for the time chosen in the editor.
+  async _nearby(cat, lat, lon, radius = 1500, signal = null) {
+    const stopped = () => { if (signal?.aborted) throw new DOMException('stopped', 'AbortError'); };
+    const keepH = [168, 336, 720].includes(+this._config.people_nearby_keep) ? +this._config.people_nearby_keep : 168;
+    const key = `${FM_NEAR_KEY}${cat.id}:${(+lat).toFixed(3)},${(+lon).toFixed(3)}`;
+    // anything already found for this kind of place within a few hundred metres is used again
+    // rather than asking OpenStreetMap a second time (distances are worked out from where you asked)
+    try {
+      const pre = `${FM_NEAR_KEY}${cat.id}:`;
+      let best = null;
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(pre)) continue;
+        const hit = JSON.parse(localStorage.getItem(k) || 'null');
+        if (!hit || !Array.isArray(hit.items) || Date.now() - hit.at >= keepH * 3600000) continue;
+        const [hl, ho] = hit.lat != null ? [hit.lat, hit.lon] : k.slice(pre.length).split(',').map(Number);
+        const d = haversine([lat, lon], [hl, ho]);
+        if (d <= 400 && (!best || d < best.d)) best = { d, hit };
+      }
+      if (best) {
+        return best.hit.items.map(it => ({ ...it, dist: haversine([lat, lon], [it.lat, it.lon]) }))
+          .filter(it => it.dist <= radius * 1.2).sort((x, y) => x.dist - y.dist);
+      }
+    } catch (e) { /* nothing kept */ }
+    const parts = cat.tags.map(t => { const [k, v] = t.split('='); return `nwr["${k}"="${v}"](around:${radius},${lat},${lon});`; }).join('');
+    const q = `[out:json][timeout:20];(${parts});out center 80;`;
+    let els = null;
+    for (const [n, url] of FM_OVERPASS.entries()) {
+      stopped();
+      if (n) await fmSleep(600);
+      stopped();
+      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 12000);
+      const onStop = () => ctl.abort();
+      signal?.addEventListener('abort', onStop, { once: true });
+      try {
+        const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), signal: ctl.signal });
+        clearTimeout(tm);
+        if (!r.ok) { console.warn('[Crow Messenger] Find Nearby:', url, r.status); continue; }
+        const j = await r.json();
+        if (Array.isArray(j.elements)) { els = j.elements; break; }
+      } catch (err) { clearTimeout(tm); stopped(); console.warn('[Crow Messenger] Find Nearby:', url, err?.message || err); }
+      finally { signal?.removeEventListener('abort', onStop); }
+    }
+    stopped();
+    const out = [], seen = new Set();
+    const main = cat.tags.filter(t => !t.endsWith('=yes')).map(t => t.split('='));
+    const add = (d) => {
+      const k = `${String(d.name).toLowerCase()}|${(+d.lat).toFixed(4)}|${(+d.lon).toFixed(4)}`;
+      if (seen.has(k)) return;
+      seen.add(k);
+      const dist = haversine([lat, lon], [+d.lat, +d.lon]);
+      if (dist <= radius * 1.2) out.push({ ...d, lat: +d.lat, lon: +d.lon, dist });
+    };
+    const fromTags = (t) => {
+      const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');
+      const town = [t['addr:city'] || t['addr:town'] || t['addr:village'], t['addr:postcode']].filter(Boolean).join(' ');
+      // a cash machine or toilets inside a shop, bank or station
+      const inside = !main.some(([k, v]) => t[k] === v);
+      return {
+        sub: street || town || '', address: [street, town].filter(Boolean).join(', ') || t['addr:full'] || '',
+        addrLines: street || t['addr:city'] || t['addr:town'] || t['addr:village'] || t['addr:postcode']
+          ? [street, t['addr:city'] || t['addr:town'] || t['addr:village'], t['addr:postcode']] : null,
+        kind: inside ? `${cat.one} Inside` : '', hours: t.opening_hours || '', phone: t.phone || t['contact:phone'] || '',
+        web: t.website || t['contact:website'] || t.url || '', wheelchair: t.wheelchair || '',
+        operator: t.brand || t.operator || '', fee: t.fee || '', charge: t.charge || '',
+      };
+    };
+    if (els) {
+      for (const e of els) {
+        const la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon;
+        if (la == null || lo == null) continue;
+        const t = e.tags || {};
+        add({ name: t.name || t.brand || t.operator || cat.one, lat: la, lon: lo, ...fromTags(t) });
+      }
+    } else {
+      // OpenStreetMap's search, inside a box around the point
+      const dLat = radius / 111000, dLon = radius / (111000 * Math.cos(lat * Math.PI / 180));
+      const box = `${lon - dLon},${lat + dLat},${lon + dLon},${lat - dLat}`;
+      let any = false, first = true;
+      for (const [k, v] of main) {
+        if (!first) await fmSleep(1100);
+        first = false;
+        stopped();
+        try {
+          const r = await fetch(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ format: 'jsonv2', [k]: v, bounded: '1', viewbox: box, limit: '40', addressdetails: '1', extratags: '1' })}`, { signal });
+          if (!r.ok) continue;
+          any = true;
+          for (const pl of await r.json()) {
+            const a = pl.address || {}, x = pl.extratags || {};
+            const street = [a.house_number, a.road].filter(Boolean).join(' ');
+            // an unnamed place is called by its brand or what it is, not by the road it's on
+            add({ name: pl.name || x.brand || x.operator || cat.one, lat: pl.lat, lon: pl.lon, sub: street,
+              address: [street, [a.town || a.city || a.village, a.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', '),
+              addrLines: [street, a.town || a.city || a.village, a.postcode],
+              kind: '', hours: x.opening_hours || '', phone: x.phone || x['contact:phone'] || '', web: x.website || x['contact:website'] || '',
+              wheelchair: x.wheelchair || '', operator: x.brand || x.operator || '', fee: x.fee || '', charge: x.charge || '' });
+          }
+        } catch (err) { stopped(); console.warn('[Crow Messenger] Find Nearby (search):', err?.message || err); }
+      }
+      stopped();
+      if (!any) throw new Error('nearby');
+    }
+    const items = out.sort((x, y) => x.dist - y.dist).slice(0, 25);
+    try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), lat: +lat, lon: +lon, items })); } catch (e) { /* storage full or blocked */ }
+    return items;
+  },
+  // everything Find Nearby has found and still remembers, one entry per place
+  _savedNearby() {
+    const keepH = [168, 336, 720].includes(+this._config.people_nearby_keep) ? +this._config.people_nearby_keep : 168;
+    const out = [], seen = new Set();
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (!k || !k.startsWith(FM_NEAR_KEY)) continue;
+        const cat = FM_NEARBY.find(c => c.id === k.slice(FM_NEAR_KEY.length).split(':')[0]);
+        const hit = JSON.parse(localStorage.getItem(k) || 'null');
+        if (!cat || !hit || !Array.isArray(hit.items) || Date.now() - hit.at >= keepH * 3600000) continue;
+        for (const it of hit.items) {
+          const id = `${cat.id}|${String(it.name).toLowerCase()}|${(+it.lat).toFixed(4)}|${(+it.lon).toFixed(4)}`;
+          if (seen.has(id) || !Number.isFinite(+it.lat) || !Number.isFinite(+it.lon)) continue;
+          seen.add(id);
+          out.push({ cat, it, id });
+        }
+      }
+    } catch (e) { /* nothing kept */ }
+    return out;
+  },
+  // Remove from Map: one place taken out of everything Find Nearby remembers
+  _forgetPlace(cat, it) {
+    const k = (x) => `${String(x.name).toLowerCase()}|${(+x.lat).toFixed(4)}|${(+x.lon).toFixed(4)}`;
+    const want = k(it);
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (!key || !key.startsWith(`${FM_NEAR_KEY}${cat.id}:`)) continue;
+        const hit = JSON.parse(localStorage.getItem(key) || 'null');
+        if (!hit || !Array.isArray(hit.items)) continue;
+        const items = hit.items.filter(x => k(x) !== want);
+        if (items.length !== hit.items.length) localStorage.setItem(key, JSON.stringify({ ...hit, items }));
+      }
+    } catch (e) { /* */ }
+  },
+  // Find Nearby → Clear Saved Places in the editor
+  _clearNearby() {
+    let n = 0;
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith(FM_NEAR_KEY)) { localStorage.removeItem(k); n++; }
+      }
+    } catch (e) { /* */ }
+    return n;
+  },
+  _mapsUrl(lat, lon, name) {
+    const q = `${lat},${lon}`;
+    return isApple() ? `https://maps.apple.com/?daddr=${q}` : isAndroid() ? `geo:${q}?q=${q}(${encodeURIComponent(name || '')})` : `https://www.google.com/maps/dir/?api=1&destination=${q}`;
+  },
+  // Distances, in the units chosen in the editor (Automatic follows Home Assistant's unit system):
+  // kilometres and metres, miles and metres, miles and yards, or miles and feet
+  _units() {
+    let u = this._config?.distance_units || 'auto';
+    if (!['km', 'mi_m', 'mi_yd', 'mi_ft'].includes(u)) u = this._hass?.config?.unit_system?.length === 'mi' ? 'mi_ft' : 'km';
+    const small = u === 'km' || u === 'mi_m' ? 'm' : u === 'mi_yd' ? 'yd' : 'ft';
+    const per = { m: 1, yd: 1.0936133, ft: 3.2808399 }[small];
+    return { key: u, miles: u !== 'km', small, toSmall: (m) => m * per, fromSmall: (v) => v / per };
+  },
+  _fmtDist(metres, long = false) {
+    const u = this._units();
+    const near = (n) => (n < 100 ? Math.max(5, Math.round(n / 5) * 5) : Math.round(n / 10) * 10).toLocaleString();
+    if (!u.miles) {
+      if (metres < 1000) return `${near(metres)} m`;
+      const km = metres / 1000;
+      return `${km < 10 ? km.toFixed(1) : Math.round(km).toLocaleString()} km`;
+    }
+    const mi = metres / 1609.344;
+    if (mi < 0.1) return `${near(u.toSmall(metres))} ${u.small}`;
+    const txt = mi < 10 ? mi.toFixed(1) : Math.round(mi).toLocaleString();
+    return `${txt} ${long ? (txt === '1.0' ? 'mile' : 'miles') : 'mi'}`;
+  },
   _distance(p, me) {
     if (!p.has || !me?.has || p.me) return '';
-    const m = haversine([me.lat, me.lon], [p.lat, p.lon]);
-    if (m < 200 || (p.state === 'home' && me.state === 'home')) return 'Nearby';
-    const miles = this._hass.config?.unit_system?.length === 'mi';
-    if (miles) { const mi = m / 1609.34; return mi < 10 ? `${mi.toFixed(1)} mi` : `${Math.round(mi)} mi`; }
-    const km = m / 1000;
-    return km < 10 ? `${km.toFixed(1)} km` : `${Math.round(km)} km`;
+    if (p.state === 'home' && me.state === 'home') return 'Nearby';
+    return this._fmtDist(haversine([me.lat, me.lon], [p.lat, p.lon]));
   },
 
   _pg_people({ focus } = {}) {
@@ -10513,7 +11236,7 @@ Object.assign(CrowMessengerCard.prototype, {
       <div class="fm-map"></div>
       <div class="top"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><div></div></div>
       <div class="fm-ctrls">
-        <div class="fm-vcap g"><button data-a="maptype" aria-label="Map style">${FM_ICON.map}</button><button data-a="locate" aria-label="Show me">${FM_ICON.locate}</button></div>
+        <div class="fm-vcap g"><button data-a="maptype" aria-label="Map style">${FM_ICON.map}</button><button data-a="locate" aria-label="Show me">${FM_ICON.locate}</button>${this._config.people_nearby === true ? `<button data-a="nearbyhere" aria-label="Find nearby">${ICON.search}</button>` : ''}</div>
         <button class="fm-3d g" data-a="3d" aria-label="3D">3D</button>
       </div>
       <div class="fm-sheet"><div class="fm-grab"></div><div class="fm-head"><h2>People</h2><button class="cb g" data-a="add" aria-label="Choose people">${ICON.plus}</button></div><div class="fm-list"></div></div>
@@ -10524,6 +11247,8 @@ Object.assign(CrowMessengerCard.prototype, {
     let map = null, markers = new Map(), meMarker = null, selected = focus || null, mapType = 'auto', threeD = false, fitted = false;
     // a zone being made: { lat, lon, r, bearing, name, intro, back } and its two map handles
     let draft = null;
+    // Find Nearby: { cat, lat, lon, label, items, busy, err, back } and the places' pins on the map
+    let nearbyRes = null, poiMarkers = [];
     const canZone = () => this._zoneCan();
     try { mapType = localStorage.getItem('crowMessengerMapType') || 'auto'; } catch (e) { /* */ }
 
@@ -10575,6 +11300,7 @@ Object.assign(CrowMessengerCard.prototype, {
     const badge = (p) => p.stale ? `<span class="fm-badge off">${FM_ICON.noLoc}</span>` : p.fav ? `<span class="fm-badge star">${ICON.starFill}</span>` : '';
     const renderList = () => {
       if (draft) { renderZone(); return; }
+      if (nearbyRes) { renderNearby(); return; }
       const me = meP();
       const ppl = visible().filter(p => !p.me);
       if (selected) {
@@ -10585,6 +11311,7 @@ Object.assign(CrowMessengerCard.prototype, {
       head.querySelector('h2').textContent = 'People';
       head.querySelector('[data-a]').dataset.a = 'add';
       head.querySelector('[data-a]').innerHTML = ICON.plus;
+      head.querySelector('[data-a]').classList.remove('sm');
       this._set(list, ppl.length ? ppl.map(p => `<div class="fm-row" data-eid="${esc(p.eid)}">
           <div class="fm-avw">${this._avHtml({ pic: p.pic, name: p.name, size: 52 })}${badge(p)}</div>
           <div style="min-width:0"><div class="fm-n">${esc(p.name)}</div><div class="fm-s">${esc(this._placeLabel(p))}${p.has ? ` · ${esc(timeAgoShort(p.ts))}` : ''}</div></div>
@@ -10595,8 +11322,18 @@ Object.assign(CrowMessengerCard.prototype, {
       head.querySelector('h2').textContent = '';
       head.querySelector('[data-a]').dataset.a = 'closedetail';
       head.querySelector('[data-a]').innerHTML = ICON.x;
+      head.querySelector('[data-a]').classList.add('sm');
       const batt = this._battery(p);
       const addr = this._geocoded(p);
+      const cfg = this._config;
+      const on = (k) => cfg[k] !== false;
+      const since = on('people_here_since') ? this._hereSince(p) : null;
+      const act = on('people_activity') && p.has ? this._activity(p) : '';
+      const focus = on('people_focus') ? this._focusOn(p) : '';
+      const charging = on('people_charging') ? this._charging(p) : '';
+      const wifi = on('people_wifi') ? this._wifi(p) : null;
+      const wxOn = on('people_weather') && p.has;
+      const row = (k, v) => `<div class="fi2"><span>${esc(k)}</span><b style="font-weight:500;text-align:right">${esc(v)}</b></div>`;
       const canMsg = p.uid && !p.me && s.users.has(p.uid);
       this._set(list, `<div class="fm-detail">
         <div style="display:flex;align-items:center;gap:14px"><div class="fm-avw">${this._avHtml({ pic: p.pic, name: p.name, size: 60 })}${badge(p)}</div>
@@ -10609,18 +11346,217 @@ Object.assign(CrowMessengerCard.prototype, {
         </div>
         <div class="fm-info">
           ${addr ? `<div class="fi2"><span>Address</span><b style="font-weight:500;text-align:right">${esc(addr.replace(/\n/g, ', '))}</b></div>` : ''}
+          ${since ? row(since.label, since.value) : ''}
+          ${wxOn ? `<div class="fi2" data-wx="1"><span>Weather</span><b style="font-weight:500;text-align:right">${esc(this._wxCache?.get(this._wxKey(p.lat, p.lon))?.v || '…')}</b></div>` : ''}
+          ${act ? row('Activity', act) : ''}
+          ${focus ? row(focus, 'On') : ''}
+          ${batt != null ? row('Battery', `${batt}%${charging ? ` · ${charging}` : ''}`) : ''}
+          ${wifi ? row('Wi-Fi', wifi) : ''}
           <div class="fi2"><span>Updated</span><b style="font-weight:500">${p.has ? esc(new Date(p.ts).toLocaleString(locale(this._hass), { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: hour12(this._hass) })) : '—'}</b></div>
-          ${batt != null ? `<div class="fi2"><span>Battery</span><b style="font-weight:500">${batt}%</b></div>` : ''}
-        </div></div>`);
+        </div>
+        ${cfg.people_nearby === true && p.has ? `<div class="fm-info fm-more"><div class="fi2" role="button" data-fa="nearby"><span>Find Nearby</span>${ICON.chevR}</div></div>` : ''}
+        </div>`);
+      if (wxOn) {
+        this._weatherAt(p.lat, p.lon).then(v => {
+          const b = list.querySelector('[data-wx] b');
+          if (b && selected === p.eid) b.textContent = v;
+        }).catch(() => { list.querySelector('[data-wx]')?.remove(); });
+      }
     };
 
     // ── New Zone: a name, a radius you can
     // type or drag on the map, then Create Zone adds it to Home Assistant ──
     let ed = null;   // the zone editor, once the map is up
+    const clearPois = () => { poiMarkers.forEach(m => m.remove()); poiMarkers = []; };
+    const setHead = (title, action) => {
+      head.querySelector('h2').textContent = title;
+      head.querySelector('[data-a]').dataset.a = action;
+      head.querySelector('[data-a]').innerHTML = ICON.x;
+      head.querySelector('[data-a]').classList.add('sm');
+      head.querySelector('[data-a]').setAttribute('aria-label', action === 'nearbyback' ? 'Back to the list' : 'Close');
+    };
+    // distances are from the person you're looking at (as they move), otherwise from where you searched
+    const fromWho = () => {
+      const eid = nearbyRes?.back || nearbyRes?.from;
+      const p = eid ? this._people().find(x => x.eid === eid) : null;
+      return p?.has ? { lat: p.lat, lon: p.lon, label: p.me ? 'you' : p.name } : null;
+    };
+    const distOf = (it) => { const w = fromWho(); return w ? haversine([w.lat, w.lon], [it.lat, it.lon]) : it.dist; };
+    const distFrom = () => fromWho()?.label || nearbyRes.label;
+    const renderNearby = () => {
+      const r = nearbyRes;
+      if (r.detail != null && r.items[r.detail]) { renderPlace(r.items[r.detail]); return; }
+      setHead(`${r.cat.name} Nearby`, 'closenearby');
+      const body = r.busy ? `<div class="fm-busy"><span class="fm-spin"></span><span>Looking for ${esc(r.cat.name.toLowerCase())}…</span></div>`
+        : r.err ? `<div class="empty" style="padding:24px 30px">${esc(r.err)}</div>`
+        : !r.items.length ? `<div class="empty" style="padding:24px 30px">No ${esc(r.cat.name.toLowerCase())} found within ${esc(this._fmtDist(1500, true))} of ${esc(r.label)}.</div>`
+        : `<div class="fm-nsub">Near ${esc(r.label)}</div>` + r.items.map((it, i) => `<div class="fm-nrow" data-ni="${i}">
+            <div class="fm-nic">${fmIco(r.cat, 22)}</div>
+            <div style="min-width:0;flex:1"><div class="fm-n">${esc(it.name)}</div><div class="fm-s">${esc([this._fmtDist(distOf(it)), it.kind || it.sub].filter(Boolean).join(' · '))}</div></div>
+            <button class="fm-ndir" data-nd="${i}" aria-label="Directions">${ICON.pin}</button></div>`).join('');
+      this._set(list, body);
+    };
+    // one place: its address, opening hours, phone, website and access, with Directions
+    const renderPlace = (it) => {
+      setHead('', 'nearbyback');
+      const yesNo = (v) => ({ yes: 'Yes', no: 'No', limited: 'Limited', designated: 'Yes' }[String(v).toLowerCase()] || v);
+      const rows = [
+        ['Type', it.kind || nearbyRes.cat.one],
+        ['Distance', `${this._fmtDist(distOf(it))} from ${distFrom()}`],
+        ['Address', fmAddr(it)],
+        ...(it.phone ? [['Phone', it.phone, 'np']] : []),
+        ...(it.web ? [['Website', it.web.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, ''), 'nw']] : []),
+        ['Opening Hours', fmHours(it.hours)],
+        ['Run By', it.operator && it.operator !== it.name ? it.operator : ''],
+        ['Charge', it.charge || (it.fee ? (String(it.fee).toLowerCase() === 'no' ? 'Free' : yesNo(it.fee) === 'Yes' ? 'Paid' : it.fee) : '')],
+        ['Wheelchair Access', it.wheelchair ? yesNo(it.wheelchair) : ''],
+      ].filter(([, v]) => v);
+      const zone = canZone();
+      const rowHtml = ([k, v, link]) => link
+        ? `<div class="fi2" role="button" data-${link}="${nearbyRes.detail}"><span>${esc(k)}</span><b class="fm-link" style="font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%">${esc(v)}</b></div>`
+        : `<div class="fi2"><span>${esc(k)}</span><b style="font-weight:500;text-align:right;white-space:pre-line">${esc(v)}</b></div>`;
+      this._set(list, `<div class="fm-detail">
+        <div style="display:flex;align-items:center;gap:14px"><div class="fm-nic big">${fmIco(nearbyRes.cat, 30)}</div>
+          <div style="min-width:0"><div class="fm-dn pl">${esc(it.name)}</div><div class="fm-ds">${esc([it.kind || nearbyRes.cat.one, this._fmtDist(distOf(it))].join(' · '))}</div></div></div>
+        <div class="fm-acts"><button data-nd="${nearbyRes.detail}">${ICON.pin}<span>Directions</span></button>
+          <button data-nsh="${nearbyRes.detail}">${ICON.share}<span>Share</span></button>
+          ${zone ? `<button data-nz="${nearbyRes.detail}">${FM_ICON.zone}<span>Add Zone</span></button>` : ''}</div>
+        <div class="fm-info">${rows.map(rowHtml).join('')}</div>
+        <div class="fm-src">From OpenStreetMap</div></div>`);
+    };
+    const showPois = (stay = false) => {
+      clearPois();
+      if (!map || !nearbyRes?.items?.length) return;
+      nearbyRes.items.forEach((it, i) => {
+        const d = document.createElement('div');
+        d.className = 'fm-poi'; d.innerHTML = fmIco(nearbyRes.cat, 18);
+        d.addEventListener('click', (ev) => { ev.stopPropagation(); openPlace(i); });
+        pinHold(d, () => it, nearbyRes.cat);
+        poiMarkers.push(new window.maplibregl.Marker({ element: d }).setLngLat([it.lon, it.lat]).addTo(map));
+      });
+      // the map stays at the same zoom: it only moves if none of the places are in view
+      const b = map.getBounds();
+      if (!stay && !nearbyRes.items.some(it => b.contains([it.lon, it.lat]))) {
+        const it = nearbyRes.items[0];
+        map.easeTo({ center: [it.lon, it.lat], padding: { bottom: heights()[snap], top: 60 }, duration: 700 });
+      }
+    };
+    // places found before stay on the map (smaller) so they don't have to be looked up again
+    let savedMarkers = [];
+    const savedOn = () => { try { return localStorage.getItem('crowMessengerShowSaved') !== 'off'; } catch (e) { return true; } };
+    // press and hold a place's pin: Share, Directions, or Remove from Map
+    const pinHold = (d, getIt, cat) => {
+      let t = null, held = false;
+      const go = async () => {
+        held = true;
+        try { navigator.vibrate?.(10); } catch (err) { /* */ }
+        const it = getIt();
+        if (!it) return;
+        const v = await this._menu(d, [{ header: it.name }, { text: 'Directions', value: 'dir', icon: ICON.pin }, { text: 'Share', value: 'share', icon: ICON.share },
+          { sep: true }, { text: 'Remove from Map', value: 'rm', icon: ICON.trash, red: true }]);
+        if (v === 'dir') this._alert({ title: `Get Directions to ${it.name}?`, message: nearbyRes ? `${this._fmtDist(distOf(it))} from ${distFrom()}` : '', buttons: [{ text: 'Open in Maps', style: 'ok', value: true, href: this._mapsUrl(it.lat, it.lon, it.name) }, { text: 'Cancel', style: 'cancel' }] });
+        if (v === 'share') sharePlace(d, it);
+        if (v === 'rm') {
+          this._forgetPlace(cat, it);
+          if (nearbyRes?.cat.id === cat.id) {
+            const k = (x) => `${String(x.name).toLowerCase()}|${(+x.lat).toFixed(4)}|${(+x.lon).toFixed(4)}`;
+            const was = nearbyRes.items[nearbyRes.detail];
+            nearbyRes.items = nearbyRes.items.filter(x => k(x) !== k(it));
+            if (was && k(was) === k(it)) nearbyRes.detail = null;
+            else if (was) nearbyRes.detail = nearbyRes.items.indexOf(was);
+            renderList(); showPois(true);
+          }
+          showSaved();
+        }
+      };
+      d.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); held = false; clearTimeout(t); t = setTimeout(go, 500); });
+      ['pointerup', 'pointerleave', 'pointercancel'].forEach(n => d.addEventListener(n, () => clearTimeout(t)));
+      d.addEventListener('contextmenu', (ev) => { ev.preventDefault(); clearTimeout(t); go(); });
+      // a hold doesn't also count as a tap
+      d.addEventListener('click', (ev) => { if (held) { ev.stopPropagation(); ev.stopImmediatePropagation(); held = false; } }, true);
+    };
+    const showSaved = () => {
+      savedMarkers.forEach(m => m.remove()); savedMarkers = [];
+      if (!map || this._config.people_nearby !== true || !savedOn()) return;
+      const live = new Set((nearbyRes?.items || []).map(it => `${nearbyRes.cat.id}|${String(it.name).toLowerCase()}|${(+it.lat).toFixed(4)}|${(+it.lon).toFixed(4)}`));
+      for (const sp of this._savedNearby()) {
+        if (live.has(sp.id)) continue;
+        const d = document.createElement('div');
+        d.className = 'fm-poi saved'; d.innerHTML = fmIco(sp.cat, 14);
+        d.title = sp.it.name;
+        d.addEventListener('click', (ev) => { ev.stopPropagation(); openSaved(sp); });
+        pinHold(d, () => sp.it, sp.cat);
+        savedMarkers.push(new window.maplibregl.Marker({ element: d }).setLngLat([+sp.it.lon, +sp.it.lat]).addTo(map));
+      }
+    };
+    // a saved place tapped on the map: its details, with the others of that kind around it
+    const openSaved = (sp) => {
+      if (draft) return;
+      const me = meP();
+      const group = this._savedNearby().filter(x => x.cat.id === sp.cat.id && haversine([+sp.it.lat, +sp.it.lon], [+x.it.lat, +x.it.lon]) <= 1500)
+        .map(x => ({ ...x.it, lat: +x.it.lat, lon: +x.it.lon, dist: me?.has ? haversine([me.lat, me.lon], [+x.it.lat, +x.it.lon]) : 0 }));
+      nearbyRes = { cat: sp.cat, lat: +sp.it.lat, lon: +sp.it.lon, label: me?.has ? 'you' : sp.it.name, items: group, busy: false,
+        back: nearbyRes ? nearbyRes.back : selected, from: me?.eid || null, detail: null };
+      nearbyRes.items.sort((x, y) => distOf(x) - distOf(y));
+      const i = nearbyRes.items.findIndex(x => Math.abs(x.lat - sp.it.lat) < 1e-6 && Math.abs(x.lon - sp.it.lon) < 1e-6);
+      showPois(); showSaved();
+      if (snap === 'min') setSheet('half');
+      openPlace(Math.max(0, i));
+    };
+    const markPoi = (i) => {
+      poiMarkers.forEach((m, j) => m.getElement().classList.toggle('sel', j === i));
+      list.querySelectorAll('.fm-nrow').forEach(r => r.classList.toggle('sel', +r.dataset.ni === i));
+    };
+    const openPlace = (i) => {
+      const it = nearbyRes?.items?.[i];
+      if (!it) return;
+      nearbyRes.detail = i;
+      renderList(); markPoi(i);
+      // moves to the place without zooming out
+      map?.easeTo({ center: [it.lon, it.lat], zoom: Math.max(map.getZoom(), 16), padding: { bottom: heights()[snap], top: 60 }, duration: 700 });
+    };
+    const openNearby = async (anchor, lat, lon, label) => {
+      const v = await this._menu(anchor, [{ header: 'Find Nearby' }, ...FM_NEARBY.map(c => ({ text: c.name, value: c.id, icon: fmIco(c, 20) }))], { align: 'left' });
+      const cat = FM_NEARBY.find(c => c.id === v);
+      if (!cat) return;
+      clearPois();
+      nearbyRes?.ctl?.abort();   // a search still running stops
+      nearbyRes = { cat, lat, lon, label, items: [], busy: true, back: nearbyRes ? nearbyRes.back : selected, from: nearbyRes?.from || null, detail: null, ctl: new AbortController() };
+      renderList(); setSheet('half');
+      const mine = nearbyRes;
+      try { mine.items = (await this._nearby(cat, lat, lon, 1500, mine.ctl.signal)).sort((x, y) => distOf(x) - distOf(y)); }
+      catch (err) { if (err?.name === 'AbortError') return; mine.err = 'OpenStreetMap didn’t answer just now, so nearby places couldn’t be looked up. Please try again in a moment.'; }
+      mine.busy = false;
+      if (nearbyRes !== mine) return;
+      renderList(); showPois(); showSaved();
+    };
+    // Share: as a location in one or more chats, or with the phone's own share sheet
+    const sharePlace = async (anchor, it) => {
+      if (!it) return;
+      const label = [it.name, (fmAddr(it).split('\n')[0] || '')].filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
+      const url = isApple() ? `https://maps.apple.com/?ll=${it.lat},${it.lon}&q=${encodeURIComponent(it.name)}` : `https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}`;
+      const items = [{ text: 'Send in a Chat', value: 'chat', icon: ICON.bubble }];
+      items.push(navigator.share ? { text: 'Share…', value: 'os', icon: ICON.share } : { text: 'Copy Link', value: 'copy', icon: ICON.share });
+      const v = await this._menu(anchor, items);
+      if (v === 'chat') this._sendPlace({ lat: it.lat, lon: it.lon, label });
+      else if (v === 'os') { try { await navigator.share({ title: it.name, text: [it.name, fmAddr(it).replace(/\n/g, ', ')].filter(Boolean).join('\n'), url }); } catch (err) { /* cancelled */ } }
+      else if (v === 'copy') { this._toast((await copyText(`${it.name}\n${url}`)) ? 'Copied' : 'Copy not available here'); }
+    };
+    const closeNearby = () => {
+      if (!nearbyRes) return;
+      // closing while it's still looking stops the search
+      nearbyRes.ctl?.abort();
+      selected = nearbyRes.back;
+      nearbyRes = null;
+      clearPois();
+      renderList();
+      showSaved();
+    };
     const renderZone = () => {
       head.querySelector('h2').textContent = 'New Zone';
       head.querySelector('[data-a]').dataset.a = 'closezone';
       head.querySelector('[data-a]').innerHTML = ICON.x;
+      head.querySelector('[data-a]').classList.add('sm');
       if (list.querySelector('.fm-zf')) return;   // keep what's being typed when people move
       this._set(list, this._zoneFormHtml(draft.intro));
       this._fillZoneForm(list, draft);
@@ -10645,8 +11581,39 @@ Object.assign(CrowMessengerCard.prototype, {
     };
     this._wireZoneForm(list, () => ed, () => closeZone());
 
-    list.addEventListener('click', (e) => {
+    list.addEventListener('click', async (e) => {
       if (e.target.closest('[data-za]')) return;
+      const nd = e.target.closest('[data-nd]');
+      if (nd && nearbyRes) {
+        const it = nearbyRes.items[+nd.dataset.nd];
+        if (it) await this._alert({ title: `Get Directions to ${it.name}?`, message: `${this._fmtDist(distOf(it))} from ${distFrom()}`, buttons: [{ text: 'Open in Maps', style: 'ok', value: true, href: this._mapsUrl(it.lat, it.lon, it.name) }, { text: 'Cancel', style: 'cancel' }] });
+        return;
+      }
+      const np = e.target.closest('[data-np]');
+      if (np && nearbyRes) {
+        const it = nearbyRes.items[+np.dataset.np];
+        if (it?.phone) await this._alert({ title: `Call ${it.phone}?`, message: it.name, buttons: [{ text: 'Call', style: 'ok', value: true, href: `tel:${telValue(it.phone)}` }, { text: 'Cancel', style: 'cancel' }] });
+        return;
+      }
+      const nw = e.target.closest('[data-nw]');
+      if (nw && nearbyRes) {
+        const it = nearbyRes.items[+nw.dataset.nw];
+        if (!it?.web) return;
+        const href = /^https?:/i.test(it.web) ? it.web : `https://${it.web}`;
+        let host = it.web; try { host = new URL(href).host.replace(/^www\./, ''); } catch (err) { /* */ }
+        await this._alert({ title: `Open ${host}?`, message: it.name, buttons: [{ text: 'Open', style: 'ok', value: true, href }, { text: 'Cancel', style: 'cancel' }] });
+        return;
+      }
+      const nsh = e.target.closest('[data-nsh]');
+      if (nsh && nearbyRes) { sharePlace(nsh, nearbyRes.items[+nsh.dataset.nsh]); return; }
+      const nz = e.target.closest('[data-nz]');
+      if (nz && nearbyRes) {
+        const it = nearbyRes.items[+nz.dataset.nz];
+        if (it) openZone(it.lat, it.lon, { back: selected, name: it.name, intro: `This makes a zone at ${it.name}.` });
+        return;
+      }
+      const nr = e.target.closest('[data-ni]');
+      if (nr && nearbyRes) { openPlace(+nr.dataset.ni); return; }
       const row = e.target.closest('.fm-row');
       if (row) { select(row.dataset.eid); return; }
       const fa = e.target.closest('[data-fa]')?.dataset.fa;
@@ -10655,6 +11622,7 @@ Object.assign(CrowMessengerCard.prototype, {
       if (fa === 'message') this._messageUser(p.uid);
       if (fa === 'contact' && p.contact) this._nav('contact', { cid: p.contact.id });
       if (fa === 'directions') this._confirmMapsTo(p);
+      if (fa === 'nearby' && p.has) openNearby(e.target.closest('[data-fa]'), p.lat, p.lon, p.me ? 'you' : p.name);
       if (fa === 'zone' && p.has) {
         const zoned = !['not_home', 'unknown', 'unavailable'].includes(p.state);
         const who = p.me ? 'You’re' : `${p.name} is`;
@@ -10729,6 +11697,19 @@ Object.assign(CrowMessengerCard.prototype, {
       }
       for (const [eid, m] of markers) if (!seen.has(eid)) { m.remove(); markers.delete(eid); }
       if (meMarker && !ppl.some(p => p.me && p.has)) { meMarker.remove(); meMarker = null; }
+      sideBySide();
+    };
+    // people in (almost) the same spot sit side by side instead of on top of each other
+    const sideBySide = () => {
+      if (!map) return;
+      const all = [...markers.entries()].map(([eid, m]) => ({ eid, m, pt: map.project(m.getLngLat()) }))
+        .sort((a, b) => a.eid.localeCompare(b.eid));
+      const groups = [];
+      for (const it of all) {
+        const g = groups.find(gr => gr.some(o => Math.hypot(o.pt.x - it.pt.x, o.pt.y - it.pt.y) < 46));
+        if (g) g.push(it); else groups.push([it]);
+      }
+      for (const g of groups) g.forEach((it, i) => it.m.setOffset([(i - (g.length - 1) / 2) * 46, 0]));
     };
     const initMap = async () => {
       try {
@@ -10739,10 +11720,11 @@ Object.assign(CrowMessengerCard.prototype, {
           attributionControl: { compact: true }, pitchWithRotate: true, dragRotate: true });
         ed = this._zoneEditor(map, el, list);
         map.on('load', () => {
-          add3D(); ed.addLayers(); updateMarkers();
+          add3D(); ed.addLayers(); updateMarkers(); showSaved();
           if (!fitted) { fitted = true; map.resize(); if (selected) select(selected); else fitAll(false); }
         });
         map.on('styledata', () => { add3D(); ed.addLayers(); });
+        ['zoomend', 'rotateend', 'pitchend'].forEach(ev => map.on(ev, sideBySide));
         map.on('click', (e) => {
           // while making a zone, a tap moves it there
           if (draft) { ed.move(e.lngLat.lat, e.lngLat.lng); return; }
@@ -10772,6 +11754,14 @@ Object.assign(CrowMessengerCard.prototype, {
       if (a === 'back') { this._back(); return; }
       if (a === 'closedetail') { selected = null; renderList(); markers.forEach(m => m.getElement().classList.remove('sel')); return; }
       if (a === 'closezone') { closeZone(); return; }
+      if (a === 'closenearby') { closeNearby(); return; }
+      if (a === 'nearbyback') { if (nearbyRes) { nearbyRes.detail = null; markPoi(-1); renderList(); } return; }
+      if (a === 'nearbyhere') {
+        if (!map) return;
+        const c = map.getCenter();
+        openNearby(e.target.closest('button'), c.lat, c.lng, 'the middle of the map');
+        return;
+      }
       if (a === 'locate') {
         const me = meP();
         if (map && me?.has) map.flyTo({ center: [me.lon, me.lat], zoom: 15.5, padding: { bottom: heights()[snap] } });
@@ -10793,7 +11783,21 @@ Object.assign(CrowMessengerCard.prototype, {
           { text: 'Light', value: 'light', checked: mapType === 'light' },
           { text: 'Dark', value: 'dark', checked: mapType === 'dark' },
           { text: 'Satellite', value: 'satellite', checked: mapType === 'satellite' },
+          ...(this._config.people_nearby === true ? [{ sep: true }, { header: 'Places' },
+            { text: 'Show Saved Places', value: 'saved', checked: savedOn() },
+            { text: 'Clear Saved Places', value: 'clearsaved', icon: ICON.trash, red: true }] : []),
         ]);
+        if (v === 'saved') {
+          try { localStorage.setItem('crowMessengerShowSaved', savedOn() ? 'off' : 'on'); } catch (err) { /* */ }
+          showSaved();
+          this._toast(savedOn() ? 'Saved places shown' : 'Saved places hidden');
+          return;
+        }
+        if (v === 'clearsaved') {
+          const r = await this._alert({ title: 'Clear Saved Places?', message: 'Places Find Nearby has found are forgotten on this device and taken off the map. They’re looked up again next time you search.', buttons: [{ text: 'Clear', style: 'destructive', value: true }, { text: 'Cancel', style: 'cancel' }] });
+          if (r.value) { const n = this._clearNearby(); showSaved(); this._toast(n ? 'Saved places cleared' : 'No saved places'); }
+          return;
+        }
         if (v && v !== mapType) {
           mapType = v;
           try { localStorage.setItem('crowMessengerMapType', v); } catch (err) { /* */ }
@@ -10827,6 +11831,7 @@ Object.assign(CrowMessengerCard.prototype, {
     page.destroy = () => {
       window.removeEventListener('pointermove', page._pm);
       window.removeEventListener('pointerup', page._pu);
+      clearPois();
       try { map?.remove(); } catch (e) { /* */ }
     };
     return page;
@@ -10859,14 +11864,14 @@ Object.assign(CrowMessengerCard.prototype, {
       <div class="fm-zs">${esc(intro || '')}</div>
       <div class="fm-zg">
         <label><span>Name</span><input data-z="name" type="text" placeholder="Zone name" autocomplete="off" enterkeyhint="done"></label>
-        <label><span>Radius</span><input data-z="r" type="number" inputmode="numeric" min="${FM_ZONE_MIN}" max="${FM_ZONE_MAX}" step="10"><span class="fm-zu">m</span></label>
+        <label><span>Radius</span><input data-z="r" type="number" inputmode="numeric" min="${Math.round(this._units().toSmall(FM_ZONE_MIN))}" max="${Math.round(this._units().toSmall(FM_ZONE_MAX))}" step="${this._units().small === 'ft' ? 25 : 10}"><span class="fm-zu">${this._units().small}</span></label>
       </div>
       <button type="button" class="fm-zb" data-za="create">Create Zone</button></div>`;
   },
   _fillZoneForm(box, d) {
     const n = box.querySelector('[data-z="name"]'), r = box.querySelector('[data-z="r"]');
     if (n) n.value = d.name || '';
-    if (r) r.value = d.r;
+    if (r) r.value = Math.round(this._units().toSmall(d.r));
   },
 
   // Draws Home Assistant's zones on a MapLibre map, and the zone being made: a circle with
@@ -10924,7 +11929,7 @@ Object.assign(CrowMessengerCard.prototype, {
             d.r = clamp(Math.round(haversine([d.lat, d.lon], [ll.lat, ll.lng])), FM_ZONE_MIN, FM_ZONE_MAX);
             d.bearing = fmBearing(d.lat, d.lon, ll.lat, ll.lng);
             map.getSource('fm-draft')?.setData(fmCircle(d.lat, d.lon, d.r));
-            const ri = box?.querySelector('[data-z="r"]'); if (ri) ri.value = d.r;
+            const ri = box?.querySelector('[data-z="r"]'); if (ri) ri.value = Math.round(this._units().toSmall(d.r));
           });
           zH.on('dragend', () => ed.draw());   // back onto the edge if dragged past the limits
         }
@@ -10957,9 +11962,9 @@ Object.assign(CrowMessengerCard.prototype, {
       const z = e.target.dataset?.z;
       if (!d() || !z) return;
       if (z === 'name') d().name = e.target.value;
-      if (z === 'r') { const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) getEd().setR(v); }
+      if (z === 'r') { const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) getEd().setR(Math.round(this._units().fromSmall(v))); }
     });
-    box.addEventListener('change', (e) => { if (d() && e.target.dataset?.z === 'r') { e.target.value = d().r; getEd()?.fit?.(); } });
+    box.addEventListener('change', (e) => { if (d() && e.target.dataset?.z === 'r') { e.target.value = Math.round(this._units().toSmall(d().r)); getEd()?.fit?.(); } });
     box.addEventListener('keydown', (e) => { if (d() && e.key === 'Enter' && e.target.dataset?.z) { e.preventDefault(); e.target.blur(); } });
     box.addEventListener('click', async (e) => {
       const btn = e.target.closest('[data-za="create"]');
@@ -10967,7 +11972,7 @@ Object.assign(CrowMessengerCard.prototype, {
       // what the fields say now (the map may have arrived after some typing)
       d().name = box.querySelector('[data-z="name"]')?.value || '';
       const rv = parseInt(box.querySelector('[data-z="r"]')?.value, 10);
-      if (Number.isFinite(rv)) d().r = clamp(rv, FM_ZONE_MIN, FM_ZONE_MAX);
+      if (Number.isFinite(rv)) d().r = clamp(Math.round(this._units().fromSmall(rv)), FM_ZONE_MIN, FM_ZONE_MAX);
       const z = await this._createZone(d(), btn, box.querySelector('[data-z="name"]'));
       if (z) onCreated(z);
     });
@@ -13100,7 +14105,7 @@ Object.assign(CrowMessengerCard.prototype, {
     const el = this._el(`<div class="pdfpage">
       <div class="pdf-frame"><div class="pdf-inner"><div class="pdf-status"><div class="spin"></div><span>Getting ready…</span><div class="pdf-bar"><i></i></div></div></div></div>
       <div class="top"><button class="pill g" data-a="close">Done</button><div class="title">${esc(title)}</div><div style="width:64px"></div></div>
-      <div class="pdf-actions"><button class="pill g" data-a="download" disabled>${ICON.download}<span>Download</span></button><button class="pill g accent" data-a="share" disabled>${ICON.share}<span>Share</span></button></div>
+      <div class="pdf-actions"><button class="pill g" data-a="download" disabled>${ICON.download}<span>Download</span></button><button class="pill g accent" data-a="chat" disabled>${ICON.bubble}<span>Send in a Chat</span></button></div>
     </div>`);
     const page = { el };
     // the page viewer makes this its own (position: relative), so it sits inside a fixed frame
@@ -13134,14 +14139,7 @@ Object.assign(CrowMessengerCard.prototype, {
       if (a === 'close') { this._back(); return; }
       if (!blob) return;
       if (a === 'download') { downloadBlob(blob, filename); return; }
-      if (a === 'share') {
-        // the phone's share sheet: Save to Files, AirDrop, Mail, Print…
-        const file = new File([blob], filename, { type: 'application/pdf' });
-        try {
-          if (navigator.canShare?.({ files: [file] })) { await navigator.share({ files: [file], title }); return; }
-        } catch (err) { if (err?.name === 'AbortError') return; }
-        downloadBlob(blob, filename);
-      }
+      if (a === 'chat') this._sendFileToChats(new File([blob], filename, { type: 'application/pdf' }));
     });
     page.pdfBlob = () => blob;
     page.destroy = () => { closed = true; cleanups.forEach(fn => { try { fn(); } catch (e) { /* gone */ } }); };
@@ -13519,8 +14517,8 @@ class CrowMessengerCardEditor extends HTMLElement {
           <div class="card-block" style="padding:12px;">
             <div id="${id}Header" data-grp="${id}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;-webkit-tap-highlight-color:transparent;padding-bottom:2px;">
               <div style="display:flex;align-items:center;gap:10px;">
-                <div style="width:28px;height:28px;border-radius:8px;background:rgba(${colour},0.15);border:1px solid rgba(${colour},0.25);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
-                  <svg viewBox="0 0 24 24" style="width:15px;height:15px;fill:rgba(${colour},0.9);">${icon}</svg>
+                <div style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <ha-icon icon="${icon}" style="--mdc-icon-size:22px;color:var(--secondary-text-color, #727272);display:flex;"></ha-icon>
                 </div>
                 <div>
                   <div style="font-size:14px;font-weight:600;color:var(--primary-text-color, #111);">${title}</div>
@@ -13683,7 +14681,32 @@ ${this._segmented('contact-sort-segmented', 'contact_sort', 'Sort Order', '', [[
 ${this._segmented('contact-display-segmented', 'contact_display', 'Display Order', '', [['first', 'First, Last'], ['last', 'Last, First']])}
 ${this._toggle('show_my_card', 'Show My Card', 'Show your own card at the top of Contacts, where you can set the name and photo you share.')}
 <div class="grp-sub">People Map</div>
-${this._toggle('show_people_map', 'People Map', 'A map in Contacts showing where everyone is, from their Home Assistant person (usually the Companion app on their phone). Contact cards also show each person’s current place.')}`;
+${this._toggle('show_people_map', 'People Map', 'A map in Contacts showing where everyone is, from their Home Assistant person (usually the Companion app on their phone). Contact cards also show each person’s current place.')}
+<div id="people-details-wrap">
+<div style="font-size:11px;color:#888;margin:8px 0 2px;line-height:1.4;">Tap someone on the map to see these, from the sensors the Companion app creates on their phone. Anything their phone doesn’t have is left out.</div>
+${this._toggle('people_here_since', 'Here Since', 'When they arrived where they are, and for how long.')}
+${this._toggle('people_weather', 'Weather', 'The temperature and weather where they are, from Open-Meteo.')}
+${this._toggle('people_activity', 'Activity', 'Walking, Running, Cycling, Driving or Still.')}
+${this._toggle('people_focus', 'Focus', 'Shows when Focus (iPhone) or Do Not Disturb (Android) is on.')}
+${this._toggle('people_charging', 'Charging', 'Adds Charging or Full next to the battery level.')}
+${this._toggle('people_wifi', 'Wi-Fi', 'The name of the Wi-Fi network their phone is on.')}
+</div>
+<div class="grp-sub">Find Nearby</div>
+${this._toggle('people_nearby', 'Find Nearby', 'Look for toilets, cafés, cash machines, pharmacies, parking and more near someone, or near the middle of the map, with each place’s opening hours, phone and website. From OpenStreetMap. Off until you turn it on.')}
+<div id="nearby-wrap">
+<div class="select-row" style="padding:10px 0;">
+  <label for="people_nearby_keep">Remember Results</label>
+  <div class="hint">Places found are kept on each device for this long. They stay on the map as small pins you can tap, and searching the same area again is instant.</div>
+  <select id="people_nearby_keep"><option value="168">For 1 Week</option><option value="336">For 2 Weeks</option><option value="720">For 1 Month</option></select>
+</div>
+<button id="nearby-clear" type="button" style="width:100%;padding:9px 14px;border-radius:10px;border:1px solid rgba(0,122,255,0.35);background:rgba(0,122,255,0.1);color:rgba(10,132,255,0.95);font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin:2px 0 10px;">Clear Saved Places on This Device</button>
+</div>
+<div class="grp-sub">Distances</div>
+<div class="select-row" style="padding:10px 0;">
+  <label for="distance_units">Units</label>
+  <div class="hint">How far away people and places are, on the People Map and when choosing a place, and the size of a new zone.</div>
+  <select id="distance_units"><option value="auto">Automatic (as Home Assistant)</option><option value="km">Kilometres and Metres</option><option value="mi_m">Miles and Metres</option><option value="mi_yd">Miles and Yards</option><option value="mi_ft">Miles and Feet</option></select>
+</div>`;
 
     const layoutBody = `
 <div class="grp-sub" style="margin-top:2px;">Size</div>
@@ -13929,16 +14952,16 @@ ${this._toggle('contact_blur', 'Contact Card Blur', 'Contact cards get a blurred
           <ha-icon icon="mdi:shield-account-outline" style="--mdc-icon-size:15px;width:15px;height:15px;display:inline-flex;vertical-align:-3px;margin-right:4px;"></ha-icon>Dashboards, Notifications, Keep Messages, Largest Attachment, Storage and AI are household settings — only a Home Assistant administrator can change them.
         </div>
         <div id="int-error" style="display:none;padding:10px 14px;background:rgba(255,69,58,0.1);border:1px solid rgba(255,69,58,0.3);border-radius:10px;font-size:12px;color:#ff453a;line-height:1.5;"></div>
-${this._section('usersGrp', '48,209,88', ED_ICONS.users, 'Dashboards', 'Household · Where notifications open · One for everyone or each person', usersBody)}
-${this._section('notifGrp', '255,159,10', ED_ICONS.bell, 'Notifications', 'Household · iPhone &amp; Android · Previews · Reply · Calls · People &amp; phones', notifBody)}
-${this._section('msgsGrp', '90,200,250', ED_ICONS.message, 'Messages', 'Keep Messages · Largest attachment · Links · Voice · Return key', msgsBody)}
-${this._section('storageGrp', '142,142,147', ED_ICONS.storage, 'Storage', 'Household · Photos &amp; files on the server', storageBody)}
-${this._section('aiGrp', '255,159,10', ED_ICONS.ai, 'AI', 'Household · Home Assistant chat · Replies · Writing · Catch Up · Translate · Calendar · Photos', aiBody)}
-${this._section('contactsGrp', '191,90,242', ED_ICONS.contacts, 'Contacts &amp; People', 'Sort · Display · My Card · People Map', contactsBody)}
-${this._section('pdfGrp', '255,69,58', ED_ICONS.pdf, 'PDF Exports', 'Conversations · Contact cards · Address book', pdfBody)}
-${this._section('colours', '99,179,237', ED_ICONS.palette, 'Appearance', 'Style · Light &amp; dark · Home Assistant theme · Glass', appearanceBody)}
-${this._section('layoutGrp', '94,92,230', ED_ICONS.layout, 'Layout &amp; Motion', 'Card height · Animations', layoutBody)}
-${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card’s settings back to how they started', resetBody)}
+${this._section('usersGrp', '48,209,88', 'mdi:view-dashboard-outline', 'Dashboards', 'Household · Where notifications open · One for everyone or each person', usersBody)}
+${this._section('notifGrp', '255,159,10', 'mdi:bell-outline', 'Notifications', 'Household · iPhone &amp; Android · Previews · Reply · Calls · People &amp; phones', notifBody)}
+${this._section('msgsGrp', '90,200,250', 'mdi:message-text-outline', 'Messages', 'Keep Messages · Largest attachment · Links · Voice · Return key', msgsBody)}
+${this._section('storageGrp', '142,142,147', 'mdi:harddisk', 'Storage', 'Household · Photos &amp; files on the server', storageBody)}
+${this._section('aiGrp', '255,159,10', 'mdi:robot-outline', 'AI', 'Household · Home Assistant chat · Replies · Writing · Catch Up · Translate · Calendar · Photos', aiBody)}
+${this._section('contactsGrp', '191,90,242', 'mdi:account-box-outline', 'Contacts &amp; People', 'Sort · Display · My Card · People Map · Distances', contactsBody)}
+${this._section('pdfGrp', '255,69,58', 'mdi:file-pdf-box', 'PDF Exports', 'Conversations · Contact cards · Address book', pdfBody)}
+${this._section('colours', '99,179,237', 'mdi:palette-outline', 'Appearance', 'Style · Light &amp; dark · Home Assistant theme · Glass', appearanceBody)}
+${this._section('layoutGrp', '94,92,230', 'mdi:page-layout-body', 'Layout &amp; Motion', 'Card height · Animations', layoutBody)}
+${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card’s settings back to how they started', resetBody)}
         <div style="text-align:center;font-size:11px;color:#888;">Crow Messenger ${CM_VERSION}</div>
       </div>`;
 
@@ -13966,6 +14989,12 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     chk('enter_sends', c.enter_sends !== false);
     chk('show_my_card', c.show_my_card !== false);
     chk('show_people_map', c.show_people_map !== false);
+    const du = root.getElementById('distance_units'); if (du) du.value = ['km', 'mi_m', 'mi_yd', 'mi_ft'].includes(c.distance_units) ? c.distance_units : 'auto';
+    ['people_here_since', 'people_weather', 'people_activity', 'people_focus', 'people_charging', 'people_wifi'].forEach(k => chk(k, c[k] !== false));
+    chk('people_nearby', c.people_nearby === true);
+    const nk = root.getElementById('people_nearby_keep'); if (nk) nk.value = String([168, 336, 720].includes(+c.people_nearby_keep) ? +c.people_nearby_keep : 168);
+    const nw = root.getElementById('nearby-wrap'); if (nw) { nw.style.opacity = c.people_nearby === true ? '1' : '0.4'; nw.style.pointerEvents = c.people_nearby === true ? '' : 'none'; }
+    const pdw = root.getElementById('people-details-wrap'); if (pdw) { pdw.style.opacity = c.show_people_map === false ? '0.4' : '1'; pdw.style.pointerEvents = c.show_people_map === false ? 'none' : ''; }
     ['first', 'last'].forEach(v => { chk('contact_sort_' + v, (c.contact_sort || 'last') === v); chk('contact_display_' + v, (c.contact_display || 'first') === v); });
     const dsk = root.getElementById('default_skin');
     if (dsk) dsk.value = SKIN_BY[c.default_skin] && c.default_skin !== 'iphone' ? c.default_skin : '';
@@ -14002,14 +15031,22 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
     root.getElementById('cs_glass')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', true); this.updateUI(); });
     ['auto', 'light', 'dark'].forEach(v => root.getElementById('ap_' + v)?.addEventListener('change', () => this._updateConfig('appearance', v)));
     ['use_ha_theme', 'glass_popups', 'glass_bars', 'contact_blur', 'animations', 'effect_words', 'enter_sends', 'show_my_card', 'show_people_map',
-      'pdf_enabled', 'pdf_conversations', 'pdf_contact', 'pdf_contacts'].forEach(id => {
-      root.getElementById(id)?.addEventListener('change', (e) => { this._updateConfig(id, e.target.checked); if (id === 'pdf_enabled') this.updateUI(); });
+      'pdf_enabled', 'pdf_conversations', 'pdf_contact', 'pdf_contacts', ...['people_here_since', 'people_weather', 'people_activity', 'people_focus', 'people_charging', 'people_wifi', 'people_nearby']].forEach(id => {
+      root.getElementById(id)?.addEventListener('change', (e) => { this._updateConfig(id, e.target.checked); if (id === 'pdf_enabled' || id === 'show_people_map') this.updateUI(); });
     });
     ['first', 'last'].forEach(v => {
       root.getElementById('contact_sort_' + v)?.addEventListener('change', () => this._updateConfig('contact_sort', v));
       root.getElementById('contact_display_' + v)?.addEventListener('change', () => this._updateConfig('contact_display', v));
     });
     root.getElementById('default_skin')?.addEventListener('change', (e) => this._updateConfig('default_skin', e.target.value));
+    root.getElementById('distance_units')?.addEventListener('change', (e) => this._updateConfig('distance_units', e.target.value));
+    root.getElementById('people_nearby')?.addEventListener('change', () => this.updateUI());
+    root.getElementById('people_nearby_keep')?.addEventListener('change', (e) => this._updateConfig('people_nearby_keep', parseInt(e.target.value, 10)));
+    root.getElementById('nearby-clear')?.addEventListener('click', (e) => {
+      const n = CrowMessengerCard.prototype._clearNearby();
+      e.target.textContent = n ? 'Saved Places Cleared' : 'Nothing Saved on This Device';
+      setTimeout(() => { e.target.textContent = 'Clear Saved Places on This Device'; }, 2200);
+    });
     root.getElementById('card_height')?.addEventListener('change', (e) => {
       const v = e.target.value;
       this._updateConfig('card_height', v === 'fill' ? 'fill' : parseInt(v, 10));
@@ -14238,7 +15275,7 @@ ${this._section('resetGrp', '255,149,0', ED_ICONS.reset, 'Reset', 'Put this card
           <label class="toggle-switch" style="flex-shrink:0;"><input type="checkbox" data-f="notify" ${cfg.notify === false ? '' : 'checked'}><span class="toggle-track"></span></label>
         </div>
         ${mine.map(d => `<div class="check-item" style="padding:6px 0 0 42px;min-height:0;border-bottom:none;background:transparent;">
-          <svg viewBox="0 0 24 24" style="width:16px;height:16px;fill:#888;margin-right:8px;">${ED_ICONS.phone}</svg>
+          <ha-icon icon="${d.platform === 'ios' ? 'mdi:cellphone' : 'mdi:cellphone-text'}" style="--mdc-icon-size:18px;color:var(--secondary-text-color, #727272);margin-right:8px;display:flex;"></ha-icon>
           <div style="flex:1;min-width:0;"><div style="font-size:13px;">${esc2(d.name)}</div><div style="font-size:11px;color:#888;">${d.platform === 'ios' ? 'iPhone / iPad' : 'Android'}${d.model ? ' · ' + esc2(d.model) : ''}${d.available ? '' : ' · not reachable'}</div></div>
           <label class="toggle-switch"><input type="checkbox" data-dev="${esc2(d.service)}" ${cfg.devices?.[d.service] === false ? '' : 'checked'}><span class="toggle-track"></span></label>
         </div>`).join('')}
