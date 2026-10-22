@@ -49,7 +49,7 @@ Open a dashboard, click **Edit** → **+ Add Card** and search for **Crow Messen
 
 > **You don't need to add a dashboard resource.** The integration serves the card and registers it automatically. If you previously added `crow-messenger-card.js` as a resource by hand, remove it under **Settings → Dashboards → Resources** so only the bundled copy loads.
 
-> **Tip:** Crow Messenger works best on a dashboard of its own — choose **Fill the screen** for Card Height and use a **Panel** view.
+> **Tip:** Crow Messenger works best on a dashboard of its own — choose **Fill the screen** for Card Height and use a **Panel** view. On any other dashboard, tap the **Full Screen** button at the top right of the Messages screen to give the card the whole screen.
 
 ---
 
@@ -117,6 +117,7 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **Chat backgrounds** — any photo, for one chat or all of them
 - **Live Wallpapers** — Rain on Glass, Ambient Aurora, Lava Lamp, Night Sky, Fireplace, Ocean, Living Sky, Snowfall, Fireflies, Deep Space, Fairy Lights and Liquid Colour
 - **Colour themes** — per conversation or for all chats
+- **Full Screen** — a button at the top right of the Messages screen makes the card fill the whole screen, and every screen fills it with you. Tap it again, or press Escape, to put the card back on the dashboard. It matches whichever skin you've chosen, and in the old-style window skins it's the title bar's Maximise button (the green zoom light in Mac OS X Aqua). Full screen is never remembered, so the card always opens at its normal size
 
 ### Contacts and People
 
@@ -238,6 +239,7 @@ glass: 50
 glass_bars: true
 glass_popups: true
 animations: true
+fullscreen_button: true
 default_skin: ""
 show_people_map: true
 ```
@@ -257,6 +259,8 @@ show_people_map: true
 | `glass_popups` | `true` | Liquid Glass on menus, popups and sheets |
 | `default_skin` | *(iPhone)* | The skin everyone starts with; each person can choose their own |
 | `animations` | `true` | Slide between screens and animate sheets and popups |
+| `fullscreen_button` | `true` | The Full Screen button at the top right of the Messages screen |
+| `resize_btn_spin` | `true` | The Full Screen button gives a quick spin each time it's tapped |
 | `effect_words` | `true` | Words like "Happy Birthday" send an effect automatically |
 | `contact_blur` | `true` | Blur behind contact photos |
 | `contact_sort` | `last` | Sort contacts by `first` or `last` name |
@@ -309,6 +313,12 @@ show_people_map: true
 **AI features are missing**
 - Check **AI Features** is switched on in the editor — AI is off by default, and its menu entries are hidden until it's on.
 - Check an AI Task is set up in Home Assistant, or chosen in the editor. Only Chat with Home Assistant works without one.
+
+**Getting back from full screen**
+- Go back to the Messages screen and tap the Full Screen button again, or press Escape on a keyboard. Leaving the dashboard view always puts the card back too.
+
+**The Full Screen button is missing**
+- It's only on the Messages screen (the list of conversations). Check **Full Screen Button** is switched on in the editor's **Layout & Motion** section.
 
 **A photo or file won't send**
 - Files must be under the **Largest File Attachment** size set in the editor (300 MB by default).

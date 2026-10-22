@@ -39,6 +39,7 @@ Everything is **private to your household** — nothing is stored in the cloud.
 - **Games** — Noughts and Crosses, Connect Four, Reversi, Draughts and Sea Battle
 - **Skins** — iPhone, WhatsApp, Messenger, Telegram, Signal, Discord, Material You and old-school MSN, ICQ, AIM, Yahoo!, Windows 98, Windows XP, Mac OS X Aqua, BlackBerry, Nokia SMS and IRC
 - **Chat Backgrounds and Live Wallpapers** — or set any photo someone sent as the background
+- **Full Screen** — one tap on the Messages screen gives the card the whole screen, another puts it back
 - **Private Contacts** — each person's own address book, with vCard import
 - **People Map** — where everyone is, with Find Me and zones, and for each person how long they've been there, the weather there, what they're doing, Focus, charging and Wi-Fi, plus Find Nearby for places around them, with saved places kept on the map
 
