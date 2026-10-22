@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.2.5';
+const CM_VERSION = '2.2.6';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '21 Oct 2026 14:55';
+const CM_BUILD = '22 Oct 2026 14:35';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -1938,10 +1938,93 @@ const cmMedia = {
 const CM_DEFAULTS = {
   card_liquid_glass: true, appearance: 'auto', use_ha_theme: false, default_skin: '',
   glass_popups: true, glass_bars: true, contact_blur: true, animations: true, effect_words: true,
-  glass: 50, card_height: 700, pdf_enabled: true, pdf_conversations: true, pdf_contact: true, pdf_contacts: true, enter_sends: true, contact_sort: 'last', contact_display: 'first', show_my_card: true, show_people_map: true,
+  glass: 50, card_height: 700, fullscreen_button: true, resize_btn_spin: true, pdf_enabled: true, pdf_conversations: true, pdf_contact: true, pdf_contacts: true, enter_sends: true, contact_sort: 'last', contact_display: 'first', show_my_card: true, show_people_map: true,
   people_here_since: true, people_weather: true, people_activity: true, people_focus: true, people_charging: true, people_wifi: true, people_nearby: false, people_nearby_keep: 168,
   distance_units: 'auto',
 };
+
+// ── Full screen: the resize button ───────────────────────────────────────────
+// the button with the two outward arrows: the same picture whether the card is
+// full screen or not, and it spins each time it's tapped
+const RS_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+  <polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/>
+  <line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>`;
+// old-style windows: the title bar's own Maximise / Restore button (Aqua: the green zoom light)
+const RS_WIN_ICON = `<svg class="rsw-max" viewBox="0 0 10 9"><path fill="currentColor" fill-rule="evenodd" d="M0 0h10v9H0zM1 2h8v6H1z"/></svg>`
+  + `<svg class="rsw-res" viewBox="0 0 10 9"><path fill="currentColor" fill-rule="evenodd" d="M3 0h7v6H8V2H4v1H3zM0 3h7v6H0zM1 5h5v3H1z"/></svg>`
+  + `<svg class="rsw-zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/></svg>`;
+
+const RS_CSS = `
+/* ── the resize button: an ordinary round control, so every skin dresses it like its others ── */
+.rs-btn { position: relative; }
+.rs-btn svg { width: 19px; height: 19px; transition: transform 0.35s cubic-bezier(0.34,1.28,0.64,1); }
+.rs-btn.spinning svg { transform: rotate(360deg); }
+.rs-btn.pressed { transform: scale(0.92); }
+:host([data-skin]) .rs-btn.pressed { transform: none; filter: brightness(0.92); }
+.clist > .top:not(.edge) > .rs-btn { margin-left: auto; }
+/* old-style windows: it's the title bar's Maximise button instead */
+:host([data-win]) .top .rs-btn { display: none; }
+
+/* ── the title bar button (old-style windows) ── */
+.rs-win { display: none; }
+:host([data-win][data-rs][data-rs-front]) .rs-win {
+  display: flex; align-items: center; justify-content: center; position: absolute; z-index: 4; padding: 0; cursor: pointer;
+  top: calc(var(--cm-sat, 0px) + var(--rs-t, 5px)); right: calc(var(--cm-sar, 0px) + var(--rs-r, 6px)); left: auto;
+  width: var(--rs-w, 18px); height: var(--rs-h, 16px);
+  background: var(--rs-bg, #d4d0c8); color: var(--rs-fg, #000); border: var(--rs-bd, 0); border-radius: var(--rs-rad, 0); box-shadow: var(--rs-sh, none);
+}
+.rs-win::before { content: ''; position: absolute; inset: -8px -4px; }
+:host([data-win]) .rs-win.pressed, :host([data-win]) .rs-win:active { box-shadow: var(--rs-sh-in, var(--rs-sh, none)); filter: var(--rs-press, none); }
+.rs-win svg { width: var(--rs-gw, 9px); height: var(--rs-gh, 8px); transition: transform 0.35s cubic-bezier(0.34,1.28,0.64,1); }
+.rs-win .rsw-res, .rs-win .rsw-zoom { display: none; }
+:host([data-full]) .rs-win .rsw-max { display: none; }
+:host([data-full]) .rs-win .rsw-res { display: block; }
+.rs-win.pressed .rsw-max, .rs-win.pressed .rsw-res { transform: translate(1px, 1px); }
+:host { --rs-bevel: inset -1px -1px #404040, inset 1px 1px #fff, inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+  --rs-bevel-in: inset 1px 1px #404040, inset -1px -1px #fff, inset 2px 2px #808080, inset -2px -2px #dfdfdf; }
+/* Windows 98: over the Maximise box, between Minimise and Close */
+:host([data-skin="win98"]) { --rs-t: 5px; --rs-r: 22px; --rs-w: 16px; --rs-h: 14px; --rs-bg: #c0c0c0; --rs-sh: var(--rs-bevel); --rs-sh-in: var(--rs-bevel-in); }
+/* Windows XP: over the blue Maximise button */
+:host([data-skin="xp"]) { --rs-t: 4px; --rs-r: 28px; --rs-w: 21px; --rs-h: 21px; --rs-bg: linear-gradient(#5c9cff, #2a6ae6); --rs-fg: #fff;
+  --rs-bd: 1px solid rgba(255,255,255,0.85); --rs-rad: 3px; --rs-gw: 10px; --rs-gh: 9px; --rs-press: brightness(0.85); }
+/* AIM: beside its Close box */
+:host([data-skin="aim"]) { --rs-t: 5px; --rs-r: 24px; --rs-w: 18px; --rs-h: 16px; --rs-sh: var(--rs-bevel); --rs-sh-in: var(--rs-bevel-in); }
+/* ICQ 2000: at the right of the title bar, Windows 2000 style */
+:host([data-skin="icq"]) { --rs-t: 6px; --rs-r: 6px; --rs-w: 16px; --rs-h: 14px; --rs-sh: var(--rs-bevel); --rs-sh-in: var(--rs-bevel-in); }
+/* Yahoo!: beside its two buttons, in the same purple */
+:host([data-skin="yahoo"]) { --rs-t: 6px; --rs-r: 55px; --rs-w: 20px; --rs-h: 18px; --rs-bg: #6a32b0; --rs-fg: #fff; --rs-press: brightness(0.85); }
+:host([data-skin="yahoo"][data-rs]) { --sk-win-pad: 0 82px 0 12px; }
+/* MSN: at the right of the title bar, a glassy button */
+:host([data-skin="msn"]) { --rs-t: 6px; --rs-r: 8px; --rs-w: 24px; --rs-h: 18px; --rs-bg: linear-gradient(rgba(255,255,255,0.38), rgba(255,255,255,0.08));
+  --rs-fg: #fff; --rs-bd: 1px solid rgba(255,255,255,0.6); --rs-rad: 3px; --rs-press: brightness(0.85); }
+/* Mac OS X Aqua: the green zoom light itself */
+:host([data-skin="aqua"][data-win][data-rs][data-rs-front]) .rs-win { left: calc(var(--cm-sal, 0px) + 49px); right: auto; top: calc(var(--cm-sat, 0px) + 7px);
+  width: 13px; height: 13px; border-radius: 50%; background: transparent; box-shadow: none; color: rgba(0,70,0,0.72); }
+:host([data-skin="aqua"]) .rs-win .rsw-max, :host([data-skin="aqua"]) .rs-win .rsw-res { display: none !important; }
+:host([data-skin="aqua"]) .rs-win .rsw-zoom { display: block; width: 8px; height: 8px; }
+:host([data-skin="aqua"]) .rs-win.pressed { filter: brightness(0.8); }
+:host([data-skin="aqua"]) .rs-win.spinning svg { transform: rotate(360deg); }
+
+/* ── full screen ── */
+:host([data-full]) { --cm-sat: env(safe-area-inset-top, 0px); --cm-sar: env(safe-area-inset-right, 0px); --cm-sal: env(safe-area-inset-left, 0px); }
+:host([data-full]) ha-card {
+  position: fixed; inset: auto; left: var(--cm-fx, 0px); top: var(--cm-fy, 0px);
+  width: var(--cm-fw, 100vw); height: var(--cm-fh, 100dvh); max-width: none; max-height: none; min-height: 0;
+  margin: 0; padding: 0; border: 0; border-radius: 0; box-shadow: none; overflow: hidden; color: var(--cm-text);
+}
+:host([data-full][data-style="glass"]) ha-card { background: color-mix(in srgb, var(--cm-bg) 72%, transparent);
+  backdrop-filter: blur(40px) saturate(170%); -webkit-backdrop-filter: blur(40px) saturate(170%); }
+:host([data-full][data-ha][data-style="glass"]) ha-card { background: color-mix(in srgb, var(--cm-bg) 80%, transparent); }
+:host([data-full-fixed]) ha-card { z-index: 2147483000; }
+ha-card::backdrop { background: transparent; }
+:host([data-full]) .cm-root { top: var(--cm-sat); right: var(--cm-sar); bottom: var(--cm-sab, env(safe-area-inset-bottom, 0px)); left: var(--cm-sal); }
+:host([data-full][data-win]) .cm-root { top: calc(var(--cm-sat) + var(--sk-win-h, 28px)); }
+:host([data-full][data-win]) ha-card::before { top: var(--cm-sat); left: var(--cm-sal); right: var(--cm-sar); }
+:host([data-full][data-win]) ha-card::after { top: calc(var(--cm-sat) + var(--sk-btn-top, 5px)); right: calc(var(--cm-sar) + var(--sk-btn-right, 6px)); }
+:host([data-full]:is([data-skin="msn"], [data-skin="icq"], [data-skin="aqua"])) ha-card::after { left: calc(var(--cm-sal) + var(--sk-btn-left, 6px)); }
+:host([data-full][data-skin="nokia"]) .cm-root { top: calc(var(--cm-sat) + 4px); right: calc(var(--cm-sar) + 4px);
+  bottom: calc(var(--cm-sab, env(safe-area-inset-bottom, 0px)) + 4px); left: calc(var(--cm-sal) + 4px); }
+`;
 
 class CrowMessengerCard extends HTMLElement {
   constructor() {
@@ -1982,6 +2065,7 @@ class CrowMessengerCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...CM_DEFAULTS, ...(config || {}) };
+    if (this._full && this._config.fullscreen_button === false) this._exitFull(false);
     if (this._built) { this._applyTheme(); this._refresh('all'); }
   }
 
@@ -2022,6 +2106,8 @@ class CrowMessengerCard extends HTMLElement {
     window.removeEventListener('popstate', this._onLoc);
     document.removeEventListener('visibilitychange', this._onVis);
     window.removeEventListener('pagehide', this._onHide);
+    // leaving the view (or the dashboard moving the card) always ends full screen
+    if (this._full) this._exitFull(false);
     this._saveDrafts();
     this._audio?.pause();
     this._lives.forEach(l => l.stop()); this._lives.clear();
@@ -2032,8 +2118,12 @@ class CrowMessengerCard extends HTMLElement {
   // ── Build & theme ──────────────────────────────────────────────────────────
   _build() {
     this._built = true;
-    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_LIVE_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${PLAY_CSS}${SKIN_CSS}</style><ha-card><div class="cm-root"><div class="cm-pages"></div></div></ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_LIVE_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${PLAY_CSS}${SKIN_CSS}${RS_CSS}</style><ha-card><div class="cm-root"><div class="cm-pages"></div></div><button type="button" class="rs-win" data-rs>${RS_WIN_ICON}</button></ha-card>`;
     this._root = this.shadowRoot.querySelector('.cm-root');
+    this._card = this.shadowRoot.querySelector('ha-card');
+    this._rsWire(this.shadowRoot.querySelector('.rs-win'));
+    // the browser closed the full screen layer by itself: put the card back
+    this._card.addEventListener('toggle', (e) => { if (e.newState === 'closed' && this._full && !this._rsLeaving) this._exitFull(false); });
     this._pagesEl = this.shadowRoot.querySelector('.cm-pages');
     // a picture that's been deleted from the server shows a question mark instead of a broken image
     this.shadowRoot.addEventListener('error', (e) => {
@@ -2103,6 +2193,8 @@ class CrowMessengerCard extends HTMLElement {
     if (skinned) { h.style.setProperty('--cm-sheet', 'var(--cm-sheet-solid)'); h.style.setProperty('--cm-sheetedge', 'var(--cm-sep)'); }
     h.style.setProperty('--cm-height', c.card_height === 'fill'
       ? 'calc(100dvh - var(--header-height, 56px) - 24px)' : `${this._heightPx()}px`);
+    h.toggleAttribute('data-rs', this._rsOn());
+    if (this._built) this._rsSync();
   }
 
   // ── Server connection ──────────────────────────────────────────────────────
@@ -2492,6 +2584,7 @@ class CrowMessengerCard extends HTMLElement {
     page.refresh?.('all');
     page.onShow?.();
     this._reportFocus();
+    this._rsSync();
     return page;
   }
 
@@ -2510,10 +2603,223 @@ class CrowMessengerCard extends HTMLElement {
     prev.refresh?.('all');
     prev.onShow?.();
     this._reportFocus();
+    this._rsSync();
+  }
+
+  // ── Full screen (the resize button) ────────────────────────────────────────
+  // Tap the button on the front screen to fill the whole screen; tap it again to go
+  // back. However it happens, the card can always get back: every screen leads Back
+  // to the front screen and its button, Escape works, and leaving the view, turning
+  // the button off or the browser closing the layer all put the card back. Full
+  // screen is never remembered, so the card never starts full.
+  _rsOn() { return this._config.fullscreen_button !== false; }
+
+  _rsMake(cls = '') {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = `cb g rs-btn ${cls}`.trim();
+    b.dataset.rs = '';
+    b.innerHTML = RS_ICON;
+    this._rsWire(b);
+    return b;
+  }
+
+  _rsWire(b) {
+    if (!b) return;
+    const up = () => b.classList.remove('pressed');
+    b.addEventListener('pointerdown', () => b.classList.add('pressed'));
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointerleave', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); this._toggleFull(); });
+    this._rsLabel(b);
+  }
+
+  _rsLabel(b) {
+    const t = this._full ? 'Exit Full Screen' : 'Full Screen';
+    if (b.getAttribute('aria-label') !== t) { b.setAttribute('aria-label', t); b.title = t; }
+    b.setAttribute('aria-pressed', this._full ? 'true' : 'false');
+  }
+
+  // the button lives on the front screen (the chat list), at the right of its top bar
+  _rsMount(page) {
+    const top = page?.type === 'list' ? page.el?.querySelector(':scope > .top:not(.edge)') : null;
+    if (!top) return false;
+    let b = top.querySelector(':scope > .rs-btn');
+    if (!this._rsOn()) { b?.remove(); return false; }
+    if (!b) { b = this._rsMake(); top.appendChild(b); }
+    return true;
+  }
+
+  _rsSync() {
+    if (!this._card) return;
+    const front = this._stack[0];
+    this._rsMount(front);
+    // old-style window skins show it in the title bar, also only on the front screen
+    this.toggleAttribute('data-rs-front', this._stack.length === 1 && front?.type === 'list');
+    this.shadowRoot.querySelectorAll('[data-rs]').forEach(b => this._rsLabel(b));
+  }
+
+  _rsSpin() {
+    if (this._config.resize_btn_spin === false) return;
+    this.shadowRoot.querySelectorAll('.rs-btn, .rs-win').forEach(btn => {
+      btn.classList.remove('spinning');
+      void btn.offsetWidth;   // restart the turn
+      btn.classList.add('spinning');
+      setTimeout(() => btn.classList.remove('spinning'), 380);
+    });
+  }
+
+  _rsAnimOk() {
+    return this._config.animations !== false && typeof this._card?.animate === 'function'
+      && !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  }
+
+  _toggleFull(force) {
+    const want = typeof force === 'boolean' ? force : !this._full;
+    if (want === !!this._full) return;
+    // one change at a time while the card is moving (never longer than the move itself)
+    if (this._rsBusy && Date.now() - this._rsBusy < 700) return;
+    this._rsSpin();
+    if (want) this._enterFull(); else this._exitFull(true);
+  }
+
+  _enterFull() {
+    const card = this._card;
+    if (!card || !this.isConnected || !this._rsOn()) return;
+    const anim = this._rsAnimOk();
+    const from = card.getBoundingClientRect();
+    const radius = getComputedStyle(card).borderRadius;
+    // keep the card's space on the dashboard while it's away
+    this.style.height = `${Math.round(from.height)}px`;
+    this._full = true;
+    this._rsOff = { x: 0, y: 0 };
+    this.setAttribute('data-full', '');
+    this._fullFit();
+    // the top layer sits above everything on the page, whatever the dashboard's layout
+    let topLayer = false;
+    if (typeof card.showPopover === 'function') {
+      try { card.setAttribute('popover', 'manual'); card.showPopover(); topLayer = true; }
+      catch (e) { try { card.removeAttribute('popover'); } catch (_) { /* */ } }
+    }
+    this._fullTop = topLayer;
+    this.toggleAttribute('data-full-fixed', !topLayer);
+    this._fullListen(true);
+    this._fullFit(true);
+    this._lives.forEach(l => l._saverEl?.classList.add('cs-full'));
+    this._rsSync();
+    // an older browser (no top layer): if something on the page still covers the button, don't stay
+    if (!topLayer) setTimeout(() => this._fullCheck(), anim ? 450 : 60);
+    if (!anim) return;
+    const to = card.getBoundingClientRect();
+    if (!to.width || !to.height || !from.width || !from.height) return;
+    this._rsBusy = Date.now();
+    const a = card.animate([
+      { transformOrigin: '0 0', transform: `translate(${from.left - to.left}px, ${from.top - to.top}px) scale(${from.width / to.width}, ${from.height / to.height})`, borderRadius: radius },
+      { transformOrigin: '0 0', transform: 'none', borderRadius: '0px' },
+    ], { duration: 380, easing: 'cubic-bezier(.2,.9,.25,1)' });
+    const done = () => { this._rsBusy = 0; };
+    a.onfinish = done; a.oncancel = done;
+    setTimeout(done, 700);
+  }
+
+  _exitFull(anim = true) {
+    if (!this._full) return;
+    const card = this._card;
+    const finish = () => {
+      if (!this._full) return;
+      clearTimeout(this._rsExitTimer);
+      this._rsLeaving = true;
+      try { card.getAnimations?.().forEach(x => x.cancel()); } catch (e) { /* */ }
+      try { if (card.matches?.(':popover-open')) card.hidePopover(); } catch (e) { /* */ }
+      try { card.removeAttribute('popover'); } catch (e) { /* */ }
+      this._rsLeaving = false;
+      this._full = false;
+      this._fullTop = false;
+      this._rsBusy = 0;
+      this.removeAttribute('data-full');
+      this.removeAttribute('data-full-fixed');
+      ['height', '--cm-fw', '--cm-fh', '--cm-fx', '--cm-fy', '--cm-sab'].forEach(k => this.style.removeProperty(k));
+      this._fullListen(false);
+      this._lives.forEach(l => l._saverEl?.classList.remove('cs-full'));
+      this._rsSync();
+    };
+    if (!anim || !card || !this.isConnected || !this._rsAnimOk()) { finish(); return; }
+    const from = card.getBoundingClientRect();
+    const to = this.getBoundingClientRect();   // where the card lives on the dashboard
+    if (!from.width || !from.height || !to.width || !to.height) { finish(); return; }
+    this._rsBusy = Date.now();
+    const radius = getComputedStyle(this).getPropertyValue('--ha-card-border-radius').trim() || (this.hasAttribute('data-skin') ? '12px' : '28px');
+    try {
+      const a = card.animate([
+        { transformOrigin: '0 0', transform: 'none', borderRadius: '0px' },
+        { transformOrigin: '0 0', transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${to.height / from.height})`, borderRadius: radius },
+      ], { duration: 340, easing: 'cubic-bezier(.2,.9,.25,1)', fill: 'forwards' });
+      a.onfinish = finish; a.oncancel = finish;
+    } catch (e) { finish(); return; }
+    // whatever happens to the animation, the card is back in a moment
+    this._rsExitTimer = setTimeout(finish, 600);
+  }
+
+  _fullCheck() {
+    if (!this._full || this._fullTop) return;
+    const b = [...this.shadowRoot.querySelectorAll('[data-rs]')].find(x => x.offsetParent !== null && x.getBoundingClientRect().width);
+    if (!b) return;
+    const r = b.getBoundingClientRect();
+    const hit = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+    if (hit === this || this.contains(hit)) return;
+    this._exitFull(false);
+    this._toast('Full screen isn’t available on this dashboard');
+  }
+
+  _fullListen(on) {
+    if (!this._rsFit) {
+      this._rsFit = () => this._fullFit(true);
+      this._rsKey = (e) => {
+        if (e.key !== 'Escape' || e.defaultPrevented || !this._full) return;
+        // Escape closes an open sheet or alert first
+        if (this._root?.querySelector('.sheet-wrap, .viewer, .crow-ios-backdrop.visible')) return;
+        this._toggleFull(false);
+      };
+    }
+    const vv = window.visualViewport;
+    const m = on ? 'addEventListener' : 'removeEventListener';
+    window[m]('resize', this._rsFit);
+    window[m]('orientationchange', this._rsFit);
+    vv?.[m]('resize', this._rsFit);
+    vv?.[m]('scroll', this._rsFit);
+    document[m]('keydown', this._rsKey);
+  }
+
+  // fill exactly the part of the screen that's showing (above the keyboard when it's up)
+  _fullFit(check) {
+    if (!this._full) return;
+    const vv = window.visualViewport;
+    const w = vv?.width || window.innerWidth, h = vv?.height || window.innerHeight;
+    const x = vv?.offsetLeft || 0, y = vv?.offsetTop || 0;
+    const keyboard = !!vv && window.innerHeight - vv.height > 120;
+    const off = this._rsOff || (this._rsOff = { x: 0, y: 0 });
+    const s = this.style;
+    s.setProperty('--cm-fw', `${Math.round(w)}px`);
+    s.setProperty('--cm-fh', `${Math.round(h)}px`);
+    s.setProperty('--cm-fx', `${Math.round(x + off.x)}px`);
+    s.setProperty('--cm-fy', `${Math.round(y + off.y)}px`);
+    if (keyboard) s.setProperty('--cm-sab', '0px'); else s.removeProperty('--cm-sab');
+    // without the top layer, some dashboard layouts move fixed things: line the card up with the screen
+    if (check && !this._fullTop && this._card) {
+      const r = this._card.getBoundingClientRect();
+      const dx = x - r.left, dy = y - r.top;
+      if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) {
+        off.x += dx; off.y += dy;
+        s.setProperty('--cm-fx', `${Math.round(x + off.x)}px`);
+        s.setProperty('--cm-fy', `${Math.round(y + off.y)}px`);
+      }
+    }
   }
 
   _refresh(what, tid, force) {
     for (const p of this._stack) p.refresh?.(what, tid, force);
+    if (this._built) this._rsSync();
     if (['all', 'messages', 'thread', 'read', 'contacts'].includes(what)) this._keepSoon();
   }
 
@@ -14715,6 +15021,9 @@ ${this._toggle('people_nearby', 'Find Nearby', 'Look for toilets, cafés, cash m
   <div class="hint">How tall the card is on the dashboard. Fill the screen suits a Panel view.</div>
   <select id="card_height">${HEIGHTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
 </div>
+<div class="grp-sub">Full Screen</div>
+${this._toggle('fullscreen_button', 'Full Screen Button', 'A button at the top right of the Messages screen that makes the card fill the whole screen. Tap it again (or press Escape) to put it back. In the old-style window skins it’s the title bar’s Maximise button.')}
+${this._toggle('resize_btn_spin', 'Spin the Button', 'The button gives a quick spin each time it’s tapped.')}
 <div class="grp-sub">Motion</div>
 ${this._toggle('animations', 'Animations', 'Slide between screens and animate sheets and popups.')}
 ${this._toggle('effect_words', 'Effects From Words', 'Some words send a screen effect by themselves, like iMessage: Happy Birthday (Balloons), Congratulations (Confetti), Happy New Year (Fireworks), Merry Christmas (Snow), Happy Halloween, Pew Pew (Lasers), I Love You, Good Night (Fireflies), Happy Anniversary (Celebration) and Happy Easter (Petals).')}`;
@@ -14983,6 +15292,8 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     chk('glass_bars', c.glass_bars !== false);
     chk('contact_blur', c.contact_blur !== false);
     chk('animations', c.animations !== false);
+    chk('fullscreen_button', c.fullscreen_button !== false);
+    chk('resize_btn_spin', c.resize_btn_spin !== false);
     chk('effect_words', c.effect_words !== false);
     ['pdf_enabled', 'pdf_conversations', 'pdf_contact', 'pdf_contacts'].forEach(k => chk(k, c[k] !== false));
     const pw = root.getElementById('pdf-wrap'); if (pw) { pw.style.opacity = c.pdf_enabled === false ? '0.4' : '1'; pw.style.pointerEvents = c.pdf_enabled === false ? 'none' : ''; }
@@ -15030,7 +15341,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     root.getElementById('cs_classic')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', false); this.updateUI(); });
     root.getElementById('cs_glass')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', true); this.updateUI(); });
     ['auto', 'light', 'dark'].forEach(v => root.getElementById('ap_' + v)?.addEventListener('change', () => this._updateConfig('appearance', v)));
-    ['use_ha_theme', 'glass_popups', 'glass_bars', 'contact_blur', 'animations', 'effect_words', 'enter_sends', 'show_my_card', 'show_people_map',
+    ['use_ha_theme', 'glass_popups', 'glass_bars', 'contact_blur', 'animations', 'fullscreen_button', 'resize_btn_spin', 'effect_words', 'enter_sends', 'show_my_card', 'show_people_map',
       'pdf_enabled', 'pdf_conversations', 'pdf_contact', 'pdf_contacts', ...['people_here_since', 'people_weather', 'people_activity', 'people_focus', 'people_charging', 'people_wifi', 'people_nearby']].forEach(id => {
       root.getElementById(id)?.addEventListener('change', (e) => { this._updateConfig(id, e.target.checked); if (id === 'pdf_enabled' || id === 'show_people_map') this.updateUI(); });
     });
