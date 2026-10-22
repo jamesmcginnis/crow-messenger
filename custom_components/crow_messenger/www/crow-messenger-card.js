@@ -15269,7 +15269,7 @@ ${this._section('aiGrp', '255,159,10', 'mdi:robot-outline', 'AI', 'Household · 
 ${this._section('contactsGrp', '191,90,242', 'mdi:account-box-outline', 'Contacts &amp; People', 'Sort · Display · My Card · People Map · Distances', contactsBody)}
 ${this._section('pdfGrp', '255,69,58', 'mdi:file-pdf-box', 'PDF Exports', 'Conversations · Contact cards · Address book', pdfBody)}
 ${this._section('colours', '99,179,237', 'mdi:palette-outline', 'Appearance', 'Style · Light &amp; dark · Home Assistant theme · Glass', appearanceBody)}
-${this._section('layoutGrp', '94,92,230', 'mdi:page-layout-body', 'Layout &amp; Motion', 'Card height · Animations', layoutBody)}
+${this._section('layoutGrp', '94,92,230', 'mdi:page-layout-body', 'Layout &amp; Motion', 'Card height · Full screen · Animations', layoutBody)}
 ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card’s settings back to how they started', resetBody)}
         <div style="text-align:center;font-size:11px;color:#888;">Crow Messenger ${CM_VERSION}</div>
       </div>`;
