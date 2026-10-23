@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.2.6';
+const CM_VERSION = '2.2.12';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '22 Oct 2026 14:35';
+const CM_BUILD = '23 Oct 2026 06:50';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -1938,7 +1938,7 @@ const cmMedia = {
 const CM_DEFAULTS = {
   card_liquid_glass: true, appearance: 'auto', use_ha_theme: false, default_skin: '',
   glass_popups: true, glass_bars: true, contact_blur: true, animations: true, effect_words: true,
-  glass: 50, card_height: 700, fullscreen_button: true, resize_btn_spin: true, pdf_enabled: true, pdf_conversations: true, pdf_contact: true, pdf_contacts: true, enter_sends: true, contact_sort: 'last', contact_display: 'first', show_my_card: true, show_people_map: true,
+  glass: 50, card_height: 700, fullscreen_button: true, resize_btn_spin: true, start_full: false, pdf_enabled: true, pdf_conversations: true, pdf_contact: true, pdf_contacts: true, enter_sends: true, contact_sort: 'last', contact_display: 'first', show_my_card: true, show_people_map: true,
   people_here_since: true, people_weather: true, people_activity: true, people_focus: true, people_charging: true, people_wifi: true, people_nearby: false, people_nearby_keep: 168,
   distance_units: 'auto',
 };
@@ -1957,11 +1957,11 @@ const RS_WIN_ICON = `<svg class="rsw-max" viewBox="0 0 10 9"><path fill="current
 const RS_CSS = `
 /* ── the resize button: an ordinary round control, so every skin dresses it like its others ── */
 .rs-btn { position: relative; }
-.rs-btn svg { width: 19px; height: 19px; transition: transform 0.35s cubic-bezier(0.34,1.28,0.64,1); }
+/* the arrows run corner to corner, so they're drawn smaller (and a little bolder) to look the same size as the icons beside them */
+.capsule .rs-btn svg { width: 15px; height: 15px; stroke-width: 2.7; transition: transform 0.35s cubic-bezier(0.34,1.28,0.64,1); }
 .rs-btn.spinning svg { transform: rotate(360deg); }
 .rs-btn.pressed { transform: scale(0.92); }
 :host([data-skin]) .rs-btn.pressed { transform: none; filter: brightness(0.92); }
-.clist > .top:not(.edge) > .rs-btn { margin-left: auto; }
 /* old-style windows: it's the title bar's Maximise button instead */
 :host([data-win]) .top .rs-btn { display: none; }
 
@@ -2080,6 +2080,7 @@ class CrowMessengerCard extends HTMLElement {
     this._lives.forEach(l => { l.hass = hass; });
     if (!this._built) this._build();
     if (first || darkChanged) this._applyTheme();
+    if (first) this._autoFull();
     if (first && this.isConnected) this._connect();
     if (!first && this._stack.some(p => p.type === 'people' || p.type === 'contact' || p.type === 'info' || (p.type === 'thread' && (p.hasEntities || p.watchStates)))) {
       clearTimeout(this._statesTimer);
@@ -2092,6 +2093,7 @@ class CrowMessengerCard extends HTMLElement {
   _saveDrafts() { (this._stack || []).forEach(p => { try { p.composer?.saveDraft?.(); } catch (e) { /* */ } }); }
 
   connectedCallback() {
+    if (this._built) this._autoFull();
     window.addEventListener('location-changed', this._onLoc);
     window.addEventListener('popstate', this._onLoc);
     document.addEventListener('visibilitychange', this._onVis);
@@ -2108,6 +2110,7 @@ class CrowMessengerCard extends HTMLElement {
     window.removeEventListener('pagehide', this._onHide);
     // leaving the view (or the dashboard moving the card) always ends full screen
     if (this._full) this._exitFull(false);
+    this._autoFullDone = false;   // Open in Full Screen applies again the next time it's opened
     this._saveDrafts();
     this._audio?.pause();
     this._lives.forEach(l => l.stop()); this._lives.clear();
@@ -2547,6 +2550,7 @@ class CrowMessengerCard extends HTMLElement {
     else if (m.type === 'call') txt = CALL_LABEL[m.call?.kind] || '📞 Call';
     else if (m.type === 'location') txt = m.location?.live_until ? 'Live Location' : `📍 ${m.location?.label || 'Location'}`;
     else if (m.type === 'locreq') txt = '📍 Where are you?';
+    else if (m.type === 'ring') txt = '📳 Ring Phone';
     else if (m.type === 'checklist') txt = `☑️ ${m.text}`;
     else if (m.type === 'event') txt = `📅 ${m.text}`;
     else if (m.type === 'timer') txt = `⏰ ${m.text || 'Timer'}`;
@@ -2614,10 +2618,27 @@ class CrowMessengerCard extends HTMLElement {
   // screen is never remembered, so the card never starts full.
   _rsOn() { return this._config.fullscreen_button !== false; }
 
+  // Open in Full Screen: each time the card's dashboard opens, it starts full screen (once per
+  // opening, so putting it back stays put until the next time). Only with the full screen button
+  // on, so there's always a way back, and never in the card editor's preview or while editing.
+  _autoFull() {
+    if (this._autoFullDone || this._config.start_full !== true || !this._rsOn() || this._full) return;
+    if (!this.isConnected || !this._built) return;
+    if (new URLSearchParams(window.location.search).has('edit')) return;
+    for (let n = this; n; n = n.parentElement || n.getRootNode?.()?.host || null) {
+      const t = n.tagName?.toLowerCase() || '';
+      if (t.includes('dialog') || t.includes('preview') || t.includes('editor')) return;
+    }
+    this._autoFullDone = true;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (this.isConnected && !this._full && this._config.start_full === true && this._rsOn()) this._enterFull(true);
+    }));
+  }
+
   _rsMake(cls = '') {
     const b = document.createElement('button');
     b.type = 'button';
-    b.className = `cb g rs-btn ${cls}`.trim();
+    b.className = `rs-btn ${cls}`.trim();
     b.dataset.rs = '';
     b.innerHTML = RS_ICON;
     this._rsWire(b);
@@ -2641,13 +2662,15 @@ class CrowMessengerCard extends HTMLElement {
     b.setAttribute('aria-pressed', this._full ? 'true' : 'false');
   }
 
-  // the button lives on the front screen (the chat list), at the right of its top bar
+  // the button lives on the front screen (the chat list), as the third icon in the
+  // contacts and filter capsule, so it matches them exactly
   _rsMount(page) {
     const top = page?.type === 'list' ? page.el?.querySelector(':scope > .top:not(.edge)') : null;
-    if (!top) return false;
-    let b = top.querySelector(':scope > .rs-btn');
+    const cap = top?.querySelector(':scope > .cap-normal');
+    if (!cap) return false;
+    let b = cap.querySelector(':scope > .rs-btn');
     if (!this._rsOn()) { b?.remove(); return false; }
-    if (!b) { b = this._rsMake(); top.appendChild(b); }
+    if (!b) { b = this._rsMake(); cap.appendChild(b); }
     return true;
   }
 
@@ -2684,10 +2707,10 @@ class CrowMessengerCard extends HTMLElement {
     if (want) this._enterFull(); else this._exitFull(true);
   }
 
-  _enterFull() {
+  _enterFull(instant = false) {
     const card = this._card;
     if (!card || !this.isConnected || !this._rsOn()) return;
-    const anim = this._rsAnimOk();
+    const anim = !instant && this._rsAnimOk();
     const from = card.getBoundingClientRect();
     const radius = getComputedStyle(card).borderRadius;
     // keep the card's space on the dashboard while it's away
@@ -3692,6 +3715,51 @@ class CrowMessengerCard extends HTMLElement {
   }
 
   // ── Location request: "Where are you?" ────────────────────────────────────
+  // Ring Phone: the sender sees who it's ringing and can stop it; the person it rings can say they've found it
+  _ringHtml(m, t) {
+    const me = this._s.me, rg = m.ring || {}, st = rg.state || {}, to = rg.to || Object.keys(st);
+    const nm = (u) => this._nameIn(m.thread_id, u, true);
+    const on = Object.values(st).includes('ringing');
+    const word = { ringing: 'Ringing…', found: 'Found it', stopped: 'Stopped', unanswered: 'No answer' };
+    let title, sub, btns = '';
+    if (m.sender === me) {
+      title = to.length === 1 ? `Ringing ${nm(to[0])}’s phone` : 'Ringing their phones';
+      if (!on) title = to.length === 1 ? `Rang ${nm(to[0])}’s phone` : 'Rang their phones';
+      sub = to.slice(0, 5).map(u => `${nm(u)}: ${word[st[u]] || 'Stopped'}`).join('<br>');
+      if (on) btns = '<div class="xbtns"><button class="bold" data-x="ringstop">Stop Ringing</button></div>';
+      return `<div class="xcard ringcard${on ? ' on' : ''}" data-x="ring"><div class="xh">${MICON.ring}Ring Phone</div><div class="xt">${esc(title)}</div><div class="xs">${sub.split('<br>').map(esc).join('<br>')}</div>${btns}</div>`;
+    }
+    const mine = st[me];
+    title = `${nm(m.sender)} rang your phone`;
+    if (mine === 'ringing') {
+      title = `${nm(m.sender)} is ringing your phone`;
+      sub = 'It rings loudly, even on silent, until you say you’ve found it.';
+      btns = '<div class="xbtns"><button class="bold" data-x="ringok">I’ve Found It</button></div>';
+    } else if (mine === 'found') sub = 'You found it.';
+    else if (mine === 'unanswered') sub = 'It wasn’t answered.';
+    else if (mine) sub = 'They stopped ringing.';
+    else sub = 'It wasn’t ringing your phone.';
+    return `<div class="xcard ringcard${mine === 'ringing' ? ' on' : ''}" data-x="ring"><div class="xh">${MICON.ring}Ring Phone</div><div class="xt">${esc(title)}</div><div class="xs">${esc(sub)}</div>${btns}</div>`;
+  }
+
+  // the Ring Phone app: one-to-one rings them; in a group, choose who
+  async _pickRing(tid, composer) {
+    const s = this._s, t = s.threads.get(tid);
+    const others = (t?.participants || []).filter(u => u !== s.me && u !== HA_ID);
+    if (!others.length) { this._toast('There’s nobody here to ring'); return; }
+    let to = others;
+    if (others.length > 1) {
+      const r = await this._alert({
+        title: 'Ring Whose Phone?', message: 'It rings loudly, even on silent, until they say they’ve found it.',
+        buttons: [...others.slice(0, 6).map(u => ({ text: this._nameIn(tid, u, true), value: u })), { text: 'Everyone', value: '*' }, { text: 'Cancel', style: 'cancel' }],
+      });
+      if (!r?.value) return;
+      to = r.value === '*' ? others : [r.value];
+    }
+    const who = to.length === 1 ? `${this._nameIn(tid, to[0], true)}’s phone` : 'Everyone’s phones';
+    this._stageApp(composer, tid, 'ring', { extra: { type: 'ring', ring: { to } }, label: `Ring ${who}`, sub: 'Rings loudly, even on silent, until answered' });
+  }
+
   _locreqHtml(m, t) {
     const me = this._s.me, rq = m.locreq || {}, shared = rq.shared || {}, declined = rq.declined || [];
     const others = (t?.participants || []).filter(p => p !== m.sender && p !== HA_ID);
@@ -6211,6 +6279,7 @@ Object.assign(CrowMessengerCard.prototype, {
       device: { name: 'Share Device', bg: 'linear-gradient(160deg,#41BDF5,#1A8FD0)', icon: XICON.device },
       location: { name: 'Location', bg: 'linear-gradient(160deg,#FF6961,#E0302A)', icon: MICON.locate },
       locreq: { name: 'Where Are You?', bg: 'linear-gradient(160deg,#FF6961,#E0302A)', icon: MICON.locate },
+      ring: { name: 'Ring Phone', bg: 'linear-gradient(160deg,#FF9F43,#F0480F)', icon: MICON.ring },
       checklist: { name: 'Checklist', bg: 'linear-gradient(160deg,#FFD60A,#E5A800)', icon: MICON.list },
       event: { name: 'Event', bg: 'linear-gradient(160deg,#FF9F0A,#E07000)', icon: MICON.cal },
       contact: { name: 'Contact', bg: 'linear-gradient(160deg,#A2A2A7,#6E6E73)', icon: MICON.contact },
@@ -8639,7 +8708,7 @@ const drMoves = (b, turn) => {
   });
   return caps.length ? caps : steps;
 };
-const APP_ORDER = ['stickers', 'sketch', 'poll', 'checkin', 'locreq', 'device', 'checklist', 'event', 'status', 'timer', 'games'];
+const APP_ORDER = ['stickers', 'sketch', 'poll', 'checkin', 'locreq', 'ring', 'device', 'checklist', 'event', 'status', 'timer', 'games'];
 const fmtLeft = (ms) => {
   const t = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sec = t % 60;
   return h ? `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}` : `${m}:${String(sec).padStart(2, '0')}`;
@@ -8789,6 +8858,11 @@ const PLAY_CSS = `
 .remtag { color: var(--cm-accent); font-weight: 600; }
 .remtag::before { content: '⏰ '; }
 .xcard.lqcard { width: 260px; }
+.xcard.ringcard { width: 260px; }
+.xcard.ringcard .xh svg { color: #F0480F; }
+.xcard.ringcard.on .xh svg { animation: cm-ring-shake 1s ease-in-out infinite; transform-origin: 50% 50%; }
+@keyframes cm-ring-shake { 0%, 50%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-14deg); } 20%, 40% { transform: rotate(14deg); } }
+@media (prefers-reduced-motion: reduce) { .xcard.ringcard.on .xh svg { animation: none; } }
 .xcard.lqcard .xh svg { color: #FF453A; }
 .xbtns button.bold { font-weight: 700; }
 `;
@@ -8900,6 +8974,7 @@ Object.assign(CrowMessengerCard.prototype, {
       if (id === 'event') { this._openEvent(tid, composer); return; }
       if (id === 'timer') { this._openTimer(tid, composer); return; }
       if (id === 'status') { this._stageStatus(tid, composer); return; }
+      if (id === 'ring') { this._pickRing(tid, composer); return; }
       if (id === 'locreq') { this._stageApp(composer, tid, 'locreq', { extra: { type: 'locreq' }, label: 'Where are you?', sub: 'Asks for their location, once' }); return; }
       setTimeout(() => {
         if (id === 'stickers') this._openStickers({ tid, composer });
@@ -9219,7 +9294,7 @@ Object.assign(CrowMessengerCard.prototype, {
 // forwarded & starred marks, pinned messages, nicknames, Focus, activity
 // status, birthday nudges, drafts, and the pages for photos/links/files,
 // starred messages and searching a conversation.
-const MORE_TYPES = new Set(['location', 'checklist', 'event', 'contact', 'timer', 'game', 'status', 'locreq']);
+const MORE_TYPES = new Set(['location', 'checklist', 'event', 'contact', 'timer', 'game', 'status', 'locreq', 'ring']);
 const MUTE_OPTS = [{ m: 60, name: 'For 1 Hour' }, { m: 480, name: 'For 8 Hours' }, { m: 10080, name: 'For 1 Week' }, { m: 0, name: 'Always' }];
 const QUICK_EMOJI = ['👍', '❤️', '😂', '🔥', '🙏', '🎉', '👋', '😍'];
 const MICON = {
@@ -9233,6 +9308,7 @@ const MICON = {
   contact: _s('<rect x="3.5" y="3.5" width="17" height="17" rx="3"/><circle cx="12" cy="10" r="3"/><path d="M7 17.5c1-2 2.8-3 5-3s4 1 5 3"/>'),
   camera: _s('<path d="M3 8.5A2.5 2.5 0 015.5 6H7l2-2.5h6L17 6h1.5A2.5 2.5 0 0121 8.5v9a2.5 2.5 0 01-2.5 2.5h-13A2.5 2.5 0 013 17.5z"/><circle cx="12" cy="12.5" r="3.8"/>'),
   locate: _s('<path d="M12 21.5s-7-6.3-7-12a7 7 0 1114 0c0 5.7-7 12-7 12z"/><circle cx="12" cy="9.5" r="2.5"/>'),
+  ring: _s('<rect x="8" y="3" width="8" height="18" rx="2"/><path d="M11 17.5h2"/><path d="M4.5 8.5c-.9 1.1-.9 5.9 0 7M19.5 8.5c.9 1.1.9 5.9 0 7"/><path d="M2 6.5c-1.3 2.2-1.3 8.8 0 11M22 6.5c1.3 2.2 1.3 8.8 0 11"/>'),
   search: _s('<circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/>', 'stroke-width="2.3"'),
   photos: _s('<rect x="3" y="4" width="18" height="16" rx="3"/><circle cx="8.5" cy="9.5" r="1.6"/><path d="M21 15.5l-5-5L5.5 20"/>'),
   nick: _s('<path d="M4 20h4L19.5 8.5a2.1 2.1 0 00-3-3L5 17v3z"/>'),
@@ -9254,6 +9330,7 @@ Object.assign(CrowMessengerCard.prototype, {
   _moreSpecialHtml(m, t) {
     if (m.type === 'location') return this._locationHtml(m);
     if (m.type === 'locreq') return this._locreqHtml(m, t);
+    if (m.type === 'ring') return this._ringHtml(m, t);
     if (m.type === 'checklist') return this._checklistHtml(m);
     if (m.type === 'event') return this._eventHtml(m);
     if (m.type === 'contact') return this._contactCardHtml(m);
@@ -9486,7 +9563,7 @@ Object.assign(CrowMessengerCard.prototype, {
     const x = e.target.closest('[data-x]');
     if (!x) return false;
     const kind = x.dataset.x;
-    const known = ['callback', 'locopen', 'locmaps', 'locstop', 'loczone', 'strow', 'stlock', 'stlights', 'tmadd', 'tmcancel', 'gmove', 'gagain', 'gdr', 'gshuffle', 'remchip', 'lqshare', 'lqno', 'clt', 'clrm', 'cladd', 'rsvp', 'evcal', 'evmaps', 'evcheckin', 'ctadd', 'voopen', 'vomine', 'pinjump', 'anyway', 'bday', 'bdayx'];
+    const known = ['callback', 'locopen', 'locmaps', 'locstop', 'loczone', 'strow', 'stlock', 'stlights', 'tmadd', 'tmcancel', 'gmove', 'gagain', 'gdr', 'gshuffle', 'remchip', 'lqshare', 'lqno', 'ringok', 'ringstop', 'clt', 'clrm', 'cladd', 'rsvp', 'evcal', 'evmaps', 'evcheckin', 'ctadd', 'voopen', 'vomine', 'pinjump', 'anyway', 'bday', 'bdayx'];
     if (!known.includes(kind)) return false;
     const s = this._s;
     if (kind === 'pinjump') {
@@ -9518,6 +9595,11 @@ Object.assign(CrowMessengerCard.prototype, {
       const t = s.threads.get(tid), rem = (t?.reminders || []).find(r => r.message_id === m.id);
       const v = await this._menu(x, [...(rem ? [{ header: `Remind me ${this._remindWhen(rem.at)}` }] : []), ...this._remindItems().filter(i => !i.sep), { sep: true }, { text: 'Cancel Reminder', value: 'remind:off', icon: ICON.x, red: true }], { align: m.sender === s.me ? 'right' : 'left' });
       if (v?.startsWith?.('remind:')) this._remindChoice(tid, m, v.slice(7));
+      return true;
+    }
+    if (kind === 'ringok' || kind === 'ringstop') {
+      try { await this._ws('ring/answer', { thread_id: tid, message_id: m.id, answer: kind === 'ringok' ? 'found' : 'stop' }); }
+      catch (err) { this._toast(err.message || 'That didn’t work'); }
       return true;
     }
     if (kind === 'lqshare' || kind === 'lqno') {
@@ -15022,8 +15104,9 @@ ${this._toggle('people_nearby', 'Find Nearby', 'Look for toilets, cafés, cash m
   <select id="card_height">${HEIGHTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
 </div>
 <div class="grp-sub">Full Screen</div>
-${this._toggle('fullscreen_button', 'Full Screen Button', 'A button at the top right of the Messages screen that makes the card fill the whole screen. Tap it again (or press Escape) to put it back. In the old-style window skins it’s the title bar’s Maximise button.')}
+${this._toggle('fullscreen_button', 'Full Screen Button', 'An icon beside Contacts and Filter at the top of the Messages screen that makes the card fill the whole screen. Tap it again (or press Escape) to put it back. In the old-style window skins it’s the title bar’s Maximise button.')}
 ${this._toggle('resize_btn_spin', 'Spin the Button', 'The button gives a quick spin each time it’s tapped.')}
+${this._toggle('start_full', 'Open in Full Screen', 'The card fills the whole screen each time its dashboard opens. Tap the full screen icon (or press Escape) to put it back on the dashboard until the next time. Needs the Full Screen Button.', 'id="start_full_row"')}
 <div class="grp-sub">Motion</div>
 ${this._toggle('animations', 'Animations', 'Slide between screens and animate sheets and popups.')}
 ${this._toggle('effect_words', 'Effects From Words', 'Some words send a screen effect by themselves, like iMessage: Happy Birthday (Balloons), Congratulations (Confetti), Happy New Year (Fireworks), Merry Christmas (Snow), Happy Halloween, Pew Pew (Lasers), I Love You, Good Night (Fireflies), Happy Anniversary (Celebration) and Happy Easter (Petals).')}`;
@@ -15042,8 +15125,7 @@ ${this._toggle('effect_words', 'Effects From Words', 'Some words send a screen e
               <button id="editor-reset-cancel-btn" style="flex:1;padding:7px;border-radius:8px;border:1px solid rgba(128,128,128,0.2);background:transparent;color:#888;font-size:12px;cursor:pointer;font-family:inherit;">Cancel</button>
             </div>
           </div>
-        </div>
-<div style="font-size:11px;color:#888;margin-top:12px;text-align:center;">Crow Messenger ${CM_VERSION} · card build ${CM_BUILD}</div>`;
+        </div>`;
 
     const appearanceBody = `
 <div class="grp-sub" style="margin-top:2px;">Theme</div>
@@ -15271,7 +15353,6 @@ ${this._section('pdfGrp', '255,69,58', 'mdi:file-pdf-box', 'PDF Exports', 'Conve
 ${this._section('colours', '99,179,237', 'mdi:palette-outline', 'Appearance', 'Style · Light &amp; dark · Home Assistant theme · Glass', appearanceBody)}
 ${this._section('layoutGrp', '94,92,230', 'mdi:page-layout-body', 'Layout &amp; Motion', 'Card height · Full screen · Animations', layoutBody)}
 ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card’s settings back to how they started', resetBody)}
-        <div style="text-align:center;font-size:11px;color:#888;">Crow Messenger ${CM_VERSION}</div>
       </div>`;
 
     this._setupListeners();
@@ -15294,6 +15375,8 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     chk('animations', c.animations !== false);
     chk('fullscreen_button', c.fullscreen_button !== false);
     chk('resize_btn_spin', c.resize_btn_spin !== false);
+    chk('start_full', c.start_full === true);
+    { const row = root.getElementById('start_full_row'); if (row) { const off = c.fullscreen_button === false; row.style.opacity = off ? '0.4' : ''; row.style.pointerEvents = off ? 'none' : ''; } }
     chk('effect_words', c.effect_words !== false);
     ['pdf_enabled', 'pdf_conversations', 'pdf_contact', 'pdf_contacts'].forEach(k => chk(k, c[k] !== false));
     const pw = root.getElementById('pdf-wrap'); if (pw) { pw.style.opacity = c.pdf_enabled === false ? '0.4' : '1'; pw.style.pointerEvents = c.pdf_enabled === false ? 'none' : ''; }
@@ -15341,9 +15424,9 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     root.getElementById('cs_classic')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', false); this.updateUI(); });
     root.getElementById('cs_glass')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', true); this.updateUI(); });
     ['auto', 'light', 'dark'].forEach(v => root.getElementById('ap_' + v)?.addEventListener('change', () => this._updateConfig('appearance', v)));
-    ['use_ha_theme', 'glass_popups', 'glass_bars', 'contact_blur', 'animations', 'fullscreen_button', 'resize_btn_spin', 'effect_words', 'enter_sends', 'show_my_card', 'show_people_map',
+    ['use_ha_theme', 'glass_popups', 'glass_bars', 'contact_blur', 'animations', 'fullscreen_button', 'resize_btn_spin', 'start_full', 'effect_words', 'enter_sends', 'show_my_card', 'show_people_map',
       'pdf_enabled', 'pdf_conversations', 'pdf_contact', 'pdf_contacts', ...['people_here_since', 'people_weather', 'people_activity', 'people_focus', 'people_charging', 'people_wifi', 'people_nearby']].forEach(id => {
-      root.getElementById(id)?.addEventListener('change', (e) => { this._updateConfig(id, e.target.checked); if (id === 'pdf_enabled' || id === 'show_people_map') this.updateUI(); });
+      root.getElementById(id)?.addEventListener('change', (e) => { this._updateConfig(id, e.target.checked); if (id === 'pdf_enabled' || id === 'show_people_map' || id === 'fullscreen_button') this.updateUI(); });
     });
     ['first', 'last'].forEach(v => {
       root.getElementById('contact_sort_' + v)?.addEventListener('change', () => this._updateConfig('contact_sort', v));
