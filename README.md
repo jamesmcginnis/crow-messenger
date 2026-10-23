@@ -49,7 +49,7 @@ Open a dashboard, click **Edit** → **+ Add Card** and search for **Crow Messen
 
 > **You don't need to add a dashboard resource.** The integration serves the card and registers it automatically. If you previously added `crow-messenger-card.js` as a resource by hand, remove it under **Settings → Dashboards → Resources** so only the bundled copy loads.
 
-> **Tip:** Crow Messenger works best on a dashboard of its own — choose **Fill the screen** for Card Height and use a **Panel** view. On any other dashboard, tap the **Full Screen** button at the top right of the Messages screen to give the card the whole screen.
+> **Tip:** Crow Messenger works best on a dashboard of its own — choose **Fill the screen** for Card Height and use a **Panel** view. On any other dashboard, tap the **Full Screen** button beside Contacts and Filter on the Messages screen to give the card the whole screen.
 
 ---
 
@@ -100,6 +100,7 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **Polls** — with live results, in one-to-one and group chats
 - **Check In** — let people know when you arrive, or be told if you haven't
 - **Where Are You?** — ask someone to share their location just once
+- **Ring Phone** — make someone's phone ring loudly, even on silent, until they tap I've Found It. Handy for finding a lost phone or reaching someone who isn't replying. In a group you choose whose phone to ring, or everyone's
 - **Live Location and shared places** — with a map in the conversation
 - **Share a Device** — send any Home Assistant device as a live, tappable card
 - **Home Status** — what's unlocked, open or switched on right now
@@ -117,7 +118,7 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **Chat backgrounds** — any photo, for one chat or all of them
 - **Live Wallpapers** — Rain on Glass, Ambient Aurora, Lava Lamp, Night Sky, Fireplace, Ocean, Living Sky, Snowfall, Fireflies, Deep Space, Fairy Lights and Liquid Colour
 - **Colour themes** — per conversation or for all chats
-- **Full Screen** — a button at the top right of the Messages screen makes the card fill the whole screen, and every screen fills it with you. Tap it again, or press Escape, to put the card back on the dashboard. It matches whichever skin you've chosen, and in the old-style window skins it's the title bar's Maximise button (the green zoom light in Mac OS X Aqua). Full screen is never remembered, so the card always opens at its normal size
+- **Full Screen** — a button beside Contacts and Filter on the Messages screen makes the card fill the whole screen, and every screen fills it with you. Tap it again, or press Escape, to put the card back on the dashboard. It matches whichever skin you've chosen, and in the old-style window skins it's the title bar's Maximise button (the green zoom light in Mac OS X Aqua). Turn on Open in Full Screen in the editor and the card fills the screen as soon as it opens; otherwise it always opens at its normal size
 
 ### Contacts and People
 
@@ -149,6 +150,7 @@ All optional, and each can be switched off individually in the editor:
 - **Richer notifications** — the sender's photo, or what was sent: a photo or video, a sticker, a link's preview image, a map of a shared place, or the live view of a shared camera. One-to-one chats show a note such as "Sent with Slam" or "Replied to …", and a stack of notifications says how many more messages there are
 - **Cleared once read** — when you read a conversation anywhere, its notifications are removed from all your phones and tablets
 - **Focus aware** — see when someone has notifications silenced, and choose Notify Anyway
+- **Ring Phone alerts** — sent as a critical alert on iPhone and on the alarm channel on Android, so they sound even on silent. The ring repeats every 30 seconds and stops when they tap I've Found It, when you tap Stop Ringing, or after six rings, and you're told whether they found it
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from your automations
 - **`crow_messenger_message_received` event** — build automations around new messages
 - **`crow_messenger_action` event** — fired when someone taps a button sent by an automation
@@ -240,6 +242,7 @@ glass_bars: true
 glass_popups: true
 animations: true
 fullscreen_button: true
+start_full: false
 default_skin: ""
 show_people_map: true
 ```
@@ -259,8 +262,9 @@ show_people_map: true
 | `glass_popups` | `true` | Liquid Glass on menus, popups and sheets |
 | `default_skin` | *(iPhone)* | The skin everyone starts with; each person can choose their own |
 | `animations` | `true` | Slide between screens and animate sheets and popups |
-| `fullscreen_button` | `true` | The Full Screen button at the top right of the Messages screen |
+| `fullscreen_button` | `true` | The Full Screen button beside Contacts and Filter on the Messages screen |
 | `resize_btn_spin` | `true` | The Full Screen button gives a quick spin each time it's tapped |
+| `start_full` | `false` | Open in Full Screen: the card fills the screen as soon as it opens (needs the Full Screen button on, and never happens while editing the dashboard) |
 | `effect_words` | `true` | Words like "Happy Birthday" send an effect automatically |
 | `contact_blur` | `true` | Blur behind contact photos |
 | `contact_sort` | `last` | Sort contacts by `first` or `last` name |
@@ -318,7 +322,10 @@ show_people_map: true
 - Go back to the Messages screen and tap the Full Screen button again, or press Escape on a keyboard. Leaving the dashboard view always puts the card back too.
 
 **The Full Screen button is missing**
-- It's only on the Messages screen (the list of conversations). Check **Full Screen Button** is switched on in the editor's **Layout & Motion** section.
+- It's only on the Messages screen (the list of conversations), beside Contacts and Filter. Check **Full Screen Button** is switched on in the editor's **Layout & Motion** section.
+
+**Ring Phone doesn't sound on an iPhone on silent**
+- The Home Assistant app must be allowed Critical Alerts: on the iPhone go to **Settings → Notifications → Home Assistant** and turn on **Critical Alerts**. Without it the ring arrives as an ordinary notification.
 
 **A photo or file won't send**
 - Files must be under the **Largest File Attachment** size set in the editor (300 MB by default).

@@ -34,12 +34,13 @@ Everything is **private to your household** — nothing is stored in the cloud.
 - **Archive, Remind Me Later and Send a Nudge**
 - **Pinned and Starred Messages, Search and Export as PDF** — send an exported PDF straight into a chat
 - **Polls, Check In, Where Are You?, Live Location and Shared Places**
+- **Ring Phone** — make someone's phone ring loudly, even on silent, until they say they've found it
 - **Share a Device and Home Status** — live Home Assistant cards in the conversation
 - **Checklists, Events and Shared Timers**
 - **Games** — Noughts and Crosses, Connect Four, Reversi, Draughts and Sea Battle
 - **Skins** — iPhone, WhatsApp, Messenger, Telegram, Signal, Discord, Material You and old-school MSN, ICQ, AIM, Yahoo!, Windows 98, Windows XP, Mac OS X Aqua, BlackBerry, Nokia SMS and IRC
 - **Chat Backgrounds and Live Wallpapers** — or set any photo someone sent as the background
-- **Full Screen** — one tap on the Messages screen gives the card the whole screen, another puts it back
+- **Full Screen** — one tap on the Messages screen gives the card the whole screen, another puts it back, or have it open in full screen every time
 - **Private Contacts** — each person's own address book, with vCard import
 - **People Map** — where everyone is, with Find Me and zones, and for each person how long they've been there, the weather there, what they're doing, Focus, charging and Wi-Fi, plus Find Nearby for places around them, with saved places kept on the map
 
