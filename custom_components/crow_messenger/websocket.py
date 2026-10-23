@@ -41,8 +41,9 @@ def _errors(func: Callable) -> Callable:
 # What the card may send along with a message (checked again in features.py)
 EXTRA_SCHEMA = vol.Schema({
     vol.Optional("type"): vol.In(("text", "poll", "checkin", "sticker", "entity", "location", "checklist", "event", "contact", "call",
-                                  "timer", "game", "status", "locreq")),
+                                  "timer", "game", "status", "locreq", "ring")),
     vol.Optional("timer"): vol.Schema({vol.Required("seconds"): vol.Coerce(int)}),
+    vol.Optional("ring"): vol.Schema({vol.Optional("to"): [str]}),
     vol.Optional("game"): vol.Schema({vol.Required("kind"): vol.In(("ttt", "c4", "rev", "dr", "sea"))}),
     vol.Optional("reply_ext"): vol.Schema({vol.Required("thread_id"): str, vol.Required("message_id"): str}),
     vol.Optional("view_once"): bool,
@@ -175,6 +176,8 @@ ws_timer = _simple("timer", {**_MSG, vol.Required("action"): vol.In(("cancel", "
 ws_game = _simple("game/move", {**_MSG, vol.Required("move"): vol.Any(int, str, [int])},
                   lambda m, u, d: m.async_game_move(u, d["thread_id"], d["message_id"], d["move"]))
 ws_reminder = _simple("reminder/set", {**_MSG, vol.Optional("at"): vol.Any(None, int)}, _reminder)
+ws_ring = _simple("ring/answer", {**_MSG, vol.Required("answer"): vol.In(("found", "stop"))},
+                  lambda m, u, d: m.async_ring_answer(u, d["thread_id"], d["message_id"], d["answer"]))
 ws_locreq = _simple("locreq/answer", {**_MSG, vol.Required("answer"): vol.In(("share", "decline"))},
                     lambda m, u, d: m.async_locreq_answer(u, d["thread_id"], d["message_id"], d["answer"]))
 ws_game_fleet = _simple("game/fleet", _MSG, lambda m, u, d: m.async_game_fleet(u, d["thread_id"], d["message_id"]))
@@ -703,7 +706,7 @@ COMMANDS = (
     ws_delete_message, ws_unsend, ws_remove_attachment, ws_ai, ws_storage_get, ws_storage_clear,
     ws_react, ws_edit, ws_vote, ws_poll_add, ws_action, ws_checkin, ws_place_sticker,
     ws_remove_sticker, ws_disappear, ws_flag, ws_sched_list, ws_sched_cancel, ws_sched_now, ws_stickers_get,
-    ws_stickers_save, ws_stickers_delete, ws_zones, ws_zone_create, ws_timer, ws_game, ws_game_fleet, ws_game_shuffle, ws_reminder, ws_locreq,
+    ws_stickers_save, ws_stickers_delete, ws_zones, ws_zone_create, ws_timer, ws_game, ws_game_fleet, ws_game_shuffle, ws_reminder, ws_locreq, ws_ring,
     ws_mute, ws_star, ws_starred, ws_pin_message, ws_nickname, ws_quick, ws_share_hidden, ws_info, ws_media, ws_since, ws_forward,
     ws_live_stop, ws_checklist, ws_rsvp, ws_view_once, ws_notify_anyway, ws_presence,
     ws_search, ws_contacts_save, ws_contacts_delete, ws_profile_set, ws_background_set, ws_theme_set, ws_settings_get, ws_settings_set,

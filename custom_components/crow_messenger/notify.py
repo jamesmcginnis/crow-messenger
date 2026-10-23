@@ -96,6 +96,8 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
     settings = messenger.settings.get("notifications", {})
     if not settings.get("enabled", True):
         return
+    if msg.get("type") == "ring":
+        return  # Ring Phone sends its own, much louder notification (async_ring)
     sender = users.get(msg["sender"], {}).get("name", "Someone")
     atts = [messenger.data["attachments"].get(a) for a in msg.get("attachments", [])]
     atts = [a for a in atts if a]
@@ -286,6 +288,67 @@ async def async_alert(hass: HomeAssistant, messenger: Messenger, thread: dict, u
                                                {"title": title, "message": body, "data": data}, blocking=False)
             except Exception as err:  # noqa: BLE001
                 _LOGGER.warning("Crow Messenger could not notify %s: %s", device["service"], err)
+
+
+def ring_tag(thread: dict, msg: dict) -> str:
+    return f"{TAG_PREFIX}{thread['id']}_ring_{msg['id']}"
+
+
+async def async_ring(hass: HomeAssistant, messenger: Messenger, thread: dict, msg: dict, uids: list[str]) -> None:
+    """Ring Phone: a loud notification that plays even on silent / Do Not Disturb.
+    iOS: a critical alert (the Home Assistant app must be allowed Critical Alerts).
+    Android: the alarm stream, which ignores the ringer volume."""
+    settings = messenger.settings.get("notifications", {})
+    if not settings.get("enabled", True):
+        return
+    from .pushplus import PREFIX
+    users = await messenger.async_user_map()
+    sender = (users.get(msg["sender"], {}).get("name") or "Someone").split(" ")[0]
+    title = f"📳 {sender} is ringing your phone"
+    body = "Tap I've Found It to stop it ringing."
+    action = {"action": f"{PREFIX}RING_{thread['id']}_{msg['id']}", "title": "I've Found It"}
+    tag = ring_tag(thread, msg)
+    for uid in uids:
+        if uid == HA_SENDER_ID:
+            continue
+        ucfg = messenger.settings.get("users", {}).get(uid, {}) or {}
+        if ucfg.get("notify") is False:
+            continue
+        link = dashboard_link(messenger, uid, thread["id"])
+        for device in devices_for_user(hass, messenger, uid):
+            data: dict[str, Any] = {"tag": tag, "group": f"{TAG_PREFIX}{thread['id']}_ring"}
+            if device["platform"] == "ios":
+                data["url"] = link
+                data["actions"] = [{**action, "activationMode": "background", "icon": "sfsymbols:checkmark.circle.fill"}]
+                data["push"] = {"thread-id": f"{TAG_PREFIX}{thread['id']}_ring",
+                                "sound": {"name": "default", "critical": 1, "volume": 1.0},
+                                "interruption-level": "critical"}
+            else:
+                data["clickAction"] = link
+                data["actions"] = [action]
+                data["channel"] = "alarm_stream"
+                data["importance"] = "high"
+                data["priority"] = "high"
+                data["ttl"] = 0
+                data["sticky"] = "true"
+                data["notification_icon"] = "mdi:phone-ring"
+            try:
+                await hass.services.async_call("notify", device["service"],
+                                               {"title": title, "message": body, "data": data}, blocking=False)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Crow Messenger could not ring %s: %s", device["service"], err)
+
+
+async def async_ring_clear(hass: HomeAssistant, messenger: Messenger, thread: dict, msg: dict, uids: list[str]) -> None:
+    """Take a Ring Phone notification off the phones once it has stopped."""
+    tag = ring_tag(thread, msg)
+    for uid in uids:
+        for device in devices_for_user(hass, messenger, uid):
+            try:
+                await hass.services.async_call("notify", device["service"],
+                                               {"message": "clear_notification", "data": {"tag": tag}}, blocking=False)
+            except Exception:  # noqa: BLE001
+                pass
 
 
 async def async_clear_android(hass: HomeAssistant, messenger: Messenger, uid: str, tag: str) -> None:

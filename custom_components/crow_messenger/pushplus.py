@@ -121,6 +121,8 @@ async def async_handle(messenger: "Messenger", uid: str, action: str) -> bool:
         messenger.mark_read(uid, tid)
     elif what == "MUTE":
         messenger.set_mute(uid, tid, 60)
+    elif what == "RING" and len(parts) >= 3:
+        await messenger.async_ring_from_notification(uid, tid, parts[2])
     elif what in ("HOME", "OMW"):
         await messenger.async_send(uid, tid, HOME_TEXT["home" if what == "HOME" else "omw"], [])
     return True

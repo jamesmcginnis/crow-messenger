@@ -65,7 +65,7 @@ _LOGGER = logging.getLogger(__name__)
 
 URL_RE = re.compile(r"https?://[^\s<>\"']+", re.I)
 EXTRA_TYPES = ("text", "poll", "checkin", "sticker", "entity", "location", "checklist", "event", "contact", "call",
-               "timer", "game", "status", "locreq")
+               "timer", "game", "status", "locreq", "ring")
 CALL_KINDS = {"facetime": "📹 FaceTime", "facetime_audio": "📞 FaceTime Audio", "phone": "📞 Phone Call"}
 # Apple's names for the standard tapbacks, used in the quiet notification
 TAPBACK_WORDS = {"❤️": "Loved", "👍": "Liked", "👎": "Disliked", "😂": "Laughed at",
@@ -223,6 +223,8 @@ class FeaturesMixin:
             return "🏠 Home Status"
         if kind == "locreq":
             return "📍 Where are you?"
+        if kind == "ring":
+            return "📳 Ring Phone"
         if kind == "sticker":
             return (msg.get("sticker") or {}).get("emoji") or "Sticker"
         if kind == "entity":
@@ -261,7 +263,7 @@ class FeaturesMixin:
     def extras_view(self: Messenger, msg: dict) -> dict:
         out: dict[str, Any] = {}
         for key in ("call", "reactions", "effect", "spans", "mentions", "poll", "sticker", "stickers", "entity",
-                    "actions", "action_taken", "link", "ttl", "checkin", "scheduled", "note", "at", "timer", "locreq"):
+                    "actions", "action_taken", "link", "ttl", "checkin", "scheduled", "note", "at", "timer", "locreq", "ring"):
             if msg.get(key):
                 out[key] = msg[key]
         if msg.get("game"):
@@ -342,6 +344,8 @@ class FeaturesMixin:
             out.update(self.check_play(uid, thread, kind, extra))
         elif kind == "locreq":
             out.update(self.check_locreq(uid, thread))
+        elif kind == "ring":
+            out.update(self.check_ring(uid, thread, extra))
         elif kind == "call":
             call = extra.get("call") or {}
             if call.get("kind") not in CALL_KINDS:
@@ -1097,6 +1101,7 @@ class FeaturesMixin:
                     self._arm_checkin(thread, msg)
         self.async_start_play()
         self.async_start_organise()
+        self.async_start_ring()
 
     @callback
     def async_stop_features(self: Messenger) -> None:

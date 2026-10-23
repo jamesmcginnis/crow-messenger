@@ -31,7 +31,7 @@ from .http import MediaView, PushMediaView, UploadView, PushImageView
 from .manager import Messenger, MessengerError, new_id, now_ms
 from .const import ACTION_PREFIX
 from . import pushplus
-from .notify import REPLY_ACTION_PREFIX, TAG_PREFIX, async_alert, async_clear_android, async_push
+from .notify import REPLY_ACTION_PREFIX, TAG_PREFIX, async_alert, async_clear_android, async_push, async_ring, async_ring_clear
 from . import websocket
 
 _LOGGER = logging.getLogger(__name__)
@@ -85,6 +85,16 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await async_alert(hass, messenger, thread, uids, title, body, options)
 
     messenger.alert_callback = _alert
+
+    async def _ring(thread, msg, uids):
+        await async_ring(hass, messenger, thread, msg, uids)
+
+    async def _ring_clear(thread, msg, uids):
+        await async_ring_clear(hass, messenger, thread, msg, uids)
+
+    messenger.ring_callback = _ring
+    messenger.ring_clear_callback = _ring_clear
+    entry.async_on_unload(messenger.async_stop_ring)
     # Send Later timers and Check Ins carry on after a restart
     messenger.async_start_features()
     messenger.async_start_more()
