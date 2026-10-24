@@ -148,6 +148,7 @@ All optional, and each can be switched off individually in the editor:
 - **App icon badge** — optional and off by default: a red number on the Home Assistant app's icon on iPhone and iPad showing unread messages (muted chats aren't counted), kept up to date even when you read a chat on another device
 - **Notification buttons** — press and hold a notification for Reply, Tapbacks (Heart, Thumbs Up and Ha Ha), Mark as Read, Hide Alerts for 1 Hour, and I'm Home or On My Way. Each can be switched on or off in the editor. Android shows three at most: Reply, Mark as Read and Thumbs Up
 - **Richer notifications** — the sender's photo, or what was sent: a photo or video, a sticker, a link's preview image, a map of a shared place, or the live view of a shared camera. One-to-one chats show a note such as "Sent with Slam" or "Replied to …", and a stack of notifications says how many more messages there are
+- **Share to Crow Messenger** — tap Share in any app on your phone and choose Home Assistant. A "Send link to…" notification appears; tap it and Crow Messenger opens on a Send To list where you pick one or more chats (or start a new one), add a comment if you like, and tap Send. The link arrives with its preview. Nothing is sent until you choose, and Discard throws it away. Works on iPhone, iPad and Android with the Companion app; on iPhone, anything typed in the share box becomes the comment. Links and text only (not photos or files), and a shared link waits for 24 hours
 - **Cleared once read** — when you read a conversation anywhere, its notifications are removed from all your phones and tablets
 - **Focus aware** — see when someone has notifications silenced, and choose Notify Anyway
 - **Ring Phone alerts** — sent as a critical alert on iPhone and on the alarm channel on Android, so they sound even on silent. The ring repeats every 30 seconds and stops when they tap I've Found It, when you tap Stop Ringing, or after six rings, and you're told whether they found it
@@ -157,6 +158,18 @@ All optional, and each can be switched off individually in the editor:
 - **`crow_messenger_action` event** — fired when someone taps a button sent by an automation
 - **Household settings** — how long messages are kept, the largest attachment, notifications, link previews and more
 - Runs entirely on your own Home Assistant — no cloud service of its own
+
+---
+
+## Share from Your Phone
+
+Send a link from any app on your phone — Safari, Chrome, YouTube, News — to a Crow Messenger chat, much like sharing to Messages:
+
+1. Tap **Share** and choose **Home Assistant** (on iPhone, tap **Post** in the small box that appears — anything you type there becomes your comment)
+2. A **Send link to…** notification arrives on that phone — tap it, or press and hold it for **Choose Chat** or **Discard**
+3. Crow Messenger opens on **Send To**: pick one or more chats, or someone you haven't messaged yet, add a comment if you like, and tap **Send**
+
+The link arrives with its preview. Nothing is sent until you choose a chat, so things you share to Home Assistant for other reasons never end up in a conversation. Links and text can be shared (not photos or files), and a shared link waits for 24 hours. It can be switched off in the editor with **Share to Crow Messenger**.
 
 ---
 
@@ -176,23 +189,23 @@ Each person in your home is a device, **Crow Messenger (Name)**, with these enti
 
 People added to Home Assistant later get their own device straight away, and a person's device is removed when they're removed.
 
-### Turn a light on when Keeva messages
+### Turn a light on when person3 messages
 
 ```yaml
-alias: Message from Keeva
+alias: Message from person3
 triggers:
   - trigger: state
-    entity_id: sensor.crow_messenger_james_latest_message
-    to: Keeva
+    entity_id: sensor.crow_messenger_person1_latest_message
+    to: person3
   - trigger: state
-    entity_id: sensor.crow_messenger_james_latest_message
+    entity_id: sensor.crow_messenger_person1_latest_message
     attribute: received
 conditions:
   - condition: state
-    entity_id: sensor.crow_messenger_james_latest_message
-    state: Keeva
+    entity_id: sensor.crow_messenger_person1_latest_message
+    state: person3
   - condition: state
-    entity_id: sensor.crow_messenger_james_latest_message
+    entity_id: sensor.crow_messenger_person1_latest_message
     attribute: unread
     state: true
 actions:
@@ -242,7 +255,7 @@ actions:
       filename: /config/www/snapshots/doorbell.jpg
   - action: crow_messenger.send_message
     data:
-      to: ["James", "Sarah"]
+      to: ["person1", "person2"]
       message: "Someone is at the front door"
       attachment: /local/snapshots/doorbell.jpg
       actions: ["Unlock", "Ignore"]
@@ -269,7 +282,7 @@ actions:
 actions:
   - action: crow_messenger.send_message
     data:
-      to: ["James", "Sarah", "Keeva"]
+      to: ["person1", "person2", "person3"]
       group_name: Family
       message: "Dinner's ready!"
 ```
@@ -339,6 +352,7 @@ show_people_map: true
 | One Dashboard for Everyone | On | Every notification opens the same dashboard |
 | App Icon Badge | Off | A red number on the Home Assistant app's icon showing unread messages |
 | Notification Buttons | Tapbacks and Mark as Read on | Which buttons appear when a notification is pressed and held |
+| Share to Crow Messenger | On | Links shared to the Home Assistant app from a phone's share sheet can be sent to a chat |
 | AI Features | Off | Turns on the AI features for everyone |
 
 ---
@@ -356,6 +370,15 @@ show_people_map: true
 
 **Notifications open the wrong dashboard**
 - With **One Dashboard for Everyone** on, enter the dashboard's path underneath it. Until a path is entered, each person's own dashboard choice is used.
+
+**Home Assistant isn't in my phone's share list**
+- On iPhone, open the share sheet, scroll the row of apps to the end, tap **More** and switch on **Home Assistant** (drag it up the list to keep it near the front).
+- On Android it appears in the share list once the Companion app is installed and signed in.
+
+**I shared a link but no notification came**
+- Check **Share to Crow Messenger** is switched on in the editor's household settings.
+- Check notifications from the Home Assistant app are allowed, and that the phone is signed in as you. The notification goes to the phone you shared from.
+- Open the card once on that phone, so Crow Messenger knows which dashboard to open (or set **One Dashboard for Everyone**).
 
 **Location, Check In and Find Me don't work**
 - Each person needs a Home Assistant person linked to their user, with a location from the Companion app.
