@@ -62,6 +62,7 @@ All optional, and each can be switched off individually:
 - **App Icon Badge** — optional: a red number on the app's icon showing unread messages
 - **Notification Buttons** — Tapbacks, Mark as Read, Hide Alerts, and I'm Home or On My Way
 - **Richer Notifications** — the sender's photo, stickers, link previews, maps and live camera views
+- **Sensors for each person** — Unread messages, Latest message, New messages, Active now and Phone ringing (who sent what, never what it says)
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from automations
 - **`crow_messenger_message_received` event** — for automations around new messages
 - **`crow_messenger_action` event** — when someone taps a button sent by an automation

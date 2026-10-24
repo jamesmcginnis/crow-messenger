@@ -151,11 +151,57 @@ All optional, and each can be switched off individually in the editor:
 - **Cleared once read** — when you read a conversation anywhere, its notifications are removed from all your phones and tablets
 - **Focus aware** — see when someone has notifications silenced, and choose Notify Anyway
 - **Ring Phone alerts** — sent as a critical alert on iPhone and on the alarm channel on Android, so they sound even on silent. The ring repeats every 30 seconds and stops when they tap I've Found It, when you tap Stop Ringing, or after six rings, and you're told whether they found it
+- **Sensors for each person** — Unread messages, Latest message, New messages, Active now and Phone ringing (who sent what, never what it says)
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from your automations
 - **`crow_messenger_message_received` event** — build automations around new messages
 - **`crow_messenger_action` event** — fired when someone taps a button sent by an automation
 - **Household settings** — how long messages are kept, the largest attachment, notifications, link previews and more
 - Runs entirely on your own Home Assistant — no cloud service of its own
+
+---
+
+## Sensors
+
+Each person in your home is a device, **Crow Messenger (Name)**, with these entities:
+
+| Entity | Description |
+|--------|-------------|
+| Unread messages | Unread messages in chats that aren't muted — the same number as the app icon badge. Attributes: how many `conversations` they're in, and how many are `in_muted_conversations` |
+| Latest message | Who last sent them a message. Attributes: the `conversation`, whether it `is_group`, when it was `received`, its `kind` (`text`, `photo`, `video`, `file`, `poll`, `location`, `ring` and so on), whether it's still `unread`, the `thread_id` and the `sender_id` |
+| New messages | On while they have unread messages in chats that aren't muted |
+| Active now | On while they have the card open and on screen. Unknown for anyone who has switched off showing their activity |
+| Phone ringing | On while someone is using Ring Phone on their phone, with who `rung_by` |
+
+> **What a message says never goes into an entity**, only who sent it and in which chat, because anyone who can see your Home Assistant can see entities and their history.
+
+People added to Home Assistant later get their own device straight away, and a person's device is removed when they're removed.
+
+### Turn a light on when Keeva messages
+
+```yaml
+alias: Message from Keeva
+triggers:
+  - trigger: state
+    entity_id: sensor.crow_messenger_james_latest_message
+    to: Keeva
+  - trigger: state
+    entity_id: sensor.crow_messenger_james_latest_message
+    attribute: received
+conditions:
+  - condition: state
+    entity_id: sensor.crow_messenger_james_latest_message
+    state: Keeva
+  - condition: state
+    entity_id: sensor.crow_messenger_james_latest_message
+    attribute: unread
+    state: true
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.study
+    data:
+      color_name: purple
+```
 
 ---
 
