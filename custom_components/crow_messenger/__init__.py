@@ -32,6 +32,7 @@ from .http import MediaView, PushMediaView, UploadView, PushImageView
 from .manager import Messenger, MessengerError, new_id, now_ms
 from .const import ACTION_PREFIX
 from . import pushplus
+from . import share
 from .notify import REPLY_ACTION_PREFIX, TAG_PREFIX, async_alert, async_clear_android, async_push, async_ring, async_ring_clear
 from . import websocket
 
@@ -139,6 +140,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         action = str(data.get("action") or "")
         text = str(data.get("reply_text") or "").strip()
         uid = event.context.user_id
+        # Discard on a "Send link to…" notification (Share to Home Assistant)
+        if action.startswith(share.DISCARD_PREFIX) and uid:
+            await share.async_done(hass, messenger, uid, action[len(share.DISCARD_PREFIX):])
+            return
         # Tapbacks, Mark as Read, suggested replies, Hide Alerts, I'm Home / On My Way
         if action.startswith(pushplus.PREFIX) and uid:
             try:
@@ -179,6 +184,15 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await async_clear_android(hass, messenger, uid, tag)
 
     entry.async_on_unload(hass.bus.async_listen("mobile_app_notification_action", _on_notification_action))
+
+    # A link (or text) shared to the Home Assistant app from a phone's share sheet
+    async def _on_share(event: Event) -> None:
+        try:
+            await share.async_on_share(hass, messenger, event)
+        except Exception:  # noqa: BLE001 - never let a share break anything else
+            _LOGGER.exception("Crow Messenger could not handle a shared link")
+
+    entry.async_on_unload(hass.bus.async_listen(share.EVENT_SHARE, _on_share))
 
     async def _handle_send(call: ServiceCall) -> None:
         await _async_service_send(hass, messenger, call)

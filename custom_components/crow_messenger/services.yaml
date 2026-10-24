@@ -2,7 +2,7 @@ send_message:
   fields:
     to:
       required: true
-      example: '["James", "Sarah"]'
+      example: '["person1", "person2"]'
       selector:
         object:
     message:

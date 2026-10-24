@@ -639,7 +639,7 @@ class MoreFeaturesMixin:
         return self.message_view(msg, self._hidden(thread, uid))
 
     def _rsvp_note(self: Messenger, thread: dict, msg: dict, uid: str, answer: str | None, name: str) -> None:
-        """One grey line per person for their answer ("Sarah is going to Dinner"): a new answer
+        """One grey line per person for their answer ("person2 is going to Dinner"): a new answer
         replaces their old line, and the person who made the event is told."""
         ev = msg["event"]
         notes = ev.setdefault("notes", {})

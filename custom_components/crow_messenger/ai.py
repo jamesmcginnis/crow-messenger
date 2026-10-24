@@ -372,7 +372,7 @@ async def ask(hass, messenger: Messenger, uid: str, thread_id: str, question: st
         "giving exact details (times, dates, places, numbers, passwords, names) as written. Work out words like "
         "\"tomorrow\" from the day the message was sent. If the conversation doesn't answer it, say so plainly "
         "and don't guess.\n"
-        "Reply with only JSON like {\"answer\": \"Sarah said the plumber's coming on Thursday at 10am.\", "
+        "Reply with only JSON like {\"answer\": \"person2 said the plumber's coming on Thursday at 10am.\", "
         "\"messages\": [12, 14], \"found\": true} where messages are the numbers of up to three messages the "
         "answer comes from (most relevant first), and found is false when the answer isn't in the conversation.\n\n"
         f"Question: {question}\n\nConversation:\n{convo}"))

@@ -17,6 +17,7 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN, RETENTION_CHOICES
 from . import ai
+from . import share
 from .manager import Messenger, MessengerError
 from .notify import mobile_devices
 
@@ -307,6 +308,23 @@ def ws_here(hass, connection, msg) -> None:
     connection.send_result(msg["id"])
 
 
+@websocket_api.websocket_command({vol.Required("type"): "crow_messenger/share/get", vol.Required("share_id"): str})
+@websocket_api.async_response
+@_errors
+async def ws_share_get(hass, connection, msg) -> None:
+    """A link shared from this person's phone, waiting to be sent to a chat."""
+    connection.send_result(msg["id"], {"share": share.view(share.get(_m(hass), connection.user.id, msg["share_id"]))})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "crow_messenger/share/done", vol.Required("share_id"): str})
+@websocket_api.async_response
+@_errors
+async def ws_share_done(hass, connection, msg) -> None:
+    """Sent (or discarded): forget it and take its notification off the phones."""
+    await share.async_done(hass, _m(hass), connection.user.id, msg["share_id"])
+    connection.send_result(msg["id"])
+
+
 @websocket_api.websocket_command({vol.Required("type"): "crow_messenger/bootstrap"})
 @websocket_api.async_response
 @_errors
@@ -330,6 +348,7 @@ async def ws_bootstrap(hass, connection, msg) -> None:
         "presence": messenger.presence_all(uid),
         "share_hidden": messenger.share_hidden(),
         "scheduled": messenger.scheduled_for(uid),
+        "shares": share.pending(messenger, uid),
         "features": {"link_previews": messenger._feature("link_previews"),
                      "checkin": messenger.person_for(uid) is not None,
                      "zones": connection.user.is_admin or messenger._feature("zones")},
@@ -667,6 +686,7 @@ SETTINGS_SCHEMA = vol.Schema({
     vol.Optional("features"): vol.Schema({
         vol.Optional("link_previews"): bool,
         vol.Optional("zones"): bool,
+        vol.Optional("share_sheet"): bool,
     }),
     vol.Optional("dashboard"): vol.Schema({
         vol.Optional("everyone"): bool,
@@ -701,7 +721,7 @@ async def ws_settings_set(hass, connection, msg) -> None:
 
 
 COMMANDS = (
-    ws_subscribe, ws_focus, ws_here, ws_bootstrap, ws_threads, ws_messages, ws_create_thread, ws_send,
+    ws_subscribe, ws_focus, ws_here, ws_bootstrap, ws_share_get, ws_share_done, ws_threads, ws_messages, ws_create_thread, ws_send,
     ws_mark_read, ws_typing, ws_update_thread, ws_leave, ws_delete_thread, ws_discard_upload,
     ws_delete_message, ws_unsend, ws_remove_attachment, ws_ai, ws_storage_get, ws_storage_clear,
     ws_react, ws_edit, ws_vote, ws_poll_add, ws_action, ws_checkin, ws_place_sticker,

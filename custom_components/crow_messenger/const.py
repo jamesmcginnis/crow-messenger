@@ -88,7 +88,8 @@ DEFAULT_SETTINGS = {
         "buttons": {"tapbacks": True, "mark_read": True, "mute": False, "home": False},
     },
     # Messages extras: link previews (fetched by Home Assistant)
-    "features": {"link_previews": True},
+    # Share to Home Assistant: links shared from a phone's share sheet can be sent to a chat
+    "features": {"link_previews": True, "share_sheet": True},
     # one dashboard for everyone's notifications (when on and a dashboard is chosen, the
     # per-person choices are ignored; with no dashboard chosen yet, each person's choice is used)
     "dashboard": {"everyone": True, "path": ""},

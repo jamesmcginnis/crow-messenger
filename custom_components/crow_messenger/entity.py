@@ -1,6 +1,6 @@
 """What every Crow Messenger entity shares: one device for each person, kept up to date live.
 
-Each person in the household gets a device ("Crow Messenger (James)") with their unread
+Each person in the household gets a device ("Crow Messenger (person1)") with their unread
 messages, who last messaged them, whether they have new messages, whether the card is open
 ("Active now") and whether someone is ringing their phone.
 

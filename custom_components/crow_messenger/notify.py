@@ -2,7 +2,7 @@
 
 Each Companion app install is a `mobile_app` config entry that records the
 Home Assistant user who signed in on it, its device name and its platform.
-That is how a message to "Sarah" reaches only Sarah's phones, and how each
+That is how a message to "person2" reaches only person2's phones, and how each
 phone gets the payload format its platform understands.
 """
 from __future__ import annotations
@@ -40,6 +40,7 @@ def mobile_devices(hass: HomeAssistant) -> list[dict[str, Any]]:
             "platform": platform,
             "os_name": data.get("os_name") or "",
             "model": data.get("model") or "",
+            "device_id": data.get("device_id") or "",
             "available": hass.services.has_service("notify", service),
         })
     return out
@@ -52,6 +53,10 @@ def devices_for_user(hass: HomeAssistant, messenger: Messenger, uid: str) -> lis
 
 
 def dashboard_link(messenger: Messenger, uid: str, thread_id: str) -> str:
+    return f"{dashboard_path(messenger, uid)}?crow_thread={thread_id}"
+
+
+def dashboard_path(messenger: Messenger, uid: str) -> str:
     """The dashboard chosen for this person in the editor, or - when it's left
     on Automatic - wherever they last opened the card."""
     everyone = messenger.settings.get("dashboard", {}) or {}
@@ -67,7 +72,7 @@ def dashboard_link(messenger: Messenger, uid: str, thread_id: str) -> str:
         path = f"/{dashboard}/{view}"
     else:
         path = messenger.data.get("auto_paths", {}).get(uid) or "/lovelace/0"
-    return f"{path}?crow_thread={thread_id}"
+    return path
 
 
 def _attachment_label(att: dict) -> str:
@@ -182,7 +187,7 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
             if ios:
                 data["url"] = link
                 data["push"] = {"thread-id": f"{TAG_PREFIX}{thread['id']}", "sound": "default" if settings.get("sound", True) else "none",
-                                # "3 more messages from Sarah" under a stack of notifications
+                                # "3 more messages from person2" under a stack of notifications
                                 "summary-arg": sender}
                 badge = messenger.badge.for_notification(uid)
                 if badge is not None:
