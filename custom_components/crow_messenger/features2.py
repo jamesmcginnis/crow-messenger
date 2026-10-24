@@ -751,6 +751,7 @@ class MoreFeaturesMixin:
     def _presence_changed(self: Messenger, uid: str) -> None:
         self.data.setdefault("last_active", {})[uid] = self.__dict__.get("_last_active", {}).get(uid, _now())
         self._save()
+        self.entities.changed(uid)  # their Active Now sensor
         p = self.presence_for(uid)
         for sub_uid in {s.uid for s in self._subs.values()}:
             if sub_uid != uid and self.profile_for(sub_uid).get("activity") is not False:

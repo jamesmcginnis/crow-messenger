@@ -178,6 +178,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self.ring_clear_callback: Callable | None = None  # set by __init__ (notify.async_ring_clear)
         from .badge import Badge
         self.badge = Badge(self)  # the app icon badge (off until turned on in the editor)
+        from .entity import EntityHub
+        self.entities = EntityHub(self)  # each person's sensors (started by __init__)
 
     # ── Persistence ─────────────────────────────────────────────────────────
     async def async_load(self) -> None:
@@ -214,6 +216,13 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
     @callback
     def _save_contacts(self) -> None:
         self._cstore.async_delay_save(lambda: self.cdata, 1.0)
+
+    async def async_flush(self) -> None:
+        """Write everything now. Saves wait a second to batch changes, and Home Assistant only writes
+        waiting saves when it stops, so a reload of the integration would otherwise lose the last second."""
+        await self._store.async_save(self.data)
+        await self._cstore.async_save(self.cdata)
+        await self._bstore.async_save({"users": self.backgrounds, "themes": self.themes, "stickers": self.stickers})
 
     @property
     def settings(self) -> dict:
@@ -301,6 +310,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
     def _send_to(self, uid: str, payload: dict) -> None:
         if payload.get("type") in BADGE_COUNTED:
             self.badge.changed(uid)
+            self.entities.changed(uid)
         for sub in list(self._subs.values()):
             if sub.uid == uid:
                 try:

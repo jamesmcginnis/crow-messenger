@@ -20,6 +20,7 @@ import voluptuous as vol
 from homeassistant.components.frontend import add_extra_js_url
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import Event, HomeAssistant, ServiceCall, callback
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
@@ -38,6 +39,8 @@ _LOGGER = logging.getLogger(__name__)
 
 CARD_FILENAME = "crow-messenger-card.js"
 CARD_URL = f"/{DOMAIN}/{CARD_FILENAME}"
+# each person's Unread, Latest message, New messages, Active now and Phone ringing
+PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
 
 SEND_SCHEMA = vol.Schema({
     vol.Required("to"): vol.Any(cv.string, [cv.string]),
@@ -125,6 +128,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await messenger.async_expire()
 
     entry.async_on_unload(async_track_time_interval(hass, _expire, timedelta(minutes=1)))
+
+    # Each person's sensors
+    entry.async_on_unload(await messenger.entities.async_start())
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     # Reply typed into a phone notification.
     async def _on_notification_action(event: Event) -> None:
@@ -270,8 +277,12 @@ async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: 
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
+        return False
     hass.services.async_remove(DOMAIN, SERVICE_SEND_MESSAGE)
     m = hass.data.pop(DOMAIN, None)
     if m is not None and getattr(m, "badge", None):
         m.badge.unload()
+    if m is not None:
+        await m.async_flush()
     return True
