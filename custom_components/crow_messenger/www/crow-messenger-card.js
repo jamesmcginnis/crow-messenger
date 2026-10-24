@@ -6,9 +6,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.2.13';
+const CM_VERSION = '2.3.0';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '23 Oct 2026 06:50';
+const CM_BUILD = '24 Oct 2026 13:10';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -1814,6 +1814,11 @@ const CM_MORE_CSS = `
 .ask-hint { padding-top: 40px; }
 .pick-row { display: flex; align-items: center; gap: 12px; padding: 9px 14px; cursor: pointer; }
 .pick-row + .pick-row { border-top: 0.5px solid var(--cm-sep); }
+.shr-card { width: 100%; margin: 4px 0 10px; background: var(--cm-fill); color: var(--cm-text); cursor: default; }
+.shr-text { margin: 4px 0 10px; padding: 12px 14px; border-radius: 14px; background: var(--cm-fill); font-size: 15px; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
+.xfield.shr-c { resize: none; font-family: inherit; line-height: 1.35; }
+.shr-sub { padding: 14px 14px 6px; font-size: 13px; color: var(--cm-text2); text-transform: uppercase; letter-spacing: 0.02em; border-top: 0.5px solid var(--cm-sep); }
+.shr-discard { display: block; margin: 18px auto 4px; background: none; border: none; color: #ff453a; font-size: 16px; font-family: inherit; cursor: pointer; padding: 8px 16px; }
 .pick-row .pn { flex: 1; min-width: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-row .pck2 { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--cm-text3); display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
 .pick-row.on .pck2 { background: var(--cm-accent); border-color: var(--cm-accent); }
@@ -2359,6 +2364,10 @@ class CrowMessengerCard extends HTMLElement {
         if (ev.reload) this._loadMsgs(ev.thread.id, { reset: true });
         this._refresh('thread', ev.thread.id);
         break;
+      case 'share_done':
+        // sent or discarded from another device (or the notification's Discard button)
+        if (this._shareSheet?.id === ev.share_id && this._shareSheet.wrap.isConnected) this._shareSheet.close();
+        break;
       case 'thread_removed':
         s.threads.delete(ev.thread_id);
         s.msgs.delete(ev.thread_id);
@@ -2448,11 +2457,15 @@ class CrowMessengerCard extends HTMLElement {
   _checkDeepLink() {
     const params = new URLSearchParams(window.location.search);
     const tid = params.get('crow_thread');
-    if (!tid || !this._s.ready || !this.isConnected) return;
+    const sid = params.get('crow_share');
+    if ((!tid && !sid) || !this._s.ready || !this.isConnected) return;
     params.delete('crow_thread');
+    params.delete('crow_share');
     const qs = params.toString();
     window.history.replaceState(window.history.state, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
-    if (this._s.threads.has(tid)) this._openThread(tid, { reset: true, anim: false });
+    if (tid && this._s.threads.has(tid)) this._openThread(tid, { reset: true, anim: false });
+    // a link shared to the Home Assistant app: choose the chat it goes to
+    if (sid) this._openShare(sid);
   }
 
   // the chat you were in, so leaving the app (or the dashboard) and coming back opens it again
@@ -8099,7 +8112,7 @@ const PICON = {
 // and bars, drawn here in CSS. No logos, artwork or sounds are copied.
 //   mode: a fixed light/dark look (otherwise it follows the card's Theme setting)
 //   win: drawn inside an old-style window with a title bar
-//   log: messages read as a transcript ("Sarah says:", "<Sarah> …") instead of bubbles
+//   log: messages read as a transcript ("person2 says:", "<person2> …") instead of bubbles
 //   more: what the ⋯ button in a conversation says in that skin
 const SKINS = [
   { id: 'iphone', name: 'iPhone', group: 'modern' },
@@ -8234,7 +8247,7 @@ const SKIN_CSS = `
   width: var(--sk-btn-w, 60px); height: var(--sk-btn-h, 18px); background: var(--sk-btns); background-repeat: no-repeat; pointer-events: none; }
 :host([data-win]) .cm-root { top: var(--sk-win-h, 28px); }
 
-/* ═══ Transcript skins: "Sarah says:", "<Sarah> …" instead of bubbles ══════ */
+/* ═══ Transcript skins: "person2 says:", "<person2> …" instead of bubbles ══════ */
 :host([data-log]) .mrow { display: flex; flex-direction: var(--sk-log-dir, row); align-items: baseline; justify-content: flex-start; gap: 0 6px; margin-top: var(--sk-log-gap, 3px); }
 :host([data-log]) .mrow.first { margin-top: var(--sk-log-gap-first, 8px); }
 :host([data-log]) .mrow .mav, :host([data-log]) .sender { display: none; }
@@ -9760,6 +9773,69 @@ Object.assign(CrowMessengerCard.prototype, {
     };
     q.addEventListener('input', render);
     list.addEventListener('click', (e) => { const r = e.target.closest('[data-t]'); if (!r) return; chosen.has(r.dataset.t) ? chosen.delete(r.dataset.t) : chosen.add(r.dataset.t); render(); });
+    render();
+  },
+
+  // ── Share to Home Assistant ─────────────────────────────────────────────────
+  // A link (or text) shared from a phone's share sheet to the Home Assistant app: the
+  // "Send link to…" notification opens this sheet to choose who it goes to.
+  async _openShare(sid) {
+    const s = this._s;
+    if (this._shareSheet?.id === sid && this._shareSheet.wrap.isConnected) return;
+    let item;
+    try { item = (await this._ws('share/get', { share_id: sid })).share; } catch (err) { this._toast(err?.message || 'That shared link has expired'); return; }
+    const chosen = new Set();
+    const me = s.me;
+    const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => (b.pinned - a.pinned) || (b.updated_at - a.updated_at));
+    // people you don't have a one-to-one chat with yet
+    const solo = new Set(threads.filter(t => !t.is_group && t.participants.length === 2).map(t => t.participants.find(p => p !== me)));
+    const people = [...s.users.values()].filter(u => u.id !== me && !solo.has(u.id)).sort((a, b) => this._userName(a.id).localeCompare(this._userName(b.id)));
+    const p = item.preview || {};
+    const card = item.url
+      ? `<div class="linkc shr-card">${p.image ? `<img src="${esc(p.image)}" alt="" draggable="false">` : ''}<div class="lt">${esc(p.title || item.title || item.url)}</div><div class="ls">${esc(p.site || item.url)}</div></div>`
+      : `<div class="shr-text">${esc(item.text)}</div>`;
+    // words that came with the link (some apps share "Look at this https://…") start the comment
+    const extra = item.url && item.text && item.text !== item.title && item.text !== p.title ? item.text : '';
+    const sh = this._xsheet({
+      title: 'Send To', action: 'Send',
+      body: `${card}<textarea class="xfield shr-c" rows="2" maxlength="2000" placeholder="Add a comment" autocapitalize="sentences"></textarea>
+        <input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>
+        <button class="shr-discard">Discard</button>`,
+      onAction: async () => {
+        if (!chosen.size) { this._toast('Choose who to send it to'); return false; }
+        const comment = sh.el.querySelector('.shr-c').value.trim();
+        const sent = [];
+        for (const key of chosen) {
+          let tid = key.slice(2);
+          if (key.startsWith('u:')) tid = (await this._ws('create_thread', { participants: [tid] })).thread.id;
+          await this._ws('send', { thread_id: tid, text: item.url || item.text });
+          if (comment) await this._ws('send', { thread_id: tid, text: comment });
+          sent.push(tid);
+        }
+        this._ws('share/done', { share_id: sid }).catch(() => {});
+        this._toast(sent.length === 1 ? 'Sent' : `Sent to ${sent.length} conversations`);
+        if (sent.length === 1) setTimeout(() => { if (s.threads.has(sent[0])) this._openThread(sent[0], { reset: true, anim: true }); }, 400);
+      },
+    });
+    sh.id = sid;
+    this._shareSheet = sh;
+    sh.el.querySelector('.shr-c').value = item.comment || extra;
+    const list = sh.el.querySelector('.fwlist'), q = sh.el.querySelector('.q');
+    const row = (key, av, name) => `<div class="pick-row${chosen.has(key) ? ' on' : ''}" data-t="${esc(key)}">${av}<div class="pn">${esc(name)}</div><span class="pck2">${chosen.has(key) ? ICON.check : ''}</span></div>`;
+    const render = () => {
+      const w = q.value.toLowerCase();
+      const ts = threads.filter(t => !w || this._threadTitle(t).toLowerCase().includes(w)).map(t => row(`t:${t.id}`, this._threadAv(t, 36), this._threadTitle(t)));
+      const ps = people.filter(u => !w || this._userName(u.id).toLowerCase().includes(w)).map(u => row(`u:${u.id}`, this._userAv(u.id, 36), this._userName(u.id)));
+      list.innerHTML = ts.join('') + (ps.length ? `<div class="shr-sub">${ts.length ? 'New Conversation' : 'People'}</div>` + ps.join('') : '')
+        || `<div class="pick-row"><div class="pn" style="color:var(--cm-text2)">No one found</div></div>`;
+    };
+    q.addEventListener('input', render);
+    list.addEventListener('click', (e) => { const r = e.target.closest('[data-t]'); if (!r) return; chosen.has(r.dataset.t) ? chosen.delete(r.dataset.t) : chosen.add(r.dataset.t); render(); });
+    sh.el.querySelector('.shr-discard').addEventListener('click', () => {
+      this._ws('share/done', { share_id: sid }).catch(() => {});
+      sh.close();
+      this._toast('Discarded');
+    });
     render();
   },
 
@@ -15003,6 +15079,7 @@ ${this._segmented('upload-segmented', 'upload', 'Largest Attachment', 'Photos ar
 <div class="grp-sub">Links &amp; Zones</div>
 <div id="feat-wrap">
 ${this._toggle('f_link_previews', 'Link Previews', 'Shows a card with the page’s title and picture under a link. Home Assistant fetches the page — never people’s phones — and won’t open addresses on your own network. Household setting.')}
+${this._toggle('f_share_sheet', 'Share to Crow Messenger', 'When someone shares a link to the Home Assistant app from their phone’s share sheet, they get a “Send link to…” notification that opens a list of chats to send it to. Nothing is sent until a chat is chosen. Household setting.')}
 ${this._toggle('f_zones', 'Everyone Can Add Zones', 'Lets everyone add Home Assistant zones from the People map, Check In, Send Later and shared locations, not just administrators. The zones are the same as ones made in Settings → Areas, labels & zones. Household setting.')}
 </div>
 <div class="grp-sub">Typing</div>
@@ -15456,7 +15533,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     RETENTION.forEach(([v]) => root.getElementById('retention_' + v)?.addEventListener('change', () => this._onRetention(v)));
     UPLOAD_SIZES.forEach(([v]) => root.getElementById('upload_' + v)?.addEventListener('change', () => this._saveSettings({ max_upload_mb: v })));
     STORAGE_AGES.forEach(([v]) => root.getElementById('storage_age_' + v)?.addEventListener('change', () => { this._storageAge = v; root.getElementById('storage-confirm').style.display = 'none'; }));
-    ['link_previews', 'zones'].forEach(k => root.getElementById('f_' + k)?.addEventListener('change', (e) => this._saveSettings({ features: { [k]: e.target.checked } })));
+    ['link_previews', 'zones', 'share_sheet'].forEach(k => root.getElementById('f_' + k)?.addEventListener('change', (e) => this._saveSettings({ features: { [k]: e.target.checked } })));
     root.getElementById('ai_enabled')?.addEventListener('change', (e) => this._saveSettings({ ai: { enabled: e.target.checked } }));
     root.getElementById('ai_agent')?.addEventListener('change', (e) => this._saveSettings({ ai: { agent_id: e.target.value } }));
     root.getElementById('ai_task')?.addEventListener('change', (e) => this._saveSettings({ ai: { task_entity: e.target.value } }));
@@ -15741,7 +15818,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     const nb = n.buttons || {};
     ['tapbacks', 'mark_read', 'mute', 'home'].forEach(k => chk('nb_' + k, k === 'tapbacks' || k === 'mark_read' ? nb[k] !== false : nb[k] === true));
     const f = st?.features || {};
-    ['link_previews', 'zones'].forEach(k => chk('f_' + k, f[k] !== false));
+    ['link_previews', 'zones', 'share_sheet'].forEach(k => chk('f_' + k, f[k] !== false));
     const fw = r.getElementById('feat-wrap');
     if (fw) { fw.style.opacity = admin ? '1' : '0.4'; fw.style.pointerEvents = admin ? '' : 'none'; }
     const ret = st?.retention_days ?? this._ints?.retention_days ?? 30;
