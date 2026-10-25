@@ -6,16 +6,21 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '2.3.0';
+const CM_VERSION = '0.1.1';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '24 Oct 2026 13:10';
+const CM_BUILD = '25 Oct 2026 13:55';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
 const _f = (d) => `<svg viewBox="0 0 24 24" fill="currentColor">${d}</svg>`;
+// the Feed button: Home Assistant's own newspaper icon
+const FEED_ICON = '<ha-icon icon="mdi:newspaper-variant-outline"></ha-icon>';
+const MSG_ICON = '<ha-icon icon="mdi:message-outline"></ha-icon>';
 const ARCH_ICON = _s('<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9.5A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5V9M10 13h4"/>');
 const REMIND_ICON = _s('<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.6 1.6M5 3.5L2.8 5.6M19 3.5l2.2 2.1"/>');
 const ICON = {
+  // AI: Home Assistant's atom (mdi:atom), as in Ask About This Email
+  ai: _f('<path d="M12,11A1,1 0 0,1 13,12A1,1 0 0,1 12,13A1,1 0 0,1 11,12A1,1 0 0,1 12,11M4.22,4.22C5.65,2.79 8.75,3.43 12,5.56C15.25,3.43 18.35,2.79 19.78,4.22C21.21,5.65 20.57,8.75 18.44,12C20.57,15.25 21.21,18.35 19.78,19.78C18.35,21.21 15.25,20.57 12,18.44C8.75,20.57 5.65,21.21 4.22,19.78C2.79,18.35 3.43,15.25 5.56,12C3.43,8.75 2.79,5.65 4.22,4.22M15.54,8.46C16.15,9.08 16.71,9.71 17.23,10.34C18.61,8.21 19.11,6.38 18.36,5.64C17.62,4.89 15.79,5.39 13.66,6.77C14.29,7.29 14.92,7.85 15.54,8.46M8.46,15.54C7.85,14.92 7.29,14.29 6.77,13.66C5.39,15.79 4.89,17.62 5.64,18.36C6.38,19.11 8.21,18.61 10.34,17.23C9.71,16.71 9.08,16.15 8.46,15.54M5.64,5.64C4.89,6.38 5.39,8.21 6.77,10.34C7.29,9.71 7.85,9.08 8.46,8.46C9.08,7.85 9.71,7.29 10.34,6.77C8.21,5.39 6.38,4.89 5.64,5.64M9.88,14.12C10.58,14.82 11.3,15.46 12,16.03C12.7,15.46 13.42,14.82 14.12,14.12C14.82,13.42 15.46,12.7 16.03,12C15.46,11.3 14.82,10.58 14.12,9.88C13.42,9.18 12.7,8.54 12,7.97C11.3,8.54 10.58,9.18 9.88,9.88C9.18,10.58 8.54,11.3 7.97,12C8.54,12.7 9.18,13.42 9.88,14.12M18.36,18.36C19.11,17.62 18.61,15.79 17.23,13.66C16.71,14.29 16.15,14.92 15.54,15.54C14.92,16.15 14.29,16.71 13.66,17.23C15.79,18.61 17.62,19.11 18.36,18.36Z"/>'),
   back: _s('<path d="M15 19l-7-7 7-7"/>', 'stroke-width="2.4"'),
   chevR: _s('<path d="M9 6l6 6-6 6"/>', 'stroke-width="2.4"'),
   chevD: _s('<path d="M6 9l6 6 6-6"/>', 'stroke-width="2.4"'),
@@ -77,6 +82,22 @@ const ICON = {
   minusCircle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#FF3B30"/><path d="M7 12h10" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
   plusCircle: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#34C759"/><path d="M7 12h10M12 7v10" stroke="#fff" stroke-width="2.4" stroke-linecap="round"/></svg>',
 };
+// The app bar: the capsule at the top left of Messages and the Feed. Both screens build it from
+// this one list, so a new place to go is added here once and shows on both. `show` decides
+// whether it's offered on this card; the one you're on is highlighted.
+// the screens the card can start on (editor: Opening → Startup Screen)
+const START_VIEWS = [
+  ['messages', 'Messages'], ['contacts', 'Contacts'], ['feed', 'Feed'],
+  ['feed_videos', 'Feed · Videos'], ['feed_groups', 'Feed · Groups'], ['feed_events', 'Feed · Events'], ['feed_alerts', 'Feed · Notifications'],
+];
+const APP_DESTS = [
+  // dot: the red dot when there's something new there (never on the screen you're on)
+  { id: 'messages', label: 'Messages', icon: MSG_ICON, cls: 'msgbtn', page: 'list', show: (c) => !c._config.feed_only,
+    dot: (c) => [...c._s.threads.values()].some(t => (t.unread > 0 || t.marked_unread) && !t.muted && t.visible !== false && !t.archived) },
+  { id: 'contacts', label: 'Contacts', icon: ICON.contacts, page: 'contacts', show: (c) => !c._config.feed_only },
+  { id: 'feed', label: 'Feed', icon: FEED_ICON, cls: 'feedbtn', page: 'feed', show: (c) => !!c._s.feed?.enabled,
+    dot: (c) => (c._s.feed?.unseen > 0 || c._s.feed?.notif_unread > 0) && !c._feedQuietDots() },
+];
 
 // ── Small helpers ────────────────────────────────────────────────────────────
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -643,6 +664,16 @@ svg { display: block; }
 .capsule { display: flex; align-items: center; height: 44px; border-radius: 22px; padding: 0 4px; }
 .capsule button { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: transform .15s; }
 .capsule button svg { width: 21px; height: 21px; }
+.capsule .feedbtn, .capsule .msgbtn { position: relative; }
+.capsule .msgbtn .fdot { position: absolute; top: 7px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--cm-red); box-shadow: 0 0 0 2px var(--cm-bg); }
+/* the app bar: places first (the one you're on tinted), a hairline, then the screen's own tools */
+.appbar .ab-ds { display: contents; }
+.appbar .ab-d.on { background: color-mix(in srgb, var(--cm-accent) 18%, transparent); color: var(--cm-accent); }
+.appbar .ab-d.on ha-icon { color: var(--cm-accent); }
+.appbar .ab-sep { width: .5px; height: 22px; margin: 0 3px; background: var(--cm-sep); flex-shrink: 0; }
+.appbar[hidden], .appbar.ab-empty, .appbar [hidden] { display: none !important; }
+:host([data-retro]) .appbar .ab-d.on { border-radius: 3px; }
+.capsule .feedbtn .fdot { position: absolute; top: 7px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--cm-red); box-shadow: 0 0 0 2px var(--cm-bg); }
 .bottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; gap: 10px; padding: 0 14px 14px; pointer-events: none; }
 .bottom > * { pointer-events: auto; }
 .searchbar { flex: 1; height: 48px; border-radius: 24px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; min-width: 0; }
@@ -696,6 +727,8 @@ svg { display: block; }
 .swipe-actions button svg { width: 22px; height: 22px; }
 .swipe-actions .del { background: var(--cm-red); }
 .swipe-actions .mute { background: #5856D6; }
+.swipe-actions .arch { background: #8E8E93; }
+:host([data-mode="dark"]) .swipe-actions .arch { background: #636366; }
 .section-h { font-size: 22px; font-weight: 700; padding: 18px 18px 6px; }
 .hl { color: var(--cm-text); font-weight: 600; }
 
@@ -857,13 +890,14 @@ svg { display: block; }
 }
 .crow-ios-backdrop.visible { background: rgba(0,0,0,0.42); }
 .crow-ios-alert {
-  width: min(320px, 100%);
+  /* iOS 26: a rounded panel, the title and message inset from the edge, two pill buttons side by side */
+  width: min(300px, 100%); box-sizing: border-box;
   background: var(--crow-ios-bg, rgba(48,48,52,0.78));
   backdrop-filter: blur(34px) saturate(1.8); -webkit-backdrop-filter: blur(34px) saturate(1.8);
   border: 0.5px solid var(--crow-ios-edge, rgba(255,255,255,0.12));
-  border-radius: 34px;
+  border-radius: 32px;
   box-shadow: 0 24px 60px rgba(0,0,0,0.45), inset 0 1px 0 var(--crow-ios-shine, rgba(255,255,255,0.08));
-  padding: 26px 18px 18px;
+  padding: 21px 14px 14px;
   opacity: 0; transform: scale(1.08);
   transition: opacity 0.2s ease, transform 0.28s cubic-bezier(.2,.9,.3,1.15);
   font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif;
@@ -871,25 +905,32 @@ svg { display: block; }
 }
 :host([data-popups="solid"]) .crow-ios-alert { background: var(--cm-glass-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
 .crow-ios-backdrop.visible .crow-ios-alert { opacity: 1; transform: scale(1); }
-.crow-ios-title { font-size: 17px; font-weight: 700; line-height: 1.3; padding: 0 8px; word-break: break-word; }
-.crow-ios-msg { font-size: 15px; line-height: 1.42; margin-top: 6px; padding: 0 8px; color: var(--crow-ios-sub); white-space: pre-line; word-break: break-word; }
-.crow-ios-input { margin: 14px 4px 0; width: calc(100% - 8px); height: 44px; border-radius: 14px; border: none; outline: none; padding: 0 14px; font-size: 16px;
+.crow-ios-title { font-size: 17.5px; font-weight: 600; line-height: 1.22; letter-spacing: -0.015em; word-break: break-word; margin: 0 13px; }
+.crow-ios-msg { font-size: 15px; line-height: 1.26; margin: 7px 13px 0; color: var(--crow-ios-sub); white-space: pre-line; word-break: break-word; }
+.crow-ios-input { margin: 16px 0 0; width: 100%; box-sizing: border-box; height: 44px; border-radius: 14px; border: none; outline: none; padding: 0 14px; font-size: 16px;
   background: var(--crow-ios-pill); color: var(--crow-ios-text); user-select: text; -webkit-user-select: text; }
-.crow-ios-btns { display: flex; flex-direction: column; gap: 9px; margin-top: 22px; }
+.crow-ios-btns { display: flex; flex-direction: row; gap: 8px; margin-top: 20px; }
+.crow-ios-btns.stack { flex-direction: column; gap: 8px; }
 .crow-ios-btns button, .crow-ios-btns a {
-  display: block; box-sizing: border-box; text-align: center; text-decoration: none; line-height: normal;
-  width: 100%; padding: 14px 16px; margin: 0;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box; text-align: center; text-decoration: none; line-height: 1.2;
+  flex: 1 1 0; min-width: 0; min-height: 44px; padding: 11px 14px; margin: 0;
   border: none; border-radius: 999px !important;
-  font-size: 17px; font-weight: 600; font-family: inherit; cursor: pointer;
+  font-size: 17px; font-weight: 500; font-family: inherit; cursor: pointer;
   -webkit-tap-highlight-color: transparent;
   transition: transform 0.12s ease, filter 0.12s ease;
 }
 .crow-ios-btns button:active, .crow-ios-btns a:active { transform: scale(0.97); filter: brightness(1.15); }
 .crow-ios-btns .crow-ios-cancel { background: var(--crow-ios-pill, rgba(255,255,255,0.12)); color: var(--crow-ios-text); }
-.crow-ios-btns .crow-ios-ok { background: #4AA8F5; color: #fff; }
-.crow-ios-btns .crow-ios-ok.destructive { background: #FF3B30; }
+/* every button is a grey pill; the action is told apart by its colour: red to delete, the accent otherwise */
+.crow-ios-btns .crow-ios-ok { background: var(--crow-ios-pill, rgba(255,255,255,0.12)); color: var(--cm-accent, #0A84FF); font-weight: 600; }
+.crow-ios-btns .crow-ios-ok.destructive { color: #FF453A; font-weight: 500; }
+:host([data-mode="light"]) .crow-ios-btns .crow-ios-ok.destructive { color: #FF3B30; }
+:host([data-mode="dark"]) .crow-ios-btns .crow-ios-ok:not(.destructive) { color: color-mix(in srgb, var(--cm-accent, #0A84FF) 78%, #fff); }
 
 .menu-wrap { position: absolute; inset: 0; z-index: 50; }
+.menu-wrap.has-pv { background: color-mix(in srgb, var(--cm-bg) 45%, transparent); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); }
+.menu-pv { position: absolute; border-radius: 18px; overflow: hidden; background: #000; box-shadow: var(--cm-shadow); animation: cm-menu 0.24s cubic-bezier(.2,.9,.3,1.2) both; }
+.menu-pv img, .menu-pv video { display: block; width: 100%; max-height: 260px; object-fit: contain; background: #000; }
 .menu { position: absolute; min-width: 230px; max-width: calc(100% - 28px); border-radius: 22px; padding: 6px 0; overflow: hidden;
   background: var(--cm-glass-strong); backdrop-filter: blur(34px) saturate(1.8); -webkit-backdrop-filter: blur(34px) saturate(1.8);
   border: 0.5px solid var(--cm-glass-edge); box-shadow: var(--cm-shadow), inset 0 1px 0 var(--cm-glass-shine);
@@ -938,16 +979,27 @@ svg { display: block; }
 .gr .gch { width: 14px; height: 14px; color: var(--cm-text3); flex-shrink: 0; }
 .gr.blue .gl { color: var(--cm-accent); }
 .gr.red .gl { color: var(--cm-red); }
-.gr .tsw { position: relative; width: 51px; height: 31px; flex-shrink: 0; }
-.gr .tsw input { opacity: 0; width: 0; height: 0; position: absolute; }
-.gr .tsw span { position: absolute; inset: 0; border-radius: 31px; background: rgba(120,120,128,0.32); transition: background .25s; }
-.gr .tsw span::after { content: ''; position: absolute; width: 27px; height: 27px; border-radius: 50%; background: #fff; top: 2px; left: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transition: transform .25s; }
-.gr .tsw input:checked + span { background: var(--cm-green); }
-.gr .tsw input:checked + span::after { transform: translateX(20px); }
+.gr .tsw, .cf .tsw, .crop-share .tsw { position: relative; width: 51px; height: 31px; flex-shrink: 0; }
+.gr .tsw input, .cf .tsw input, .crop-share .tsw input { opacity: 0; width: 0; height: 0; position: absolute; }
+.gr .tsw span, .cf .tsw span, .crop-share .tsw span { position: absolute; inset: 0; border-radius: 31px; background: rgba(120,120,128,0.32); transition: background .25s; }
+.gr .tsw span::after, .cf .tsw span::after, .crop-share .tsw span::after { content: ''; position: absolute; width: 27px; height: 27px; border-radius: 50%; background: #fff; top: 2px; left: 2px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); transition: transform .25s; }
+.gr .tsw input:checked + span, .cf .tsw input:checked + span, .crop-share .tsw input:checked + span { background: var(--cm-green); }
+.gr .tsw input:checked + span::after, .cf .tsw input:checked + span::after, .crop-share .tsw input:checked + span::after { transform: translateX(20px); }
 
 /* ── Contacts list ─────────────────────────────────── */
 .ct-list { padding: 64px 0 100px; }
+.ct-title + .ct-list { padding-top: 0; }
 .ct-me { display: flex; align-items: center; gap: 14px; padding: 8px 18px 14px; cursor: pointer; }
+/* Favourites: a row of photos at the top of Contacts, like the iPhone's Favourites */
+.ct-favh { padding: 4px 18px 6px; font-size: 13px; font-weight: 600; color: var(--cm-text2); text-transform: uppercase; letter-spacing: 0.02em; }
+.ct-favs { display: flex; gap: 14px; overflow-x: auto; scrollbar-width: none; padding: 2px 18px 14px; }
+.ct-favs::-webkit-scrollbar { display: none; }
+.ct-fav { flex: 0 0 auto; width: 68px; text-align: center; cursor: pointer; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.ct-fav .av, .ct-fav .av-ha { margin: 0 auto 5px; }
+.ct-fav .n { font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ct-fav:active { opacity: 0.6; }
+.c-hero .cfav { color: #FFCC00; font-size: 0.7em; vertical-align: 0.12em; margin-left: 6px; }
+.srow .fstar, .pick-row .fstar { color: #FFCC00; font-size: 12px; margin-left: 4px; }
 .ct-me .n { font-size: 20px; font-weight: 600; }
 .ct-me .s { font-size: 15px; color: var(--cm-text2); }
 .ct-row.ct-ha { margin-bottom: 8px; }
@@ -976,8 +1028,40 @@ svg { display: block; }
 :host([data-mode="light"]) .cpage.tinted .g { background: rgba(255,255,255,0.5); border-color: rgba(255,255,255,0.75); }
 .cpage.tinted .gr .gi { color: var(--cm-text); }
 .c-hero { display: flex; flex-direction: column; align-items: center; padding: 64px 16px 14px; text-align: center; }
+/* a household member's cover photo, behind their photo at the top of the contact card */
+.c-inner { position: relative; }
+.c-cover { position: absolute; left: 0; right: 0; top: 0; height: 200px; overflow: hidden; pointer-events: none;
+  -webkit-mask-image: linear-gradient(180deg, #000 45%, transparent 100%); mask-image: linear-gradient(180deg, #000 45%, transparent 100%); }
+.c-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.c-cover + .c-hero { position: relative; }
+/* Move and Scale: choosing a profile photo */
+.crop-wrap { position: absolute; inset: 0; z-index: 60; background: #000; color: #fff; display: flex; flex-direction: column; overflow: hidden; touch-action: none; animation: cm-fade 0.2s ease; }
+.crop-top { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; position: relative; z-index: 2; }
+.crop-top button { font-size: 17px; color: #fff; padding: 6px 4px; }
+.crop-top button.ok { color: var(--cm-accent); font-weight: 650; }
+.crop-t { font-size: 17px; font-weight: 600; }
+.crop-area { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
+.crop-stage { position: relative; }
+.crop-stage img { position: absolute; max-width: none; user-select: none; -webkit-user-select: none; pointer-events: none; }
+.crop-mask { position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 0 9999px rgba(0,0,0,0.6); border: 1.5px solid rgba(255,255,255,0.75); pointer-events: none; }
+.crop-foot { padding: 12px 22px 22px; position: relative; z-index: 2; display: flex; flex-direction: column; gap: 14px; }
+.crop-foot input[type=range] { width: 100%; accent-color: var(--cm-accent); }
+.crop-hint { text-align: center; font-size: 13px; color: rgba(255,255,255,0.6); }
+.crop-share { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; border-radius: 14px; background: rgba(255,255,255,0.1); font-size: 16px; }
 .c-hero .cn { font-size: 30px; font-weight: 700; margin-top: 12px; line-height: 1.15; word-break: break-word; }
 .c-hero .cs { font-size: 15px; color: var(--cm-text2); margin-top: 4px; }
+.c-hero .cpres { font-size: 13.5px; }
+.c-hero .cpres.on { color: var(--cm-green, #34c759); font-weight: 600; }
+.c-act ha-icon { --mdc-icon-size: 22px; display: flex; }
+.cf .cthumb { width: 44px; height: 44px; border-radius: 10px; overflow: hidden; flex-shrink: 0; background: var(--cm-fill); }
+.cf .cthumb img { width: 100%; height: 100%; object-fit: cover; }
+.cf.cphotos { gap: 6px; overflow-x: auto; scrollbar-width: none; padding-top: 8px; padding-bottom: 8px; }
+.cf.cphotos::-webkit-scrollbar { display: none; }
+.cf.cphotos span { flex: 0 0 72px; height: 72px; border-radius: 12px; overflow: hidden; background: var(--cm-fill); cursor: pointer; }
+.cf.cphotos img { width: 100%; height: 100%; object-fit: cover; }
+.cf .cbadge { min-width: 22px; height: 22px; padding: 0 7px; border-radius: 11px; background: var(--cm-accent); color: #fff; font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+.cf .cpill { padding: 6px 12px; border-radius: 16px; background: var(--cm-accent); color: #fff; font-size: 13px; font-weight: 600; white-space: nowrap; }
+.cf.ctoggle { cursor: pointer; justify-content: space-between; }
 .c-actions { display: flex; justify-content: center; gap: 10px; padding: 8px 16px 20px; }
 .c-act { flex: 1; max-width: 86px; height: 64px; border-radius: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 500; transition: transform .15s; }
 .c-act svg { width: 22px; height: 22px; }
@@ -1054,24 +1138,15 @@ svg { display: block; }
   box-shadow: 0 30px 70px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.38), inset 0 -1px 0 rgba(255,255,255,0.08), inset 0 0 24px rgba(255,255,255,0.05);
 }
 :host([data-popups="glass"]) .crow-ios-alert::before {
-  content: ''; position: absolute; inset: 0 0 auto 0; height: 55%; pointer-events: none; border-radius: 34px 34px 0 0;
+  content: ''; position: absolute; inset: 0 0 auto 0; height: 55%; pointer-events: none; border-radius: 31px 31px 0 0;
   background: linear-gradient(180deg, rgba(255,255,255,0.12), rgba(255,255,255,0));
 }
 :host([data-popups="glass"]) .crow-ios-alert > * { position: relative; }
 :host([data-popups="glass"]) .crow-ios-msg { color: rgba(235,235,245,0.72) !important; }
-:host([data-popups="glass"]) .crow-ios-btns .crow-ios-cancel {
-  background: rgba(255,255,255,0.12); border: 0.5px solid rgba(255,255,255,0.2);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
+:host([data-popups="glass"]) .crow-ios-btns .crow-ios-cancel, :host([data-popups="glass"]) .crow-ios-btns .crow-ios-ok {
+  background: rgba(255,255,255,0.11); border: 0.5px solid rgba(255,255,255,0.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18);
   backdrop-filter: blur(12px) saturate(1.6); -webkit-backdrop-filter: blur(12px) saturate(1.6);
-}
-:host([data-popups="glass"]) .crow-ios-btns .crow-ios-ok {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--cm-accent, #007AFF) 95%, transparent), color-mix(in srgb, var(--cm-accent, #007AFF) 78%, transparent));
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--cm-accent, #007AFF) 35%, transparent), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.12);
-}
-/* a destructive button (e.g. Delete) keeps its red, as tinted glass */
-:host([data-popups="glass"]) .crow-ios-btns .crow-ios-ok.destructive {
-  background: linear-gradient(180deg, rgba(255,69,58,0.92), rgba(220,40,30,0.85)) !important;
-  box-shadow: 0 8px 22px rgba(255,59,48,0.35), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.12);
 }
 :host([data-popups="glass"]) .crow-ios-input { background: rgba(255,255,255,0.12); border: 0.5px solid rgba(255,255,255,0.2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25); }
 /* light panels */
@@ -1085,8 +1160,11 @@ svg { display: block; }
 :host([data-popups="glass"][data-mode="light"]) .crow-ios-alert::before { background: linear-gradient(180deg, rgba(255,255,255,0.45), rgba(255,255,255,0)); }
 :host([data-popups="glass"][data-mode="light"]) .crow-ios-msg { color: rgba(60,60,67,0.7) !important; }
 :host([data-popups="glass"][data-mode="light"]) .crow-ios-btns .crow-ios-cancel, :host([data-popups="glass"][data-mode="light"]) .crow-ios-input {
-  background: rgba(255,255,255,0.62); border-color: rgba(0,0,0,0.07);
-  box-shadow: inset 0 1px 0 #ffffff, 0 1px 3px rgba(0,0,0,0.08); color: #000;
+  background: rgba(120,120,128,0.14); border-color: rgba(0,0,0,0.05);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.7); color: #000;
+}
+:host([data-popups="glass"][data-mode="light"]) .crow-ios-btns .crow-ios-ok {
+  background: rgba(120,120,128,0.14); border-color: rgba(0,0,0,0.05); box-shadow: inset 0 1px 0 rgba(255,255,255,0.7);
 }
 
 /* menus: the same Liquid Glass panel. While a menu is open the card behind it is gently dimmed,
@@ -1375,7 +1453,17 @@ const CM_EXTRA_CSS = `
 .popt .pck svg { width: 13px; height: 13px; }
 .popt .ptx { flex: 1; min-width: 0; font-size: 15.5px; position: relative; word-break: break-word; }
 .popt .pvt { display: flex; align-items: center; position: relative; }
-.popt .pvt .av { border: 1.5px solid var(--cm-recv); margin-left: -6px; }
+.popt .pvt { cursor: pointer; padding: 2px 0 2px 6px; }
+.popt .pvt .pf { display: inline-flex; margin-left: -6px; }
+.popt .pvt .pf:first-child { margin-left: 0; }
+.popt .pvt .av { border: 1.5px solid var(--cm-recv); }
+.me .popt .pvt .av { border-color: var(--cm-sent); }
+.popt .pvt .pf.new { animation: cm-poll-pop 0.45s cubic-bezier(.2,.9,.3,1.4); }
+@keyframes cm-poll-pop { from { transform: scale(0.2); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } }
+.popt .pvt .pmore { font-size: 11.5px; font-weight: 600; margin-left: 3px; opacity: 0.7; }
+/* skins without photos: initials in the little circles */
+:host(:is([data-skin="irc"], [data-skin="nokia"])) :is(.pvt, .fk-faces) .av img { display: none; }
+:host(:is([data-skin="irc"], [data-skin="nokia"])) :is(.pvt, .fk-faces) .av[data-ini]::after { content: attr(data-ini); font-size: 9px; }
 .popt .pn { font-size: 13px; opacity: 0.6; min-width: 14px; text-align: right; position: relative; font-variant-numeric: tabular-nums; }
 .ci-badge { width: 40px; height: 40px; border-radius: 12px; display: flex; align-items: center; justify-content: center; background: #34C759; color: #fff; flex-shrink: 0; }
 .ci-badge svg { width: 22px; height: 22px; }
@@ -1393,6 +1481,18 @@ const CM_EXTRA_CSS = `
 .ent-cam { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #000; }
 .ent-note { padding: 0 13px 11px; font-size: 15px; }
 .linkc { width: 260px; max-width: 100%; border-radius: 18px; overflow: hidden; cursor: pointer; }
+.xcard.postc { width: 250px; max-width: 100%; padding: 0; overflow: hidden; cursor: pointer; }
+.xcard.lazy-ph { padding: 16px 18px; color: var(--cm-text2); font-size: 14px; min-width: 160px; }
+.postc .pc-pic { position: relative; background: var(--cm-fill); }
+.postc .pc-pic img { width: 100%; max-height: 180px; object-fit: cover; display: block; }
+.postc .pc-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
+.postc .pc-play svg { width: 34px; height: 34px; filter: drop-shadow(0 1px 4px rgba(0,0,0,.5)); }
+.postc .pc-b { padding: 9px 12px 11px; }
+.postc .pc-h { display: flex; align-items: center; gap: 7px; font-size: 13px; }
+.postc .pc-n { font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.postc .pc-f { display: inline-flex; align-items: center; gap: 3px; font-size: 11.5px; opacity: .6; }
+.postc .pc-f svg { width: 13px; height: 13px; }
+.postc .pc-t { margin-top: 6px; font-size: 14px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .me .linkc { background: color-mix(in srgb, var(--cm-sent) 18%, var(--cm-recv)); color: var(--cm-recv-text); }
 .them .linkc { background: var(--cm-recv); color: var(--cm-recv-text); }
 .linkc img { width: 100%; max-height: 190px; object-fit: cover; display: block; background: var(--cm-fill); }
@@ -1818,11 +1918,22 @@ const CM_MORE_CSS = `
 .shr-text { margin: 4px 0 10px; padding: 12px 14px; border-radius: 14px; background: var(--cm-fill); font-size: 15px; white-space: pre-wrap; word-break: break-word; max-height: 160px; overflow-y: auto; }
 .xfield.shr-c { resize: none; font-family: inherit; line-height: 1.35; }
 .shr-sub { padding: 14px 14px 6px; font-size: 13px; color: var(--cm-text2); text-transform: uppercase; letter-spacing: 0.02em; border-top: 0.5px solid var(--cm-sep); }
+.shr-feed { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; margin: 0 0 10px; padding: 11px; border-radius: 12px; background: var(--cm-fill); color: var(--cm-accent); font-size: 15px; font-weight: 500; }
+.shr-feed svg { width: 18px; height: 18px; }
 .shr-discard { display: block; margin: 18px auto 4px; background: none; border: none; color: #ff453a; font-size: 16px; font-family: inherit; cursor: pointer; padding: 8px 16px; }
 .pick-row .pn { flex: 1; min-width: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pick-row .pck2 { width: 22px; height: 22px; border-radius: 50%; border: 1.5px solid var(--cm-text3); display: flex; align-items: center; justify-content: center; color: #fff; flex-shrink: 0; }
 .pick-row.on .pck2 { background: var(--cm-accent); border-color: var(--cm-accent); }
 .pick-row .pck2 svg { width: 13px; height: 13px; }
+/* Home Assistant icons (mdi) wherever the card's own drawn icons go */
+.pick-row .pck2 ha-icon { --mdc-icon-size: 15px; display: flex; }
+.menu button .mi ha-icon { --mdc-icon-size: 20px; display: flex; }
+.capsule button ha-icon { --mdc-icon-size: 22px; display: flex; }
+.cb ha-icon { --mdc-icon-size: 22px; display: flex; }
+.pill ha-icon { --mdc-icon-size: 19px; display: flex; }
+.gr .gi ha-icon { --mdc-icon-size: 22px; display: flex; }
+.shr-feed ha-icon { --mdc-icon-size: 19px; display: flex; }
+.postc .pc-f ha-icon { --mdc-icon-size: 13px; display: flex; }
 .inforow { display: flex; align-items: center; gap: 12px; padding: 9px 14px; }
 .inforow + .inforow { border-top: 0.5px solid var(--cm-sep); }
 .inforow .in { flex: 1; font-size: 15.5px; }
@@ -1946,6 +2057,18 @@ const CM_DEFAULTS = {
   glass: 50, card_height: 700, fullscreen_button: true, resize_btn_spin: true, start_full: false, pdf_enabled: true, pdf_conversations: true, pdf_contact: true, pdf_contacts: true, enter_sends: true, contact_sort: 'last', contact_display: 'first', show_my_card: true, show_people_map: true,
   people_here_since: true, people_weather: true, people_activity: true, people_focus: true, people_charging: true, people_wifi: true, people_nearby: false, people_nearby_keep: 168,
   distance_units: 'auto',
+  // which view the card opens in: 'messages' (the chats) or 'feed' (the household Feed)
+  start_view: 'messages',
+  // leaving and coming back reopens the screens you had open
+  resume: true,
+  // the Facebook-style bar along the bottom of the Feed
+  feed_nav: true,
+  // the app bar (the capsule at the top left): which places, in what order; Filter on Messages; red dots
+  app_bar_items: ['messages', 'contacts', 'feed'], app_bar_filter: true, app_bar_dots: true,
+  // the Feed on this card
+  feed_autoplay: false, show_stories: true, show_memories: true, feed_start_tab: 'feed',
+  // a household member's contact card shows their Feed and your chats with them
+  contact_extras: true,
 };
 
 // ── Full screen: the resize button ───────────────────────────────────────────
@@ -2058,10 +2181,10 @@ class CrowMessengerCard extends HTMLElement {
     this._onLoc = () => this._checkDeepLink();
     this._onVis = () => {
       // going into the background: keep what's typed in the message box
-      if (document.visibilityState === 'hidden') this._saveDrafts();
+      if (document.visibilityState === 'hidden') { this._saveDrafts(); this._saveResume(); }
       this._reportFocus(); this._maybeMarkRead();
     };
-    this._onHide = () => this._saveDrafts();
+    this._onHide = () => { this._saveDrafts(); this._saveResume(); };
     this._onReady = () => this._bootstrap(true);
   }
 
@@ -2098,17 +2221,25 @@ class CrowMessengerCard extends HTMLElement {
   _saveDrafts() { (this._stack || []).forEach(p => { try { p.composer?.saveDraft?.(); } catch (e) { /* */ } }); }
 
   connectedCallback() {
+    CrowMessengerCard.instances.add(this);
     if (this._built) this._autoFull();
     window.addEventListener('location-changed', this._onLoc);
     window.addEventListener('popstate', this._onLoc);
     document.addEventListener('visibilitychange', this._onVis);
     window.addEventListener('pagehide', this._onHide);
+    if (this._pagesEl && !this._pagesEl._resumeWired) {
+      this._pagesEl._resumeWired = true;
+      let t = null;
+      this._pagesEl.addEventListener('scroll', () => { clearTimeout(t); t = setTimeout(() => this._saveResume(), 400); }, { capture: true, passive: true });
+    }
     if (this._hass && !this._unsub && !this._connecting) this._connect();
     else this._reportFocus();
     if (this._built) this._refresh('background', null, true);
   }
 
   disconnectedCallback() {
+    this._saveResume();
+    CrowMessengerCard.instances.delete(this);
     window.removeEventListener('location-changed', this._onLoc);
     window.removeEventListener('popstate', this._onLoc);
     document.removeEventListener('visibilitychange', this._onVis);
@@ -2126,8 +2257,10 @@ class CrowMessengerCard extends HTMLElement {
   // ── Build & theme ──────────────────────────────────────────────────────────
   _build() {
     this._built = true;
-    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_LIVE_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${PLAY_CSS}${SKIN_CSS}${RS_CSS}</style><ha-card><div class="cm-root"><div class="cm-pages"></div></div><button type="button" class="rs-win" data-rs>${RS_WIN_ICON}</button></ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${SKIN_CSS}${RS_CSS}${Object.values(CrowMessengerCard.lazyCss || {}).join('')}</style><ha-card><div class="cm-root"><div class="cm-pages"></div></div><button type="button" class="rs-win" data-rs>${RS_WIN_ICON}</button></ha-card>`;
     this._root = this.shadowRoot.querySelector('.cm-root');
+    // the app bar's places work the same on every screen that has one
+    this._root.addEventListener('click', (e) => { const b = e.target.closest('[data-app]'); if (b && this._root.contains(b)) { e.stopPropagation(); this._appGo(b.dataset.app); } });
     this._card = this.shadowRoot.querySelector('ha-card');
     this._rsWire(this.shadowRoot.querySelector('.rs-win'));
     // the browser closed the full screen layer by itself: put the card back
@@ -2146,7 +2279,25 @@ class CrowMessengerCard extends HTMLElement {
       img.replaceWith(box);
     }, true);
     this._pagesEl.innerHTML = '';
-    this._nav('list', {}, { anim: false });
+    this._nav(this._config.feed_only ? 'floading' : 'list', {}, { anim: false });
+  }
+
+  // the standalone Feed card starts on this until the Feed's file has loaded
+  _pg_floading() {
+    const el = this._el(`<div><div class="scroll"><div class="empty" style="padding-top:120px"><b>Feed</b><span class="fl-msg">Loading…</span></div></div></div>`);
+    return { el, setMsg: (t) => { el.querySelector('.fl-msg').textContent = t; } };
+  }
+
+  async _feedOnlyStart() {
+    if (this._feedRooted) return;
+    const root = this._stack[0];
+    if (!this._s.feed?.enabled) { root?.setMsg?.('The Feed is switched off. An administrator can turn it on in the Crow Messenger card editor.'); return; }
+    try { await this._loadFeed(); } catch (err) { root?.setMsg?.('Couldn’t load the Feed. Check your connection and refresh.'); return; }
+    if (this._feedRooted) return;
+    this._feedRooted = true;
+    this._feedSetup();
+    while (this._stack.length) { const p = this._stack.pop(); p.destroy?.(); p.el.remove(); }
+    this._nav(this._config.mode === 'slideshow' ? 'fslide' : 'feed', { root: true }, { anim: false });
   }
 
   // the skin each person picks for their own screens (⋯ → Skin); the admin sets the default
@@ -2222,7 +2373,10 @@ class CrowMessengerCard extends HTMLElement {
       }
       this._s.cached = true;
       this._refresh('all');
-      this._restoreLastChat();
+      if (this._config.feed_only) { /* the Feed card starts once it's connected */ }
+      else if (this._resumeState()) this._resumePending = true;   // put back once connected
+      else if (this._startElsewhere()) this._openStartView();
+      else this._restoreLastChat();
     } catch (e) { this._s.ready = false; }
   }
 
@@ -2268,8 +2422,35 @@ class CrowMessengerCard extends HTMLElement {
     } finally { this._connecting = false; }
   }
 
+  // wipe everything this browser keeps for Crow Messenger (chats shown instantly, photo cache, drafts, the last chat…)
+  async _wipeLocal(resetId) {
+    try { Object.keys(localStorage).filter(k => k.startsWith('crowMessenger') && k !== 'crowMessengerBuild').forEach(k => localStorage.removeItem(k)); } catch (e) { /* blocked */ }
+    try { if (resetId) localStorage.setItem('crowMessengerReset', resetId); } catch (e) { /* blocked */ }
+    try { const db = await cmMedia._db; db?.close?.(); } catch (e) { /* */ }
+    cmMedia._db = undefined;
+    try { indexedDB.deleteDatabase('crowMessenger'); } catch (e) { /* */ }
+  }
+
+  async _onReset(resetId) {
+    if (window.__crowResetting) return;
+    window.__crowResetting = true;
+    await this._wipeLocal(resetId);
+    try { this._root.appendChild(this._el(`<div class="toast g" style="top:45%">Crow Messenger was reset. Starting again…</div>`)); } catch (e) { /* */ }
+    // the integration restarts itself; then the dashboard reloads with everything empty
+    setTimeout(() => window.location.reload(), 3500);
+  }
+
   async _bootstrap(reconnect = false) {
     const r = await this._ws('bootstrap');
+    // reset while this card was closed: what the browser kept is from before, so it goes
+    if (r.reset_id) {
+      let known = null, hadCache = false;
+      try { known = localStorage.getItem('crowMessengerReset'); hadCache = Object.keys(localStorage).some(k => k.startsWith('crowMessengerCache:')); } catch (e) { /* */ }
+      if (known !== r.reset_id) {
+        await this._wipeLocal(r.reset_id);
+        if (hadCache || this._s.cached) { window.location.reload(); return; }
+      }
+    }
     const warm = !!this._s.cached;
     this._applyBoot(r);
     const s = this._s;
@@ -2283,13 +2464,16 @@ class CrowMessengerCard extends HTMLElement {
     if (open && s.msgs.get(open.data.tid)?.stale) this._loadMsgs(open.data.tid, { soft: true });
     this._refresh('all');
     this._checkDeepLink();
-    if (!reconnect && !warm) this._restoreLastChat();
+    if (this._config.feed_only) { this._restoreTried = true; this._feedOnlyStart?.(); }
+    else if (!reconnect && (this._resumePending || (!warm && this._resumeState()))) { this._resumePending = false; this._restoreTried = true; this._restoreResume(); }
+    else if (this._startElsewhere()) { this._restoreTried = true; this._openStartView(); }
+    else if (!reconnect && !warm) this._restoreLastChat();
     else this._restoreTried = true;
     this._reportFocus();
     this._keepSoon();
     // Tell the integration which dashboard this card is on, so notifications
     // can open here when no dashboard has been chosen for this person.
-    if (!new URLSearchParams(window.location.search).has('edit')) {
+    if (!new URLSearchParams(window.location.search).has('edit') && !this._config.feed_only) {
       this._ws('here', { path: window.location.pathname }).catch(() => {});
     }
   }
@@ -2303,6 +2487,8 @@ class CrowMessengerCard extends HTMLElement {
     s.ai = r.ai || {};
     s.stickers = r.stickers || [];
     s.features = r.features || {};
+    s.feed = { ...(s.feed || {}), ...(r.feed || { enabled: false }) };
+    s.modules = r.modules || s.modules || {};
     s.focusEntities = r.focus_entities || {};
     s.presence = r.presence || {};
     s.shareHidden = new Set(r.share_hidden || []);
@@ -2364,9 +2550,16 @@ class CrowMessengerCard extends HTMLElement {
         if (ev.reload) this._loadMsgs(ev.thread.id, { reset: true });
         this._refresh('thread', ev.thread.id);
         break;
+      case 'reset':
+        // Crow Messenger was reset by an administrator: forget what's kept in the browser and start again
+        this._onReset(ev.reset_id);
+        break;
       case 'share_done':
         // sent or discarded from another device (or the notification's Discard button)
         if (this._shareSheet?.id === ev.share_id && this._shareSheet.wrap.isConnected) this._shareSheet.close();
+        break;
+      case 'feed': case 'feed_removed': case 'story': case 'story_removed': case 'feed_groups': case 'feed_albums': case 'feed_seen': case 'feed_milestones': case 'feed_notif': case 'feed_options': case 'feed_quiet':
+        this._feedLive(ev);
         break;
       case 'thread_removed':
         s.threads.delete(ev.thread_id);
@@ -2374,10 +2567,15 @@ class CrowMessengerCard extends HTMLElement {
         this._closeThreadPages(ev.thread_id);
         this._refresh('thread', ev.thread_id);
         break;
-      case 'users':
+      case 'users': {
+        const before = s.users || new Map();
         s.users = new Map(ev.users.map(u => [u.id, u]));
         this._refresh('all');
+        // a new name, photo or cover photo: the Feed redraws the posts and comments it shows
+        const key = (u) => u ? `${u.name}|${u.picture}|${u.cover?.id}|${u.cover?.y}` : '';
+        if ([...s.users.values()].some(u => key(u) !== key(before.get(u.id)))) this._refresh('fusers');
         break;
+      }
       case 'contact':
         s.contacts.set(ev.contact.id, ev.contact);
         this._refresh('contacts');
@@ -2458,14 +2656,92 @@ class CrowMessengerCard extends HTMLElement {
     const params = new URLSearchParams(window.location.search);
     const tid = params.get('crow_thread');
     const sid = params.get('crow_share');
-    if ((!tid && !sid) || !this._s.ready || !this.isConnected) return;
-    params.delete('crow_thread');
-    params.delete('crow_share');
+    const fpost = params.get('crow_post'), fcomment = params.get('crow_comment'), fgroup = params.get('crow_group'), fmedia = params.get('crow_media');
+    const fprofile = params.get('crow_profile'), fstory = params.get('crow_story'), ffeed = params.get('crow_feed');
+    const shareTo = params.get('crow_to');
+    if (tid || fpost || fgroup || fprofile || fstory || ffeed) this._deepLinked = true;
+    if ((!tid && !sid && !fpost && !fgroup && !fprofile && !fstory && !ffeed) || !this._s.ready || !this.isConnected) return;
+    ['crow_thread', 'crow_share', 'crow_to', 'crow_post', 'crow_comment', 'crow_group', 'crow_media', 'crow_profile', 'crow_story', 'crow_feed'].forEach(k => params.delete(k));
     const qs = params.toString();
     window.history.replaceState(window.history.state, '', window.location.pathname + (qs ? `?${qs}` : '') + window.location.hash);
     if (tid && this._s.threads.has(tid)) this._openThread(tid, { reset: true, anim: false });
     // a link shared to the Home Assistant app: choose the chat it goes to
-    if (sid) this._openShare(sid);
+    // shared from a phone: Send in a Chat, Post on a Page, or (tapping the notification) this card's Open in view
+    if (sid) {
+      const to = shareTo || (this._startFeed() ? 'feed' : 'chat');
+      this._deepLinked = true;
+      if (to === 'feed' && this._s.feed?.enabled) this._openFeed('fcompose', { share: sid });
+      else this._openShare(sid);
+    }
+    // a Feed notification: the post (and the comment), or a group you were added to
+    // a Copy Link of a photo or video opens the post with it showing
+    if (fpost) this._openFeed('fpost', { pid: fpost, cid: fcomment || null, media: fmedia || null });
+    else if (fgroup) this._openFeed('fgroup', { gid: fgroup });
+    else if (fprofile) this._openFeed('fprofile', { uid: fprofile });
+    else if (fstory) this._openFeed('feed', {}).then(() => this._fopenStory?.(fstory));
+    else if (ffeed) this._openFeed('feed', ffeed === 'alerts' ? { view: 'alerts' } : {});
+  }
+
+  // ── The Feed (its screens are a separate file, loaded the first time it's opened) ──
+  _loadFeed() { return this._lazy('feed'); }
+
+  // Open in: Feed - the card starts on the Feed (with Messages underneath, so Back goes there)
+  // the screen the card starts on: messages, contacts, feed or a Feed tab (feed_videos …)
+  _startView() {
+    const v = this._config.start_view || 'messages';
+    if (this._config.feed_only || !START_VIEWS.some(([k]) => k === v)) return 'messages';
+    if (v.startsWith('feed') && !this._s.feed?.enabled) return 'messages';
+    return v;
+  }
+  _startFeed() { return this._startView().startsWith('feed'); }
+  _startElsewhere() { return this._startView() !== 'messages'; }
+
+  _openStartView() {
+    if (this._startViewDone) return;
+    this._startViewDone = true;
+    // a notification that opened a chat, a post or a share wins
+    const q = new URLSearchParams(window.location.search);
+    if (this._deepLinked || ['crow_thread', 'crow_share', 'crow_post', 'crow_group', 'crow_profile', 'crow_story', 'crow_feed'].some(k => q.has(k))) return;
+    if (this._stack.length !== 1) return;
+    const v = this._startView();
+    if (v === 'contacts') this._nav('contacts', {}, { anim: false });
+    else if (v.startsWith('feed')) this._openFeed('feed', v === 'feed' ? {} : { view: v.slice(5) }, { anim: false });
+  }
+
+  async _openFeed(type = 'feed', data = {}, opts = {}) {
+    if (!this._s.feed?.enabled) { this._toast('The Feed is switched off'); return null; }
+    try { await this._lazy('feed'); } catch (err) { this._toast('Couldn’t open the Feed. Check your connection and try again.'); return null; }
+    this._feedSetup();
+    return this._nav(type, data, opts);
+  }
+
+  // Quiet Mode with Hide Red Dots: no red dots for the Feed while it's quiet
+  _feedQuietDots() {
+    const q = this._s.feed?.quiet;
+    if (!q?.dots || this._s.feed?.options?.quiet === false) return false;
+    if (q.until && q.until > Date.now()) return true;
+    if (!q.schedule) return false;
+    const d = new Date(), now = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+    const a = q.from || '22:00', b = q.to || '07:00';
+    return a <= b ? (now >= a && now < b) : (now >= a || now < b);
+  }
+
+  _feedLive(ev) {
+    const f = this._s.feed || (this._s.feed = {});
+    if (ev.type === 'feed_seen') f.unseen = ev.unseen || 0;
+    else if (ev.type === 'feed_options') { f.options = ev.options; if (ev.enabled !== undefined) f.enabled = ev.enabled; this._refresh('fmeta'); this._refresh('feedcount'); return; }
+    else if (ev.type === 'feed_notif') { f.notif_unread = ev.unread || 0; f.notif_changed = !!ev.changed; this._refresh('feednotif'); this._refresh('feedcount'); return; }
+    else if (ev.type === 'feed_quiet') { f.quiet = ev.quiet; this._refresh('feedcount'); this._refresh('feednotif'); return; }
+    else if (ev.type === 'feed_groups') f.groups = ev.groups;
+    else if (ev.type === 'feed_albums') f.albums = ev.albums;
+    else if (ev.type === 'feed_milestones') f.milestones = ev.milestones;
+    else if (ev.type === 'feed' && ev.post && ev.post.author !== this._s.me) {
+      f.known = f.known || new Set();
+      if (!f.known.has(ev.post.id) && !this._stack.some(p => p.type === 'feed')) f.unseen = (f.unseen || 0) + 1;
+      f.known.add(ev.post.id);
+    }
+    if (CrowMessengerCard.lazyReady.feed) this._feedEvent(ev);
+    this._refresh('feedcount');
   }
 
   // the chat you were in, so leaving the app (or the dashboard) and coming back opens it again
@@ -2475,6 +2751,68 @@ class CrowMessengerCard extends HTMLElement {
     if (!this._s?.ready || !this._s.me || !this._restoreTried) return;
     const th = [...this._stack].reverse().find(p => p.type === 'thread');
     try { localStorage.setItem(this._lastChatKey(), th ? th.data.tid : ''); } catch (e) { /* private window */ }
+    this._saveResume();
+  }
+
+  // ── Where you left off: the screens you had open (and how far down), so leaving the dashboard or
+  // the app and coming back puts you back there. After 12 hours away, the Startup Screen is used instead.
+  _resumeKey() { return `crowMessengerResume:${this._s?.me || ''}`; }
+  _saveResume() {
+    if (!this._s?.ready || !this._s.me || !this._restoreTried || this._resuming || this._config.feed_only) return;
+    if (this._config.resume === false) return;
+    const OK = new Set(['thread', 'info', 'media', 'starred', 'contacts', 'contact', 'profile', 'people', 'feed', 'fpost', 'fprofile', 'fgroup', 'falbum', 'flist', 'factivity', 'fsettings']);
+    const DROP = ['focus', 'media', 'preset', 'edit', 'cid_scroll', 'startId'];
+    const stack = [];
+    for (const pg of this._stack.slice(1)) {
+      if (!OK.has(pg.type)) break;
+      const data = { ...(pg.data || {}), ...(pg.resumeData?.() || {}) };
+      DROP.forEach(k => { if (k in data && !(pg.type === 'contact' && k === 'cid')) delete data[k]; });
+      if (pg.type === 'fpost') delete data.cid;
+      let clean;
+      try { clean = JSON.parse(JSON.stringify(data)); } catch (e) { break; }
+      if (Object.values(data).some(v => typeof v === 'function')) break;
+      stack.push({ type: pg.type, data: clean });
+    }
+    const top = this._stack[this._stack.length - 1];
+    const scroll = top?.el?.querySelector('.scroll')?.scrollTop || 0;
+    try { localStorage.setItem(this._resumeKey(), JSON.stringify({ at: Date.now(), stack, scroll: Math.round(scroll) })); } catch (e) { /* private window */ }
+  }
+  _resumeState() {
+    if (this._config.resume === false || this._config.feed_only) return null;
+    const q = new URLSearchParams(window.location.search);
+    if (this._deepLinked || ['crow_thread', 'crow_share', 'crow_post', 'crow_group', 'crow_profile', 'crow_story', 'crow_feed'].some(k => q.has(k))) return null;
+    let st = null;
+    try { st = JSON.parse(localStorage.getItem(this._resumeKey()) || 'null'); } catch (e) { st = null; }
+    if (!st || Date.now() - (st.at || 0) > 12 * 3600000) return null;
+    if (!st.stack?.length && !st.scroll) return null;
+    return st;
+  }
+  async _restoreResume() {
+    const st = this._resumeState();
+    if (!st || this._stack.length > 1) { if (!st && this._startElsewhere()) this._openStartView(); return; }
+    this._resuming = true;
+    this._startViewDone = true;
+    try {
+      for (const { type, data } of st.stack) {
+        if (['thread', 'info', 'media'].includes(type) && !this._s.threads.has(data.tid)) break;
+        if (type === 'contact' && !this._s.contacts.get(data.cid)) break;
+        if (type.startsWith('f')) { if (!this._s.feed?.enabled || !(await this._openFeed(type, data, { anim: false }))) break; }
+        else if (type === 'thread') this._openThread(data.tid, { anim: false });
+        else this._nav(type, data, { anim: false });
+      }
+    } catch (e) { /* whatever couldn't be put back stays closed */ }
+    this._resuming = false;
+    // and how far down you were (once the screen has its content)
+    if (st.scroll > 0) {
+      const top = this._stack[this._stack.length - 1];
+      const sc = top?.el?.querySelector('.scroll');
+      if (sc && top.type !== 'thread') {
+        let tries = 0;
+        const go = () => { if (!sc.isConnected || this._stack[this._stack.length - 1] !== top) return; if (sc.scrollHeight - sc.clientHeight >= st.scroll || tries > 6) { sc.scrollTop = st.scroll; return; } tries++; setTimeout(go, 300); };
+        setTimeout(go, 150);
+      }
+    }
+    this._reportFocus();
   }
   _restoreLastChat() {
     this._restoreTried = true;
@@ -2490,13 +2828,28 @@ class CrowMessengerCard extends HTMLElement {
     const top = this._stack[this._stack.length - 1];
     const tid = top?.type === 'thread' ? top.data.tid : null;
     const visible = document.visibilityState === 'visible' && this.isConnected;
-    const key = `${tid}|${visible}`;
+    // which part of the card is on screen, for the Viewing sensor (never which chat)
+    const t = top?.type || '';
+    const screen = t === 'thread' ? 'chat' : t === 'list' ? 'messages' : (t === 'feed' || /^f[a-z]/.test(t)) ? 'feed' : /^contact/.test(t) ? 'contacts' : 'other';
+    const key = `${tid}|${visible}|${screen}`;
     if (key === this._lastFocus) return;
     this._lastFocus = key;
-    this._ws('focus', { thread_id: tid, visible }).catch(() => {});
+    this._ws('focus', { thread_id: tid, visible, screen }).catch(() => {});
   }
 
   // ── Names & avatars ────────────────────────────────────────────────────────
+  // Favourites: your own (each person's contacts), shown first wherever you choose someone
+  _favUids() {
+    const out = new Set();
+    for (const c of this._s.contacts.values()) if (c.favourite && c.ha_user && c.ha_user !== this._s.me) out.add(c.ha_user);
+    return out;
+  }
+  _threadFav(t, favs = this._favUids()) {
+    if (!t || t.is_group) return false;
+    const other = t.participants.find(p => p !== this._s.me);
+    return !!other && favs.has(other);
+  }
+
   _contactForUser(uid) {
     for (const c of this._s.contacts.values()) if (c.ha_user === uid) return c;
     // a contact with exactly the same full name as the Home Assistant user counts too
@@ -2570,6 +2923,7 @@ class CrowMessengerCard extends HTMLElement {
     else if (m.type === 'game') txt = `🎮 ${GAME_NAME[m.game?.kind] || 'Game'}`;
     else if (m.type === 'status') txt = '🏠 Home Status';
     else if (m.type === 'contact') txt = `👤 ${[m.contact?.first, m.contact?.last].filter(Boolean).join(' ') || m.contact?.company || 'Contact'}`;
+    else if (m.type === 'post') txt = '📰 Shared a post';
     else if (m.view_once) txt = '📷 View Once';
     else if (m.effect === 'invisible' && txt) txt = 'Sent with Invisible Ink';
     if (!txt && m.attachments?.length) {
@@ -2603,6 +2957,51 @@ class CrowMessengerCard extends HTMLElement {
     this._reportFocus();
     this._rsSync();
     return page;
+  }
+
+  // ── The app bar (Messages, Feed, and more later) ──────────────────────────
+  // tools: the screen's own buttons after the places (Contacts and Filter on Messages)
+  _appDests() {
+    const want = Array.isArray(this._config.app_bar_items) ? this._config.app_bar_items : CM_DEFAULTS.app_bar_items;
+    return [...APP_DESTS].sort((a, b) => (want.indexOf(a.id) + 1 || 99) - (want.indexOf(b.id) + 1 || 99));
+  }
+
+  _appBarHtml(current, tools = '', extra = '') {
+    const dests = this._appDests().map(d => `<button class="ab-d${d.cls ? ' ' + d.cls : ''}${d.id === current ? ' on' : ''}" data-app="${d.id}" aria-label="${d.label}" title="${d.label}"${d.id === current ? ' aria-current="page"' : ''}>${d.icon}${d.dot ? '<span class="fdot" hidden></span>' : ''}</button>`).join('');
+    return `<div class="capsule g appbar ${extra}" data-current="${current}"><span class="ab-ds">${dests}</span><span class="ab-sep" hidden></span>${tools}</div>`;
+  }
+
+  // which places this card offers, the red dot on the Feed, and the line between places and tools
+  _appBarSync(scope) {
+    scope.querySelectorAll('.appbar').forEach(bar => {
+      const want = Array.isArray(this._config.app_bar_items) ? this._config.app_bar_items : CM_DEFAULTS.app_bar_items;
+      // a place left out of the app bar still shows on its own screen, so you can see where you are
+      const shown = APP_DESTS.filter(d => d.show(this) && (want.includes(d.id) || d.id === bar.dataset.current));
+      // just one place (the Crow Feed card, or the Feed switched off): nothing to switch between
+      const many = shown.length > 1;
+      APP_DESTS.forEach(d => { const b = bar.querySelector(`[data-app="${d.id}"]`); if (b) b.hidden = !many || !shown.includes(d); });
+      APP_DESTS.forEach(d => {
+        const dot = d.dot && bar.querySelector(`[data-app="${d.id}"] .fdot`);
+        if (dot) dot.hidden = this._config.app_bar_dots === false || bar.dataset.current === d.id || !d.dot(this);
+      });
+      const tools = [...bar.children].filter(c => !c.classList.contains('ab-ds') && !c.classList.contains('ab-sep') && !c.hidden && (!c.isConnected || getComputedStyle(c).display !== 'none'));
+      bar.querySelector('.ab-sep').hidden = !many || !tools.length;
+      bar.classList.toggle('ab-empty', !many && !tools.length);
+    });
+  }
+
+  // go to one of the app bar's places, like switching tabs: back to it if it's underneath,
+  // otherwise back to Messages (the front screen) and open it from there, so screens never pile up
+  async _appGo(id) {
+    const d = APP_DESTS.find(x => x.id === id);
+    if (!d) return;
+    const top = this._stack[this._stack.length - 1];
+    const at = this._stack.findIndex(p => p.type === d.page);
+    if (top && at === this._stack.length - 1) { top.el.querySelector('.scroll')?.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (at >= 0) { while (this._stack.length > at + 2) this._back(false); this._back(); return; }
+    while (this._stack.length > 1) this._back(false);
+    if (id === 'feed') await this._openFeed();
+    else this._nav(d.page);
   }
 
   _back(anim = true) {
@@ -2678,19 +3077,21 @@ class CrowMessengerCard extends HTMLElement {
   // the button lives on the front screen (the chat list), as the third icon in the
   // contacts and filter capsule, so it matches them exactly
   _rsMount(page) {
-    const top = page?.type === 'list' ? page.el?.querySelector(':scope > .top:not(.edge)') : null;
-    const cap = top?.querySelector(':scope > .cap-normal');
+    const top = page ? page.el?.querySelector(':scope > .top:not(.edge)') : null;
+    const cap = top?.querySelector(':scope > .appbar');
     if (!cap) return false;
     let b = cap.querySelector(':scope > .rs-btn');
-    if (!this._rsOn()) { b?.remove(); return false; }
+    if (!this._rsOn()) { b?.remove(); this._appBarSync(top); return false; }
     if (!b) { b = this._rsMake(); cap.appendChild(b); }
+    this._appBarSync(top);
     return true;
   }
 
   _rsSync() {
     if (!this._card) return;
     const front = this._stack[0];
-    this._rsMount(front);
+    // on Messages and on the Feed: the last button in the app bar
+    this._stack.forEach(p => this._rsMount(p));
     // old-style window skins show it in the title bar, also only on the front screen
     this.toggleAttribute('data-rs-front', this._stack.length === 1 && front?.type === 'list');
     this.shadowRoot.querySelectorAll('[data-rs]').forEach(b => this._rsLabel(b));
@@ -2855,6 +3256,7 @@ class CrowMessengerCard extends HTMLElement {
 
   _refresh(what, tid, force) {
     for (const p of this._stack) p.refresh?.(what, tid, force);
+    if (['all', 'list', 'messages', 'thread', 'read', 'feedcount'].includes(what) && this._root) this._appBarSync(this._root);
     if (this._built) this._rsSync();
     if (['all', 'messages', 'thread', 'read', 'contacts'].includes(what)) this._keepSoon();
   }
@@ -2889,7 +3291,7 @@ class CrowMessengerCard extends HTMLElement {
         <button class="pill g" data-a="edit">Edit</button>
         <button class="pill g archback" data-a="archback" hidden>${ICON.back}<span>Messages</span></button>
         <div class="title" style="opacity:0">Messages</div>
-        <div class="capsule g cap-normal"><button data-a="contacts" aria-label="Contacts">${ICON.contacts}</button><button data-a="filter" aria-label="Filter">${ICON.filter}</button></div>
+        ${this._appBarHtml('messages', this._config.app_bar_filter === false ? '' : `<button data-a="filter" aria-label="Filter">${ICON.filter}</button>`, 'cap-normal')}
         <button class="pill g cap-edit" data-a="editactions" hidden>Options</button>
       </div>
       <div class="bottom sbar">
@@ -2949,6 +3351,7 @@ class CrowMessengerCard extends HTMLElement {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'edit') { s.editing = !s.editing; s.selected.clear(); page.refresh('list'); return; }
       if (a === 'contacts') { this._nav('contacts'); return; }
+      if (a === 'feed') { this._appGo('feed'); return; }
       if (a === 'filter') {
         const v = await this._menu(e.target.closest('button'), [
           ...([...s.threads.values()].some(t => t.visible !== false && t.last && !!t.archived === !!s.archivedView)
@@ -2957,6 +3360,7 @@ class CrowMessengerCard extends HTMLElement {
           { text: 'All Messages', value: 'all', checked: s.filter === 'all', icon: ICON.bubble },
           { text: 'Unread Messages', value: 'unread', checked: s.filter === 'unread', icon: ICON.mailO },
           { text: 'Group Chats', value: 'groups', checked: s.filter === 'groups', icon: ICON.people },
+          { text: 'Favourites', value: 'favs', checked: s.filter === 'favs', icon: MICON.star },
           { sep: true }, { text: 'Starred Messages', value: 'starred', checked: false, icon: MICON.star },
           { sep: true }, { text: 'Skin', sub: this._skinItems(), icon: ICON.palette },
         ]);
@@ -3115,6 +3519,10 @@ class CrowMessengerCard extends HTMLElement {
     lst.addEventListener('contextmenu', (e) => { const h = holdTarget(e); if (h) { e.preventDefault(); clearTimeout(holdTimer); holdTimer = null; chatMenu(h.el, h.tid); } });
 
     page.refresh = (what) => {
+      if (what === 'feedcount' || what === 'all') {
+        this._appBarSync(el);
+        if (what === 'feedcount') return;
+      }
       if (!['all', 'list', 'messages', 'thread', 'read', 'contacts', 'typing'].includes(what)) return;
       if (what === 'typing') return;
       // nothing to edit with no conversations: Edit is greyed out, like on an iPhone
@@ -3184,6 +3592,7 @@ class CrowMessengerCard extends HTMLElement {
     if (!q) threads = threads.filter(t => !!t.archived === !!s.archivedView);
     if (s.filter === 'unread') threads = threads.filter(t => t.unread > 0 || t.marked_unread);
     if (s.filter === 'groups') threads = threads.filter(t => t.is_group);
+    if (s.filter === 'favs') { const favs = this._favUids(); threads = threads.filter(t => this._threadFav(t, favs)); }
     if (q) threads = threads.filter(t => (this._threadTitle(t) + ' ' + t.participants.map(p => this._userName(p)).join(' ')).toLowerCase().includes(q));
     threads.sort((a, b) => b.updated_at - a.updated_at);
     let html = chips;
@@ -3206,8 +3615,8 @@ class CrowMessengerCard extends HTMLElement {
       }).join('')}</div>`;
     }
     if (!threads.length && !q && !pinned.length) {
-      const what = s.filter === 'unread' ? 'No Unread Messages' : s.filter === 'groups' ? 'No Group Chats' : 'No Messages';
-      return `<div class="empty"><b>${what}</b>${s.filter === 'all' ? 'Tap the compose button to send a message to someone in your home.' : ''}</div>`;
+      const what = s.filter === 'unread' ? 'No Unread Messages' : s.filter === 'groups' ? 'No Group Chats' : s.filter === 'favs' ? 'No Chats With Favourites' : 'No Messages';
+      return `<div class="empty"><b>${what}</b>${s.filter === 'all' ? 'Tap the compose button to send a message to someone in your home.' : s.filter === 'favs' ? 'Open someone’s contact card and tap Add to Favourites. Chats with them show here.' : ''}</div>`;
     }
     if (q && threads.length) html += `<div class="section-h">Conversations</div>`;
     html += threads.map((t, i) => `
@@ -3250,6 +3659,12 @@ class CrowMessengerCard extends HTMLElement {
     return html;
   }
 
+  // a row's swipe widths: data-sw (the buttons on the right) and data-sl (on the left), so other lists
+  // (Feed notifications) can use the same swipes with different buttons. data-full: a long swipe left
+  // presses the last button (Remove), like Mail
+  _swW(row) { return +(row.dataset.sw || 216); }
+  _swL(row) { return +(row.dataset.sl || 160); }
+
   _wireSwipe(container) {
     let row = null, sx = 0, sy = 0, dx = 0, base = 0, active = false, id = null;
     container.addEventListener('pointerdown', (e) => {
@@ -3261,14 +3676,17 @@ class CrowMessengerCard extends HTMLElement {
     });
     container.addEventListener('pointermove', (e) => {
       if (!row || e.pointerId !== id) return;
+      // a mouse moving over the list with no button held isn't a swipe (it kept dragging the row after letting go)
+      if (e.pointerType === 'mouse' && !(e.buttons & 1)) return;
       const mx = e.clientX - sx, my = e.clientY - sy;
       if (!active) {
-        if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.4) { active = true; base = row.classList.contains('swiped') ? -216 : row.classList.contains('swiped-l') ? 160 : 0; row.classList.add('swiping'); try { row.setPointerCapture(id); } catch (err) { /* */ } }
+        if (Math.abs(mx) > 10 && Math.abs(mx) > Math.abs(my) * 1.4) { active = true; base = row.classList.contains('swiped') ? -this._swW(row) : row.classList.contains('swiped-l') ? this._swL(row) : 0; row.classList.add('swiping'); try { row.setPointerCapture(id); } catch (err) { /* */ } }
         else if (Math.abs(my) > 10) { row = null; return; }
       }
       if (active) {
         // swipe left for Hide Alerts and Delete, right for Unread and Pin
-        dx = clamp(base + mx, -250, 200);
+        dx = clamp(base + mx, row.dataset.full ? -row.offsetWidth : -this._swW(row) - 34, this._swL(row) + 40);
+        row.classList.toggle('swipe-full', !!row.dataset.full && dx < -Math.max(this._swW(row) + 90, row.offsetWidth * 0.55));
         row.querySelector('.swipe-actions').style.visibility = dx < 0 ? 'visible' : 'hidden';
         const lead = row.querySelector('.swipe-lead');
         if (lead) lead.style.visibility = dx > 0 ? 'visible' : 'hidden';
@@ -3287,10 +3705,23 @@ class CrowMessengerCard extends HTMLElement {
         // an open row closes as soon as it's pushed back a little way, rather than needing to be
         // dragged nearly all the way across
         const moved = dx - base;
+        if (row.classList.contains('swipe-full')) {
+          // a long swipe left: the last button (Remove) without stopping
+          row.classList.remove('swipe-full', 'swiping');
+          const btn = row.querySelector('.swipe-actions button:last-child');
+          inner.style.transform = `translateX(${-row.offsetWidth}px)`;
+          active = false; const r2 = row; row = null;
+          // the release isn't a tap on the row
+          { const t0 = Date.now(), swallow = (ev) => { if (!ev.target.closest('.swipe-actions') || Date.now() - t0 < 80) { ev.stopPropagation(); ev.preventDefault(); } };
+            r2.addEventListener('click', swallow, true); setTimeout(() => r2.removeEventListener('click', swallow, true), 350); }
+          setTimeout(() => btn?.click(), 160);
+          return;
+        }
+        const W = this._swW(row), L = this._swL(row);
         const open = base < 0 ? moved < 40 && dx < -60 : dx < -60;
         const openL = base > 0 ? moved > -40 && dx > 60 : dx > 60;
-        inner.style.transform = open ? 'translateX(-216px)' : openL ? 'translateX(160px)' : '';
-        this._swipeButtons(row, open ? -216 : openL ? 160 : 0, true);
+        inner.style.transform = open ? `translateX(${-W}px)` : openL ? `translateX(${L}px)` : '';
+        this._swipeButtons(row, open ? -W : openL ? L : 0, true);
         row.classList.toggle('swiped', open);
         row.classList.toggle('swiped-l', openL);
         const r0 = row;
@@ -3312,8 +3743,12 @@ class CrowMessengerCard extends HTMLElement {
   _swipeButtons(row, dx, animate) {
     const acts = row.querySelector('.swipe-actions'), lead = row.querySelector('.swipe-lead');
     [acts, lead].forEach(b => { if (b) b.style.transition = animate ? '' : 'none'; });
-    if (acts) acts.style.transform = `translateX(${Math.max(0, 216 + Math.min(dx, 0))}px)`;
-    if (lead) lead.style.transform = `translateX(${Math.min(0, Math.max(dx, 0) - 160)}px)`;
+    const W = this._swW(row), L = this._swL(row);
+    if (acts) acts.style.transform = `translateX(${Math.max(0, W + Math.min(dx, 0))}px)`;
+    if (lead) lead.style.transform = `translateX(${Math.min(0, Math.max(dx, 0) - L)}px)`;
+    // a long swipe: the last button stretches across, like Mail
+    const last = acts?.querySelector('button:last-child');
+    if (last && row.dataset.full) last.style.width = dx < -W ? `${72 + (-dx - W)}px` : '';
   }
 
   _closeSwipes(scope) {
@@ -3624,7 +4059,7 @@ class CrowMessengerCard extends HTMLElement {
       bgEl.dataset.src = img;
       if (page.live) { page.live.stop(); this._lives.delete(page.live); page.live = null; }
       bgEl.style.backgroundImage = img && !kind ? `url("${img}")` : '';
-      if (want) { page.live = new CrowLiveWallpaper(bgEl, kind, this._hass); this._lives.add(page.live); }
+      if (want) { page.live = this._liveWallpaper(bgEl, kind); this._lives.add(page.live); }
       el.classList.toggle('has-bg', !!img);
       el.classList.toggle('has-live', !!kind);
     };
@@ -4499,7 +4934,7 @@ class CrowMessengerCard extends HTMLElement {
       <div class="crow">
         <button class="cb g" data-c="plus" aria-label="Attach">${ICON.plus}</button>
         ${inThread || ensureThread ? `<button class="cb g" data-c="apps" aria-label="Add to Message: stickers, polls, location and more">${XICON.apps}</button>` : ''}
-        <div class="field g"><div class="stage"></div><div class="inrow"><div class="rbslot"></div><button class="fbtn aa" data-c="fmt" aria-label="Text Effects" hidden>Aa</button><button class="fbtn ai-w" data-c="write" aria-label="Writing Tools" hidden>${ICON.pen}</button><button class="fbtn send" data-c="action"></button></div></div>
+        <div class="field g"><div class="stage"></div><div class="inrow"><div class="rbslot"></div><button class="fbtn aa" data-c="fmt" aria-label="Text Effects" hidden>Aa</button><button class="fbtn ai-w" data-c="write" aria-label="Writing Tools" hidden>${ICON.ai}</button><button class="fbtn send" data-c="action"></button></div></div>
       </div>
       <input type="file" class="f-any" multiple hidden>
     </div>`);
@@ -4997,7 +5432,8 @@ class CrowMessengerCard extends HTMLElement {
       return { id: u.id, name, contact: me || !!c, keys: `${name} ${u.name || ''} ${u.ha_name || ''}${me ? ' me you myself' : ''}`.toLowerCase(),
         sub: me ? 'Message yourself' : c ? (u.ha_name && u.ha_name !== name ? u.ha_name : (u.is_admin ? 'Administrator' : 'Home Assistant user')) : 'Not in Contacts' };
     }).concat(s.ai?.assistant ? [{ id: HA_ID, name: 'Home Assistant', contact: true, keys: 'home assistant ha assist ai', sub: 'Ask about or control your home' }] : [])
-      .sort((a, b) => (b.contact - a.contact) || a.name.localeCompare(b.name));
+      .sort((a, b) => (b.contact - a.contact) || (favSet.has(b.id) - favSet.has(a.id)) || a.name.localeCompare(b.name));
+    const favSet = this._favUids();
     const render = () => {
       chipsEl.innerHTML = chosen.map(id => `<span class="chip${chipSel === id ? ' sel' : ''}" data-id="${esc(id)}">${esc(this._userName(id))}</span>`).join('');
       gname.hidden = chosen.length < 2;
@@ -5005,7 +5441,9 @@ class CrowMessengerCard extends HTMLElement {
       const words = q.split(/\s+/).filter(Boolean);
       // people only appear once you start typing a name (or tap + to browse your contacts)
       const list = q || browse ? people().filter(p => words.every(w => p.keys.includes(w))) : [];
-      const row = p => `<div class="srow" data-id="${esc(p.id)}">${this._userAv(p.id, 40)}<div><div class="sn">${esc(p.name)}</div><div class="ss">${esc(p.sub)}</div></div>${chosen.includes(p.id) ? `<span class="ck">${ICON.check}</span>` : ''}</div>`;
+      const row = p => `<div class="srow" data-id="${esc(p.id)}">${this._userAv(p.id, 40)}<div><div class="sn">${esc(p.name)}${favSet.has(p.id) ? '<span class="fstar" aria-label="Favourite">★</span>' : ''}</div><div class="ss">${esc(p.sub)}</div></div>${chosen.includes(p.id) ? `<span class="ck">${ICON.check}</span>` : ''}</div>`;
+      // before you type: your Favourites, ready to tap
+      const favRows = !q && !browse && !chosen.length ? people().filter(p => favSet.has(p.id)) : [];
       const mine = list.filter(p => p.contact), others = list.filter(p => !p.contact);
       const noContacts = !people().some(p => p.id !== s.me);
       const hint = `<div class="empty" style="padding:30px">Add people to your Contacts to message them.<br><button data-a="tocontacts" style="margin-top:12px;color:var(--cm-accent);font-size:15px;font-weight:600">Open Contacts</button></div>`;
@@ -5014,7 +5452,7 @@ class CrowMessengerCard extends HTMLElement {
           + (others.length ? `<div class="sh">${mine.length ? 'Others in Your Home' : 'People in Your Home'}</div>` + others.map(row).join('') : '')
           + (noContacts && !q ? hint : '')
         : noContacts && (q || browse) ? hint
-          : (q ? `<div class="empty" style="padding:30px">No one in your Contacts called “${esc(input.value.trim())}”.</div>` : '');
+          : (q ? `<div class="empty" style="padding:30px">No one in your Contacts called “${esc(input.value.trim())}”.</div>` : favRows.length ? `<div class="sh">Favourites</div>${favRows.map(row).join('')}` : '');
       composer.setPlaceholder(chosen.length > 1 ? 'Message the group' : 'Message');
       composer.refresh();
       showPrev(!q && !browse);
@@ -5245,11 +5683,14 @@ class CrowMessengerCard extends HTMLElement {
   // ── Overlays: alert, menu, toast ───────────────────────────────────────────
   _alert({ title, message, input, buttons }) {
     return new Promise((resolve) => {
+      // side by side, Cancel goes first (on the left), as on an iPhone; stacked, it goes last
+      const cancelFirst = buttons.length === 2;
+      const order = [...buttons].sort((a, b) => cancelFirst ? (b.style === 'cancel') - (a.style === 'cancel') : (a.style === 'cancel') - (b.style === 'cancel'));
       const back = this._el(`<div class="crow-ios-backdrop"><div class="crow-ios-alert" role="alertdialog">
         ${title ? `<div class="crow-ios-title">${esc(title)}</div>` : ''}
         ${message ? `<div class="crow-ios-msg">${esc(message)}</div>` : ''}
         ${input ? `<input class="crow-ios-input" type="text" value="${esc(input.value || '')}" placeholder="${esc(input.placeholder || '')}">` : ''}
-        <div class="crow-ios-btns">${buttons.map((b, i) => {
+        <div class="crow-ios-btns${buttons.length > 2 ? ' stack' : ''}">${order.map((b) => { const i = buttons.indexOf(b);
           const cls = b.style === 'cancel' ? 'crow-ios-cancel' : `crow-ios-ok${b.style === 'destructive' ? ' destructive' : ''}`;
           // a real link, so the tap itself opens Mail / Phone / FaceTime (iOS ignores links opened after the popup closes)
           return b.href ? `<a data-i="${i}" class="${cls}" href="${esc(b.href)}"${linkTarget(b.href) ? ' target="_blank"' : ''} rel="noopener">${esc(b.text)}</a>`
@@ -5276,7 +5717,8 @@ class CrowMessengerCard extends HTMLElement {
     });
   }
 
-  _menu(anchor, items, { align = 'right', above = false } = {}) {
+  _menu(anchor, items, { align = 'right', above = false, preview = '', onOpen = null } = {}) {
+    // preview: a picture shown above the menu, like pressing and holding a photo on an iPhone
     // An item with `sub` is a folder: tapping it shows its items in the same popup,
     // with "‹ Name" at the top to go back.
     const rowsHtml = (list, back) => {
@@ -5290,9 +5732,10 @@ class CrowMessengerCard extends HTMLElement {
           : `<button data-i="${i}" class="${it.red ? 'red' : ''}${it.sub ? ' mfolder' : ''}">${ticks ? `<span class="mc">${it.checked ? ICON.check : ''}</span>` : ''}<span>${esc(it.text)}</span>${it.icon ? `<span class="mi">${it.icon}</span>` : ''}${it.sub ? `<span class="mchev">${ICON.chevR}</span>` : ''}</button>`).join('');
     };
     return new Promise((resolve) => {
-      const wrap = this._el(`<div class="menu-wrap"><div class="menu" role="menu">${rowsHtml(items)}</div></div>`);
+      const wrap = this._el(`<div class="menu-wrap${preview ? ' has-pv' : ''}">${preview ? `<div class="menu-pv">${preview}</div>` : ''}<div class="menu" role="menu">${rowsHtml(items)}</div></div>`);
       this._root.appendChild(wrap);
       const menu = wrap.querySelector('.menu');
+      const pv = wrap.querySelector('.menu-pv');
       const rr = this._root.getBoundingClientRect(), ar = anchor.getBoundingClientRect();
       let cur = items, folder = null;
       const place = () => {
@@ -5303,6 +5746,16 @@ class CrowMessengerCard extends HTMLElement {
         let top = above ? ar.top - rr.top - mh - 8 : ar.bottom - rr.top + 8;
         if (top + mh > rr.height - 10) top = Math.max(10, ar.top - rr.top - mh - 8);
         if (top < 10) top = 10;
+        if (pv) {
+          // the picture, then the menu under it, kept on the card together
+          const pw = Math.min(rr.width - 40, 300), ph = pv.offsetHeight;
+          const total = ph + 10 + mh;
+          top = clamp(ar.top - rr.top, 10, Math.max(10, rr.height - total - 10));
+          const pl = clamp(ar.left - rr.left + ar.width / 2 - pw / 2, 10, rr.width - pw - 10);
+          pv.style.left = `${pl}px`; pv.style.top = `${top}px`; pv.style.width = `${pw}px`;
+          left = clamp(pl + (align === 'right' ? pw - mw : 0), 10, rr.width - mw - 10);
+          top += ph + 10;
+        }
         menu.style.left = `${left}px`; menu.style.top = `${top}px`;
         menu.style.transformOrigin = `${align === 'right' ? 'right' : 'left'} ${above ? 'bottom' : 'top'}`;
       };
@@ -5316,6 +5769,9 @@ class CrowMessengerCard extends HTMLElement {
         place();
       };
       place();
+      if (pv) pv.querySelectorAll('img, video').forEach(m => m.addEventListener('loadedmetadata', place, { once: true }));
+      if (pv) pv.querySelectorAll('img').forEach(m => m.addEventListener('load', place, { once: true }));
+      onOpen?.(wrap);
       // only a tap that starts once the menu is open counts: lifting the finger that opened it
       // (a press and hold) mustn't close it again straight away
       let armed = false;
@@ -5807,25 +6263,49 @@ Object.assign(CrowMessengerCard.prototype, {
     return '';
   },
 
+  // who voted: small overlapping photos on each choice (yours first), "+N" after three; new ones pop in
+  _pollFaces(key, who, anonymous) {
+    if (anonymous || !who.length) return '';
+    const me = this._s.me;
+    const order = [...who].sort((a, b) => (b === me) - (a === me));
+    this._pollSeen = this._pollSeen || new Set();
+    const html = order.slice(0, 3).map(u => { const k = `${key}:${u}`, fresh = !this._pollSeen.has(k) && this._pollSeen.size > 0; this._pollSeen.add(k); return `<span class="pf${fresh ? ' new' : ''}" data-x="pface" data-u="${esc(u)}" role="button" aria-label="${esc(this._userName(u))}’s profile">${this._userAv(u, 20)}</span>`; }).join('');
+    who.forEach(u => this._pollSeen.add(`${key}:${u}`));
+    return `${html}${order.length > 3 ? `<span class="pmore" data-x="pvoters" data-opt="${esc(key.split(':')[1] || '')}">+${order.length - 3}</span>` : ''}`;
+  },
+
+  // someone's profile: their Social profile when the Feed is on, otherwise their contact card
+  _openPersonProfile(uid) {
+    if (!uid || uid === HA_ID) return;
+    if (this._s.feed?.enabled) { this._openFeed('fprofile', { uid }); return; }
+    const c = uid === this._s.me ? (this._s.profile?.my_card && this._s.contacts.get(this._s.profile.my_card)) : this._contactForUser(uid);
+    if (c) this._nav('contact', { cid: c.id });
+    else if (uid !== this._s.me) this._messageUser(uid);
+  },
+
   _pollHtml(m, t) {
     const p = m.poll || { options: [], votes: {} };
     const votes = p.votes || {};
+    const anon = !!p.anonymous;
     const mine = new Set(votes[this._s.me] || []);
     const voters = Object.keys(votes);
     const counts = new Map(p.options.map(o => [o.id, voters.filter(v => votes[v].includes(o.id))]));
-    const max = Math.max(1, ...[...counts.values()].map(v => v.length));
+    const n = (id) => anon ? (p.counts?.[id] || 0) : (counts.get(id) || []).length;
+    const max = Math.max(1, ...p.options.map(o => n(o.id)));
+    const total = anon ? (p.total || 0) : voters.length;
     const people = (t?.participants || []).filter(x => x !== HA_ID).length;
+    if (!this._pollSeen?.size) { this._pollSeen = new Set(['_']); }
     return `<div class="xcard poll" data-x="poll">
-      <div class="xh">${XICON.poll}Poll</div>
+      <div class="xh">${XICON.poll}${anon ? 'Anonymous Poll' : 'Poll'}</div>
       <div class="xt">${esc(m.text)}</div>
       ${p.options.map(o => {
-        const who = counts.get(o.id) || [];
+        const who = counts.get(o.id) || [], c = n(o.id);
         return `<div class="popt${mine.has(o.id) ? ' on' : ''}" data-x="vote" data-opt="${esc(o.id)}">
-          <div class="pbar" style="width:${who.length ? Math.round(who.length / max * 100) : 0}%"></div>
+          <div class="pbar" style="width:${c ? Math.round(c / max * 100) : 0}%"></div>
           <span class="pck">${mine.has(o.id) ? ICON.check : ''}</span><span class="ptx">${esc(o.text)}</span>
-          <span class="pvt">${who.slice(0, 3).map(u => this._userAv(u, 20)).join('')}</span><span class="pn">${who.length || ''}</span></div>`;
+          ${anon || !who.length ? '' : `<span class="pvt" data-x="pvoters" data-opt="${esc(o.id)}" role="button" aria-label="Who chose this">${this._pollFaces(`${m.id}:${o.id}`, who, anon)}</span>`}<span class="pn">${c || ''}</span></div>`;
       }).join('')}
-      <div class="xs" style="padding-top:8px">${voters.length} of ${people} voted${p.multi === false ? ' · one choice' : ''}</div>
+      <div class="xs" style="padding-top:8px">${total} of ${people} voted${p.multi === false ? ' · one choice' : ''}${anon ? ' · votes are anonymous' : ''}</div>
       <div class="xbtns"><button data-x="polladd">Add Choice</button></div>
     </div>`;
   },
@@ -5982,10 +6462,21 @@ Object.assign(CrowMessengerCard.prototype, {
         await this._ws('action', { thread_id: tid, message_id: m.id, action: x.dataset.act });
         return true;
       }
+      if (kind === 'pface') { this._openPersonProfile(x.dataset.u); return true; }
+      if (kind === 'pvoters') {
+        const p = m.poll || {}, opt = p.options?.find(o => o.id === x.dataset.opt);
+        if (!opt || p.anonymous) return true;
+        const who = Object.keys(p.votes || {}).filter(u => p.votes[u].includes(opt.id)).sort((a, b) => (b === this._s.me) - (a === this._s.me));
+        const sh = this._xsheet({ title: opt.text, body: `<div class="group">${who.map(u => `<div class="pick-row" data-u="${esc(u)}">${this._userAv(u, 36)}<div class="pn">${esc(u === this._s.me ? 'You' : this._userName(u))}</div></div>`).join('')}</div><div class="sfoot">${who.length === 1 ? '1 vote' : `${who.length} votes`}</div>` });
+        sh.el.addEventListener('click', (ev) => { const r = ev.target.closest('[data-u]'); if (!r) return; sh.close(); this._openPersonProfile(r.dataset.u); });
+        return true;
+      }
       if (kind === 'vote') {
         const p = m.poll; const mine = new Set(p.votes?.[this._s.me] || []);
         const id = x.dataset.opt;
+        const before = [...mine];
         if (mine.has(id)) mine.delete(id); else { if (p.multi === false) mine.clear(); mine.add(id); }
+        if (p.anonymous) { const c = { ...(p.counts || {}) }; before.forEach(o => { c[o] = Math.max(0, (c[o] || 1) - 1); }); mine.forEach(o => { c[o] = (c[o] || 0) + 1; }); p.counts = c; p.total = Math.max(0, (p.total || 0) + (mine.size ? 1 : 0) - (before.length ? 1 : 0)); }
         // show it straight away; the server confirms
         p.votes = { ...(p.votes || {}), [this._s.me]: [...mine] };
         if (!mine.size) delete p.votes[this._s.me];
@@ -6505,18 +6996,20 @@ Object.assign(CrowMessengerCard.prototype, {
 
   // ── Poll ───────────────────────────────────────────────────────────────────
   _openPoll(tid, composer) {
-    let multi = true;
+    let multi = true, anonymous = false;
     const sh = this._xsheet({
       title: 'New Poll', action: 'Add',
       body: `${this._fieldBox([{ cls: 'q', placeholder: 'Question', cap: true }])}
         <div class="opts"></div>
-        <div class="sgroup"><label class="gr"><div class="gl">Allow More Than One Choice</div><span class="tsw"><input type="checkbox" class="multi" checked><span></span></span></label></div>
+        <div class="sgroup"><label class="gr"><div class="gl">Allow More Than One Choice</div><span class="tsw"><input type="checkbox" class="multi" checked><span></span></span></label>
+          <label class="gr"><div class="gl">Anonymous Poll<div style="font-size:13px;color:var(--cm-text2)">Only the totals show — nobody, not even you, sees who chose what</div></div><span class="tsw"><input type="checkbox" class="anon"><span></span></span></label></div>
         <div class="sfoot">Everyone in the conversation can vote and add choices. Votes update live.</div>`,
       onAction: async () => {
         const q = sh.el.querySelector('.q').value.trim();
         const options = list.values();
         if (!q || options.length < 2) { this._toast('Add a question and at least two choices'); return false; }
-        this._stageApp(composer, tid, 'poll', { text: q, extra: { type: 'poll', poll: { options, multi } }, label: `Poll: ${q}`, sub: `${options.length} choices` });
+        anonymous = !!sh.el.querySelector('.anon')?.checked;
+        this._stageApp(composer, tid, 'poll', { text: q, extra: { type: 'poll', poll: { options, multi, ...(anonymous ? { anonymous: true } : {}) } }, label: `${anonymous ? 'Anonymous Poll' : 'Poll'}: ${q}`, sub: `${options.length} choices` });
       },
     });
     const list = this._listRows(sh.el.querySelector('.opts'), { placeholder: 'Choice', addLabel: 'Add Choice', max: 12 });
@@ -8232,6 +8725,30 @@ const SKIN_CSS = `
 :host([data-skin]) .menu .mh { color: var(--sk-mh, var(--cm-text2)); font-size: 12px; }
 :host([data-skin]) .xsheet { border-radius: var(--sk-sheet-r, 18px 18px 0 0); backdrop-filter: none; -webkit-backdrop-filter: none; }
 :host([data-skin]) .crow-ios-alert { border-radius: var(--sk-alert-r, 14px); }
+/* a skin's own alert: its colours, font, border and buttons (the same layout as iOS 26) */
+:host([data-skin]) .crow-ios-alert { font-family: inherit; background: var(--sk-menu, var(--cm-glass-solid)); color: var(--sk-menu-text, var(--cm-text));
+  border: var(--sk-menu-bd, 0.5px solid var(--cm-sep)); box-shadow: var(--sk-menu-sh, 0 20px 50px rgba(0,0,0,0.3)); backdrop-filter: none; -webkit-backdrop-filter: none; }
+:host([data-skin]) .crow-ios-msg { color: var(--cm-text2); }
+:host([data-skin]) .crow-ios-input { background: var(--sk-field, var(--cm-fill)); border: var(--sk-field-bd, 0); border-radius: var(--sk-field-r, 12px); color: var(--sk-field-text, var(--cm-text)); }
+:host([data-skin]) .crow-ios-btns button, :host([data-skin]) .crow-ios-btns a { background: var(--sk-ctl, var(--cm-fill)) !important; border: var(--sk-ctl-bd, 0) !important;
+  border-radius: var(--sk-pill-r, 999px) !important; box-shadow: var(--sk-alert-btn-sh, none) !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important; font-family: inherit; }
+:host([data-skin]) .crow-ios-btns .crow-ios-cancel { color: var(--cm-text) !important; }
+:host([data-skin]) .crow-ios-btns .crow-ios-ok { color: var(--sk-alert-ok, var(--cm-accent)) !important; }
+:host([data-skin]) .crow-ios-btns .crow-ios-ok.destructive { color: var(--sk-alert-red, var(--cm-red, #e5352b)) !important; }
+/* the old-style skins: a smaller dialog with a title bar, like the window it's in */
+:host([data-retro]) .crow-ios-alert { width: min(320px, 100%); padding: 16px 12px 12px; transform: none; transition: opacity 0.12s; }
+:host([data-retro]) .crow-ios-title { font-size: 15px; font-weight: 700; margin: 0 4px; letter-spacing: 0; }
+:host([data-retro]) .crow-ios-msg { font-size: 13.5px; margin: 6px 4px 0; line-height: 1.35; }
+:host([data-retro]) .crow-ios-btns { margin-top: 16px; gap: 8px; }
+:host([data-retro]) .crow-ios-btns button, :host([data-retro]) .crow-ios-btns a { min-height: 32px; padding: 6px 12px; font-size: 13.5px; font-weight: 600; }
+:host([data-retro]) .crow-ios-btns button:active { transform: none; filter: brightness(0.92); }
+:host([data-win]) .crow-ios-alert { position: relative; overflow: hidden; padding-top: calc(var(--sk-win-h, 24px) + 14px); }
+:host([data-win]) .crow-ios-alert::before { content: var(--sk-win-title, 'Crow Messenger'); position: absolute; left: 0; right: 0; top: 0; height: var(--sk-win-h, 24px);
+  display: flex; align-items: center; padding: 0 10px; box-sizing: border-box; background: var(--sk-win-bg); color: var(--sk-win-text, #fff);
+  font: var(--sk-win-font, 700 13px/1 Tahoma, Verdana, sans-serif); text-shadow: var(--sk-win-ts, none); justify-content: var(--sk-win-align, flex-start); }
+:host(:is([data-skin="win98"], [data-skin="icq"], [data-skin="aim"])) { --sk-alert-btn-sh: 1px 1px 0 #000; --sk-alert-ok: #000; --sk-alert-red: #000; }
+:host([data-skin="win98"]) .crow-ios-btns .crow-ios-ok, :host([data-skin="icq"]) .crow-ios-btns .crow-ios-ok, :host([data-skin="aim"]) .crow-ios-btns .crow-ios-ok { outline: 1px dotted #000; outline-offset: -5px; }
+:host([data-skin="nokia"]) .crow-ios-btns button { border: 2px solid #43523d !important; }
 :host([data-retro]) .crow-ios-alert, :host([data-retro]) .menu { animation: none; }
 :host([data-skin]) :is(.ask-card, .ask-offer) { border-radius: var(--sk-menu-r, 12px); background: var(--sk-menu, var(--cm-glass-solid)) !important; border: var(--sk-menu-bd, 0.5px solid var(--cm-sep)); box-shadow: none; color: var(--sk-menu-text, var(--cm-text)); }
 :host([data-skin]) .schips button { border-radius: var(--sk-pill-r, 15px); }
@@ -8620,107 +9137,30 @@ const SKIN_CSS = `
 :host([data-skin="irc"]) .receipt { color: #555; }
 `;
 
-const GAMES = [
-  { id: 'ttt', name: 'Noughts and Crosses', sub: 'Three in a row wins', bg: 'linear-gradient(160deg,#FF6482,#E0245E)' },
-  { id: 'c4', name: 'Connect Four', sub: 'Drop counters, line up four', bg: 'linear-gradient(160deg,#FFD60A,#FF9F0A)' },
-  { id: 'rev', name: 'Reversi', sub: 'Turn over your opponent’s discs', bg: 'linear-gradient(160deg,#30D158,#1E7A3C)', icon: 'disc' },
-  { id: 'dr', name: 'Draughts', sub: 'Jump and take, crown your kings', bg: 'linear-gradient(160deg,#C0392B,#7B1E14)', icon: 'crown' },
-  { id: 'sea', name: 'Sea Battle', sub: 'Find and sink the hidden fleet', bg: 'linear-gradient(160deg,#0A84FF,#0B3E8A)', icon: 'anchor' },
-];
+
 const GAME_NAME = { ttt: 'Noughts and Crosses', c4: 'Connect Four', rev: 'Reversi', dr: 'Draughts', sea: 'Sea Battle', word: 'Word Game' };
 
 
 // ── Sea Battle drawing: each ship is one hull across its squares ───────────────
-const SEA_SHIPS = [['Battleship', 4], ['Cruiser', 3], ['Submarine', 3], ['Destroyer', 2], ['Patrol Boat', 2]];
-const seaN = (v) => +v.toFixed(3);
+
+
 // a hull lying along x from 0 to n (one square high), bow on the right
-const seaHull = (n, kind, wreck) => {
-  const h = (a) => seaN(a);
-  if (kind === 'Submarine' && !wreck) {
-    return `<path d="M0.32,0.3 L${h(n - 0.4)},0.3 Q${h(n - 0.08)},0.32 ${h(n - 0.08)},0.5 Q${h(n - 0.08)},0.68 ${h(n - 0.4)},0.7 L0.32,0.7 Q0.1,0.7 0.1,0.5 Q0.1,0.3 0.32,0.3Z" fill="#4f5b66" stroke="#222a31" stroke-width="0.05"/>
-      <rect x="${h(n * 0.45 - 0.2)}" y="0.36" width="0.5" height="0.28" rx="0.12" fill="#8b98a5"/><circle cx="${h(n * 0.45 + 0.05)}" cy="0.5" r="0.07" fill="#222a31"/>`;
-  }
-  const hull = `M0.3,0.2 L${h(n - 0.5)},0.2 Q${h(n - 0.12)},0.24 ${h(n - 0.05)},0.5 Q${h(n - 0.12)},0.76 ${h(n - 0.5)},0.8 L0.3,0.8 Q0.1,0.8 0.1,0.5 Q0.1,0.2 0.3,0.2Z`;
-  if (wreck) {
-    // a burnt-out, broken hull
-    const mid = n / 2;
-    return `<path d="${hull}" fill="#4a3027" stroke="#1a0e0a" stroke-width="0.05"/>
-      <path d="M${h(mid - 0.15)},0.2 L${h(mid + 0.05)},0.42 L${h(mid - 0.1)},0.55 L${h(mid + 0.1)},0.8" fill="none" stroke="#1a0e0a" stroke-width="0.08" stroke-linejoin="round"/>
-      <path d="M0.45,0.38 L${h(n - 0.8)},0.38" stroke="#6b463a" stroke-width="0.06" stroke-dasharray="0.18 0.12"/>`;
-  }
-  const turrets = [0.6, ...(n >= 3 ? [n - 0.9] : [])].map(x => `<circle cx="${h(x)}" cy="0.5" r="0.11" fill="#39424c"/><rect x="${h(x)}" y="0.47" width="0.28" height="0.06" fill="#39424c"/>`).join('');
-  return `<path d="${hull}" fill="#6b7783" stroke="#2b333c" stroke-width="0.05"/>
-    <rect x="0.34" y="0.34" width="${h(n - 0.95)}" height="0.32" rx="0.12" fill="#8794a1"/>
-    <rect x="${h(n * 0.45 - 0.22)}" y="0.29" width="0.46" height="0.42" rx="0.07" fill="#c7d0d8" stroke="#2b333c" stroke-width="0.03"/>
-    ${n >= 3 ? `<circle cx="${h(n * 0.45 + 0.42)}" cy="0.5" r="0.09" fill="#2b333c"/>` : ''}${turrets}`;
-};
+
 // placed on the 8 x 8 board: lying across a row, or turned upright down a column
-const seaShip = (cells, kind, { wreck = false, ghost = false } = {}) => {
-  const c = [...cells].sort((a, b) => a - b), n = c.length, r0 = Math.floor(c[0] / 8), c0 = c[0] % 8;
-  const across = n < 2 || c[1] - c[0] === 1;
-  const tf = across ? `translate(${c0},${r0})` : `translate(${c0 + 1},${r0}) rotate(90)`;
-  return `<g transform="${tf}"${ghost ? ' opacity="0.55"' : ''}>${seaHull(n, kind, wreck)}</g>`;
-};
-const seaMark = (i, v, last) => {
-  const x = i % 8 + 0.5, y = Math.floor(i / 8) + 0.5;
-  let out = '';
-  if (v === 1) out += `<circle cx="${x}" cy="${y}" r="0.3" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="0.05"/><circle cx="${x}" cy="${y}" r="0.18" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="0.06"/><circle cx="${x}" cy="${y}" r="0.06" fill="#fff"/>`;
-  else if (v >= 2) {
-    const k = v === 3 ? 0.6 : 1, f = (dx, dy) => `${seaN(x + dx * k)},${seaN(y + dy * k)}`;
-    out += `${v === 2 ? `<circle cx="${seaN(x + 0.12)}" cy="${seaN(y - 0.3)}" r="0.16" fill="rgba(60,60,60,0.45)"/>` : ''}
-      <path d="M${f(0, -0.34)} C${f(0.25, -0.1)} ${f(0.24, 0.26)} ${f(0, 0.3)} C${f(-0.24, 0.26)} ${f(-0.25, -0.1)} ${f(0, -0.34)}Z" fill="#ff6d00"/>
-      <path d="M${f(0, -0.12)} C${f(0.13, 0.02)} ${f(0.12, 0.22)} ${f(0, 0.24)} C${f(-0.12, 0.22)} ${f(-0.13, 0.02)} ${f(0, -0.12)}Z" fill="#ffd54f"/>`;
-  }
-  if (last) out += `<rect x="${seaN(x - 0.46)}" y="${seaN(y - 0.46)}" width="0.92" height="0.92" rx="0.14" fill="none" stroke="#ffd60a" stroke-width="0.08" class="sea-last"/>`;
-  return out;
-};
+
+
 // which kind each sunk ship was, from its size (the two 3s and the two 2s in the order they went down)
-const seaKinds = (lists) => {
-  const used = new Set();
-  return lists.map(cells => { const k = SEA_SHIPS.findIndex(([nm, n], j) => n === cells.length && !used.has(j)); used.add(k); return SEA_SHIPS[k]?.[0] || 'Ship'; });
-};
+
 
 // The same rules Home Assistant checks, so the board can show where you're allowed to go
-const G8 = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
-const g8ok = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8;
-const revFlips = (b, i, who) => {
-  if (b[i]) return [];
-  const other = 3 - who, r0 = Math.floor(i / 8), c0 = i % 8, out = [];
-  for (const [dr, dc] of G8) {
-    const run = []; let r = r0 + dr, c = c0 + dc;
-    while (g8ok(r, c) && b[r * 8 + c] === other) { run.push(r * 8 + c); r += dr; c += dc; }
-    if (run.length && g8ok(r, c) && b[r * 8 + c] === who) out.push(...run);
-  }
-  return out;
-};
-const drOwner = (v) => (v === 1 || v === 3 ? 0 : v === 2 || v === 4 ? 1 : null);
-const drDirs = (v) => (v >= 3 ? [[-1, -1], [-1, 1], [1, -1], [1, 1]] : v === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]]);
-const drCrowns = (v, i) => (v === 1 && i < 8) || (v === 2 && i >= 56);
-const drJumps = (b, start, v, pos, taken) => {
-  const out = [], r0 = Math.floor(pos / 8), c0 = pos % 8, me = drOwner(v);
-  for (const [dr, dc] of drDirs(v)) {
-    const r2 = r0 + 2 * dr, c2 = c0 + 2 * dc;
-    if (!g8ok(r2, c2)) continue;
-    const mid = (r0 + dr) * 8 + c0 + dc, land = r2 * 8 + c2;
-    if (taken.includes(mid) || drOwner(b[mid]) !== 1 - me || (b[land] && land !== start)) continue;
-    const nt = [...taken, mid];
-    if (drCrowns(v, land)) { out.push([[land], nt]); continue; }
-    const more = drJumps(b, start, v, land, nt);
-    if (more.length) more.forEach(([p, t]) => out.push([[land, ...p], t])); else out.push([[land], nt]);
-  }
-  return out;
-};
-const drMoves = (b, turn) => {
-  const caps = [], steps = [];
-  b.forEach((v, i) => {
-    if (drOwner(v) !== turn) return;
-    drJumps(b, i, v, i, []).forEach(([p, t]) => caps.push({ path: [i, ...p], taken: t }));
-    if (caps.length) return;
-    const r0 = Math.floor(i / 8), c0 = i % 8;
-    for (const [dr, dc] of drDirs(v)) { const r = r0 + dr, c = c0 + dc; if (g8ok(r, c) && !b[r * 8 + c]) steps.push({ path: [i, r * 8 + c], taken: [] }); }
-  });
-  return caps.length ? caps : steps;
-};
+
+
+
+
+
+
+
+
 const APP_ORDER = ['stickers', 'sketch', 'poll', 'checkin', 'locreq', 'ring', 'device', 'checklist', 'event', 'status', 'timer', 'games'];
 const fmtLeft = (ms) => {
   const t = Math.max(0, Math.ceil(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor(t % 3600 / 60), sec = t % 60;
@@ -8731,154 +9171,7 @@ const fmtSpan = (secs) => {
   return [h && `${h} hr`, m && `${m} min`, s && `${s} sec`].filter(Boolean).join(' ') || '0 sec';
 };
 
-const PLAY_CSS = `
-/* the Add to Message drawer, while you're editing it */
-.apps.editing .app { animation: cm-jiggle 0.32s ease-in-out infinite alternate; touch-action: none; }
-.apps.editing .app:nth-child(2n) { animation-delay: -0.16s; }
-@keyframes cm-jiggle { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
-.app { position: relative; }
-.app.hid { opacity: 0.38; }
-.app .abadge { display: none; position: absolute; top: -4px; left: calc(50% - 36px); width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 18px; font-weight: 700; line-height: 22px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.3); z-index: 2; }
-.apps.editing .app .abadge { display: block; background: #8E8E93; }
-.apps.editing .app.hid .abadge { background: #34C759; }
-.app.dragging { z-index: 5; animation: none !important; transform: scale(1.12); opacity: 0.9; }
-.apps-note { font-size: 13px; color: var(--cm-text2); text-align: center; margin: 2px 12px 8px; line-height: 1.4; }
-.apps-note[hidden] { display: none; }
 
-/* Home Status */
-.xcard.status { width: 268px; }
-.st-row { display: flex; align-items: center; gap: 10px; padding: 7px 13px; cursor: pointer; }
-.st-row .sti { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
-.st-row .sti svg { width: 17px; height: 17px; }
-.st-row .stl { font-size: 13px; opacity: 0.7; }
-.st-row .stv { font-size: 15px; font-weight: 500; line-height: 1.25; word-break: break-word; }
-.st-row.ok .sti { background: #34C759; } .st-row.warn .sti { background: #FF9F0A; } .st-row.bad .sti { background: #FF3B30; } .st-row.info .sti { background: #5E5CE6; }
-
-/* Shared Timer */
-.xcard.timer { width: 248px; }
-.tm-top { display: flex; align-items: center; gap: 12px; padding: 12px 13px 10px; }
-.tm-ring { width: 54px; height: 54px; flex-shrink: 0; transform: rotate(-90deg); }
-.tm-ring circle { fill: none; stroke-width: 4.5; stroke-linecap: round; }
-.tm-ring .bg { stroke: color-mix(in srgb, currentColor 16%, transparent); }
-.tm-ring .fg { stroke: #FF9F0A; transition: stroke-dashoffset 0.95s linear; }
-.timer.done .tm-ring .fg { stroke: #34C759; } .timer.cancelled .tm-ring .fg { stroke: #8E8E93; }
-.tm-left { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.1; }
-.tm-lab { font-size: 14px; opacity: 0.75; margin-top: 2px; word-break: break-word; }
-
-/* Games */
-.xcard.game { width: 268px; }
-.g-who { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 13px; opacity: 0.8; padding: 0 13px 6px; }
-.g-who span { display: inline-flex; align-items: center; gap: 5px; }
-.g-who i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
-.g-who svg { width: 13px; height: 13px; }
-.g-ttt { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; padding: 4px 22px 12px; }
-.g-ttt button { aspect-ratio: 1; border-radius: 12px; background: color-mix(in srgb, currentColor 10%, transparent); display: flex; align-items: center; justify-content: center; }
-.g-ttt button svg { width: 62%; height: 62%; }
-.g-ttt button .gx { color: #FF453A; } .g-ttt button .go { color: #0A84FF; }
-.g-ttt button.win { background: color-mix(in srgb, #34C759 30%, transparent); }
-.g-ttt button.last span { animation: g-pop 0.35s cubic-bezier(.2,1.6,.4,1); }
-.g-ttt span { display: flex; width: 100%; height: 100%; align-items: center; justify-content: center; }
-@keyframes g-pop { from { transform: scale(0.2); opacity: 0; } to { transform: none; opacity: 1; } }
-.g-c4 { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 4px 12px 12px; padding: 6px; border-radius: 12px; background: #1E5BD6; }
-.g-c4 button { display: grid; grid-template-rows: repeat(6, 1fr); gap: 4px; padding: 0; border-radius: 8px; }
-.g-c4 button:not([disabled]):active { background: rgba(255,255,255,0.12); }
-.g-c4 .d { aspect-ratio: 1; border-radius: 50%; background: rgba(0,0,0,0.35); box-shadow: inset 0 2px 3px rgba(0,0,0,0.35); }
-.g-c4 .d.p1 { background: radial-gradient(circle at 35% 30%, #FF8A80, #E53935 60%, #B71C1C); box-shadow: none; }
-.g-c4 .d.p2 { background: radial-gradient(circle at 35% 30%, #FFF59D, #FDD835 60%, #F9A825); box-shadow: none; }
-.g-c4 .d.win { outline: 2.5px solid #fff; outline-offset: -2px; }
-.g-c4 .d.last { animation: g-drop 0.45s cubic-bezier(.4,0,.7,1.4); }
-@keyframes g-drop { from { transform: translateY(-160px); } to { transform: none; } }
-.gpick { display: flex; flex-direction: column; gap: 10px; }
-.gpick button { width: 100%; display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 16px; background: var(--cm-fill); text-align: left; color: var(--cm-text); }
-.gpick .gpi { width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
-.gpick .gpi svg { width: 26px; height: 26px; }
-.gpick .gpn { font-size: 16px; font-weight: 600; } .gpick .gps { font-size: 13px; color: var(--cm-text2); margin-top: 2px; }
-.tm-custom { display: flex; gap: 8px; margin-top: 10px; }
-.tm-custom[hidden] { display: none; }
-.tm-custom label { flex: 1; display: flex; align-items: center; gap: 6px; background: var(--cm-fill); border-radius: 12px; padding: 0 12px; height: 46px; color: var(--cm-text2); font-size: 15px; }
-.tm-custom input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--cm-text); font-size: 17px; text-align: right; }
-
-/* ── Reversi, Draughts and Sea Battle ── */
-.xcard.game.big { width: 276px; }
-.g-note { text-align: center; font-size: 12.5px; opacity: 0.75; padding: 0 12px 6px; margin-top: -2px; }
-.g-who .rd, .g-who .pc { width: 12px; height: 12px; }
-.g-rev { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin: 4px 10px 12px; padding: 4px; border-radius: 10px; background: #145a32; box-shadow: inset 0 0 0 2px #0d3d22; }
-.g-rev button { aspect-ratio: 1; padding: 0; border-radius: 3px; background: #1e8a4c; display: flex; align-items: center; justify-content: center; }
-.g-rev button.ok:active { background: #27a85d; }
-.rd { display: block; width: 84%; height: 84%; border-radius: 50%; }
-.rd.d1 { background: radial-gradient(circle at 35% 30%, #5a5a5e, #111 70%); box-shadow: 0 1px 2px rgba(0,0,0,0.5); }
-.rd.d2 { background: radial-gradient(circle at 35% 30%, #fff, #d9d9de 70%); box-shadow: 0 1px 2px rgba(0,0,0,0.45); }
-.g-rev .hint { width: 26%; height: 26%; border-radius: 50%; background: rgba(0,0,0,0.28); }
-.g-rev .rd.last { animation: g-pop 0.35s cubic-bezier(.2,1.6,.4,1); }
-.g-rev .rd.flip { animation: g-flip 0.5s ease; }
-@keyframes g-flip { 0% { transform: scaleX(1); } 50% { transform: scaleX(0.05); } 100% { transform: scaleX(1); } }
-.g-dr { display: grid; grid-template-columns: repeat(8, 1fr); margin: 4px 10px 12px; border-radius: 6px; overflow: hidden; box-shadow: 0 0 0 3px #5b3a1e; }
-.g-dr > * { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; }
-.g-dr .lt { background: #f0d9b5; }
-.g-dr .dk { padding: 0; border-radius: 0; background: #8b5a2b; }
-.g-dr .dk.trail { background: #a8743e; }
-.g-dr .dk.sel { background: #c9a227; }
-.g-dr .dk.tgt { background: #6f9a3a; }
-.g-dr .dk.tgt::after { content: ''; width: 30%; height: 30%; border-radius: 50%; background: rgba(255,255,255,0.55); }
-.pc { display: flex; align-items: center; justify-content: center; width: 70%; height: 70%; border-radius: 50%; }
-.pc.p0 { background: radial-gradient(circle at 35% 30%, #ff7a6b, #c0392b 60%, #7b1e14); box-shadow: 0 2px 2px rgba(0,0,0,0.45), inset 0 0 0 2px rgba(255,255,255,0.18); }
-.pc.p1 { background: radial-gradient(circle at 35% 30%, #fffdf4, #e8dcc0 60%, #b5a37a); box-shadow: 0 2px 2px rgba(0,0,0,0.45), inset 0 0 0 2px rgba(0,0,0,0.08); }
-.pc svg { width: 58%; height: 58%; }
-.pc.p0 svg { color: #ffd76a; } .pc.p1 svg { color: #9a6b10; }
-.g-dr .dk.can .pc { box-shadow: 0 0 0 2px #ffd60a, 0 2px 2px rgba(0,0,0,0.45); }
-.g-dr .pc.last { animation: g-pop 0.35s cubic-bezier(.2,1.6,.4,1); }
-.g-who .pc { display: inline-block; }
-.sea-l { font-size: 12px; font-weight: 600; opacity: 0.75; padding: 2px 12px 4px; }
-.g-sea { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; margin: 0 10px 10px; padding: 3px; border-radius: 8px; background: #0b3e8a; position: relative; }
-.g-sea > button, .g-sea > span { aspect-ratio: 1; padding: 0; border-radius: 3px; background: #1565c0; }
-.g-sea button:not([disabled]):active { background: #1e88e5; }
-.g-sea .sea-art { position: absolute; inset: 3px; width: calc(100% - 6px); height: calc(100% - 6px); pointer-events: none; overflow: visible; }
-.g-sea .sea-last { animation: g-fade 1.2s ease-out both; }
-@keyframes g-fade { from { opacity: 0; } 30% { opacity: 1; } }
-.g-sea.small { gap: 1px; padding: 2px; border-radius: 6px; margin: 0; width: 132px; }
-.g-sea.small > button, .g-sea.small > span { border-radius: 2px; }
-.g-sea.small .sea-art { inset: 2px; width: calc(100% - 4px); height: calc(100% - 4px); }
-.sea-roster { padding: 0 12px 12px; display: flex; flex-direction: column; gap: 6px; }
-.sr-row { display: flex; align-items: center; gap: 8px; }
-.sr-n { width: 64px; flex-shrink: 0; font-size: 12px; font-weight: 600; opacity: 0.75; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sr-ships { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-.sr-ship { position: relative; display: inline-flex; }
-.sr-ship svg { height: 11px; display: block; }
-.sr-ship.sunk { opacity: 0.35; }
-.sr-ship.sunk::after { content: ''; position: absolute; left: -2px; right: -2px; top: 50%; height: 1.5px; background: #ff453a; transform: rotate(-12deg); }
-.sea-own { display: flex; align-items: flex-end; gap: 10px; padding: 0 10px 10px; }
-.sea-own .sea-l { padding: 2px 0 4px; }
-.sea-move { flex: 1; padding: 9px 8px; border-radius: 12px; font-size: 13.5px; font-weight: 600; color: var(--cm-accent); background: color-mix(in srgb, currentColor 10%, transparent); }
-.sea-two { display: flex; gap: 8px; padding: 0 10px 10px; justify-content: center; }
-.sea-two .g-sea.small { width: 124px; }
-.sea-two .sea-l { padding: 2px 0 4px; }
-
-/* ── Archive, Remind Me, Location request ── */
-.arch-row { width: calc(100% - 20px); margin: 2px 10px 6px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--cm-fill2, var(--cm-fill)); color: var(--cm-text); text-align: left; font-size: 16px; }
-.arch-row .ai { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--cm-fill); color: var(--cm-text2); }
-.arch-row .ai svg { width: 18px; height: 18px; }
-.arch-row .al { flex: 1; font-weight: 600; }
-.arch-row .ac { color: var(--cm-text2); font-size: 15px; }
-.arch-row .ac b { color: #fff; background: var(--cm-accent); border-radius: 10px; padding: 1px 7px; font-size: 13px; }
-.arch-row > svg { width: 13px; height: 13px; color: var(--cm-text3, var(--cm-text2)); }
-.arch-note { margin: 0 16px 10px; font-size: 13px; line-height: 1.4; color: var(--cm-text2); text-align: center; }
-.arch-note button { display: block; margin: 6px auto 0; color: var(--cm-accent); font-size: 14px; font-weight: 600; }
-.pill.archback { padding: 0 14px 0 10px; gap: 2px; }
-.pill.archback svg { width: 18px; height: 18px; }
-.swipe-actions .arch { background: #8E8E93; }
-.remindmk { display: inline-flex; align-items: center; gap: 4px; margin: 2px 6px 0; font-size: 11.5px; font-weight: 600; color: var(--cm-accent); }
-.remindmk svg { width: 13px; height: 13px; }
-.remtag { color: var(--cm-accent); font-weight: 600; }
-.remtag::before { content: '⏰ '; }
-.xcard.lqcard { width: 260px; }
-.xcard.ringcard { width: 260px; }
-.xcard.ringcard .xh svg { color: #F0480F; }
-.xcard.ringcard.on .xh svg { animation: cm-ring-shake 1s ease-in-out infinite; transform-origin: 50% 50%; }
-@keyframes cm-ring-shake { 0%, 50%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-14deg); } 20%, 40% { transform: rotate(14deg); } }
-@media (prefers-reduced-motion: reduce) { .xcard.ringcard.on .xh svg { animation: none; } }
-.xcard.lqcard .xh svg { color: #FF453A; }
-.xbtns button.bold { font-weight: 700; }
-`;
 
 Object.assign(CrowMessengerCard.prototype, {
 
@@ -9104,202 +9397,17 @@ Object.assign(CrowMessengerCard.prototype, {
   },
 
   // ── Games ────────────────────────────────────────────────────────────────
-  _openGames(tid, composer) {
-    const sh = this._xsheet({
-      title: 'Games',
-      body: `<div class="gpick">${GAMES.map(g => `<button data-g="${g.id}"><span class="gpi" style="background:${g.bg}">${PICON[g.icon || (g.id === 'ttt' ? 'x' : 'o')]}</span><span><div class="gpn">${esc(g.name)}</div><div class="gps">${esc(g.sub)}</div></span></button>`).join('')}</div>
-        <div class="xnote">Home Assistant keeps the game, so you can take turns whenever you like. It lets the other person know when it’s their turn.</div>`,
-    });
-    sh.el.querySelector('.gpick').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-g]'); if (!b) return;
-      const g = GAMES.find(x => x.id === b.dataset.g);
-      sh.close();
-      this._stageApp(composer, tid, 'games', { extra: { type: 'game', game: { kind: g.id } }, label: g.name, sub: g.sub });
-    });
-  },
-  _gameHtml(m) {
-    const g = m.game || {}, me = this._s.me;
-    const nm = (u) => (u === me ? 'You' : this._nameIn(m.thread_id, u, true));
-    if (g.kind === 'word') {
-      return `<div class="xcard game" data-x="game"><div class="xh">${PICON.games}Word Game</div><div class="xs" style="padding-top:2px">This game is no longer available.</div></div>`;
-    }
-    const players = g.players || [], over = g.winner !== null && g.winner !== undefined;
-    const tp = players[g.turn];
-    const mine = !over && (tp === me || (tp == null && g.turn === 1 && players[0] !== me));
-    const status = over ? (g.winner === 'draw' ? 'It’s a draw' : players[g.winner] === me && players[0] !== players[1] ? 'You won! 🎉' : `${esc(nm(players[g.winner]))} won${players[0] === players[1] ? '' : ' 🎉'}`)
-      : mine ? 'Your turn' : tp ? `${esc(nm(tp))}’s turn` : 'Waiting for someone to play';
-    const board = g.board || [], line = g.line || [];
-    const who = (i) => players[i] ? esc(nm(players[i])) : 'Anyone';
-    if (g.kind === 'rev' || g.kind === 'dr' || g.kind === 'sea') return this._bigGameHtml(m, g, { mine, over, status, who, nm });
-    let grid, legend;
-    if (g.kind === 'ttt') {
-      legend = `<span><span class="gx" style="color:#FF453A">${PICON.x}</span>${who(0)}</span><span><span style="color:#0A84FF">${PICON.o}</span>${who(1)}</span>`;
-      grid = `<div class="g-ttt">${board.map((v, i) => `<button class="${line.includes(i) ? 'win' : ''}${i === g.last ? ' last' : ''}" data-x="gmove" data-mv="${i}"${mine && !v ? '' : ' disabled'}>${v ? `<span class="${v === 1 ? 'gx' : 'go'}">${v === 1 ? PICON.x : PICON.o}</span>` : ''}</button>`).join('')}</div>`;
-    } else {
-      legend = `<span><i style="background:#E53935"></i>${who(0)}</span><span><i style="background:#FDD835"></i>${who(1)}</span>`;
-      const cols = [];
-      for (let c = 0; c < 7; c++) {
-        const full = !!board[c];
-        cols.push(`<button data-x="gmove" data-mv="${c}" aria-label="Column ${c + 1}"${mine && !full ? '' : ' disabled'}>${[0, 1, 2, 3, 4, 5].map(r => { const i = r * 7 + c, v = board[i]; return `<span class="d${v ? ` p${v}` : ''}${line.includes(i) ? ' win' : ''}${i === g.last && m.id === this._gameNew ? ' last' : ''}"></span>`; }).join('')}</button>`);
-      }
-      grid = `<div class="g-c4">${cols.join('')}</div>`;
-    }
-    return `<div class="xcard game" data-x="game"><div class="xh">${PICON.games}${esc(GAME_NAME[g.kind] || 'Game')}</div>
-      <div class="xt" style="text-align:center">${status}</div>
-      <div class="g-who">${legend}</div>${grid}
-      ${over ? '<div class="xbtns"><button data-x="gagain">Play Again</button></div>' : ''}</div>`;
-  },
+  
+  
 
   // clicks on the new cards (from _moreClick)
-  async _playClick(kind, x, tid, m) {
-    if (kind === 'strow') { this.dispatchEvent(new CustomEvent('hass-more-info', { bubbles: true, composed: true, detail: { entityId: x.dataset.eid } })); return; }
-    if (kind === 'stlock' || kind === 'stlights') {
-      const h = this._homeStatus(), lock = kind === 'stlock', ids = (lock ? h.unlocked : h.lights).map(e => e.entity_id);
-      if (!ids.length) return;
-      const r = await this._alert({ title: lock ? `Lock ${ids.length === 1 ? (h.unlocked[0].attributes.friendly_name || 'it') : `All ${ids.length}`}?` : `Turn Off ${ids.length} Light${ids.length === 1 ? '' : 's'}?`,
-        buttons: [{ text: lock ? 'Lock' : 'Turn Off', style: 'ok', value: true }, { text: 'Cancel', style: 'cancel' }] });
-      if (!r.value) return;
-      await this._hass.callService(lock ? 'lock' : 'light', lock ? 'lock' : 'turn_off', { entity_id: ids });
-      this._toast(lock ? 'Locking…' : 'Turning off…');
-      return;
-    }
-    if (kind === 'tmadd') { await this._ws('timer', { thread_id: tid, message_id: m.id, action: 'add', minutes: 1 }); return; }
-    if (kind === 'tmcancel') {
-      const r = await this._alert({ title: 'Cancel Timer?', message: 'It stops for everyone in the conversation.', buttons: [{ text: 'Cancel Timer', style: 'destructive', value: true }, { text: 'Keep', style: 'cancel' }] });
-      if (r.value) await this._ws('timer', { thread_id: tid, message_id: m.id, action: 'cancel' });
-      return;
-    }
-    if (kind === 'gmove') { this._gameNew = m.id; await this._ws('game/move', { thread_id: tid, message_id: m.id, move: +x.dataset.mv }); return; }
-    if (kind === 'gagain') { await this._sendMessage(tid, '', [], { type: 'game', game: { kind: m.game?.kind || 'ttt' } }); }
-    if (kind === 'gdr') { await this._draughtsTap(x, tid, m); return; }
-    if (kind === 'gshuffle') {
-      const r = await this._ws('game/shuffle', { thread_id: tid, message_id: m.id });
-      this._fleets.set(`${m.id}:${r.side}`, r);
-      this._refresh('messages', tid, true);
-    }
-  },
+  
 
   // ── Reversi, Draughts and Sea Battle boards ──────────────────────────────
-  _bigGameHtml(m, g, { mine, over, status, who, nm }) {
-    const me = this._s.me, players = g.players || [], solo = players[0] && players[0] === players[1];
-    const head = (extra = '') => `<div class="xcard game big gk-${g.kind}" data-x="game"><div class="xh">${PICON.games}${esc(GAME_NAME[g.kind])}</div>
-      <div class="xt" style="text-align:center">${status}</div>${extra}`;
-    const foot = `${over ? '<div class="xbtns"><button data-x="gagain">Play Again</button></div>' : ''}</div>`;
-    const b = g.board || [];
-    if (g.kind === 'rev') {
-      const sc = g.score || [b.filter(v => v === 1).length, b.filter(v => v === 2).length];
-      const note = g.passed != null && !over ? `<div class="g-note">${esc(players[g.passed] === me ? 'You' : nm(players[g.passed]) || 'They')} had no moves, so ${players[g.turn] === me ? 'you go' : `${esc(nm(players[g.turn]))} goes`} again</div>` : '';
-      const legend = `<div class="g-who"><span><i class="rd d1"></i>${who(0)} ${sc[0]}</span><span><i class="rd d2"></i>${who(1)} ${sc[1]}</span></div>`;
-      const fresh = m.id === this._gameNew, flipped = new Set(fresh ? g.flipped || [] : []);
-      const cells = b.map((v, i) => {
-        const legal = mine && !v && revFlips(b, i, g.turn + 1).length;
-        return `<button data-x="gmove" data-mv="${i}"${legal ? ' class="ok"' : ' disabled'} aria-label="Square ${i + 1}">${v ? `<span class="rd d${v}${i === g.last ? ' last' : ''}${flipped.has(i) ? ' flip' : ''}"></span>` : legal ? '<span class="hint"></span>' : ''}</button>`;
-      }).join('');
-      return head(legend + note) + `<div class="g-rev">${cells}</div>` + foot;
-    }
-    if (g.kind === 'dr') {
-      // you always see your own pieces at the bottom
-      const flip = !solo && players[1] === me;
-      const cnt = g.count || [12, 12];
-      const legal = mine ? drMoves(b, g.turn) : [];
-      const must = legal.some(x => x.taken.length);
-      const trail = new Set(g.path || []);
-      const legend = `<div class="g-who"><span><i class="pc p0"></i>${who(0)} ${cnt[0]}</span><span><i class="pc p1"></i>${who(1)} ${cnt[1]}</span></div>`;
-      let cells = '';
-      for (let k = 0; k < 64; k++) {
-        const i = flip ? 63 - k : k, r = Math.floor(i / 8), c = i % 8, v = b[i];
-        if ((r + c) % 2 === 0) { cells += '<span class="lt"></span>'; continue; }
-        const can = legal.some(x => x.path[0] === i);
-        cells += `<button data-x="gdr" data-sq="${i}" class="dk${trail.has(i) ? ' trail' : ''}${can ? ' can' : ''}"${mine ? '' : ' disabled'}>${v ? `<span class="pc p${drOwner(v)}${v >= 3 ? ' king' : ''}${i === g.last && m.id === this._gameNew ? ' last' : ''}">${v >= 3 ? PICON.crown : ''}</span>` : ''}</button>`;
-      }
-      return head(legend + (mine && must ? '<div class="g-note">You have to take a piece</div>' : '')) + `<div class="g-dr">${cells}</div>` + foot;
-    }
-    // Sea Battle
-    // in a group, whoever fires second joins as the other player
-    const side = solo ? g.turn : players[0] === me ? 0 : players[1] === me ? 1 : players[1] == null && !over ? 1 : null;
-    const shots = g.shots || [[], []], sunk = g.sunk || [[], []], left = (k) => 5 - (sunk[k] || []).length;
-    let fleet = null;
-    if (g.reveal) fleet = null;
-    else if (side != null) {
-      const key = `${m.id}:${side}`, f = this._fleets.get(key);
-      if (f) fleet = f.fleet;
-      else if (!this._fleetAsk.has(key)) {
-        this._fleetAsk.add(key);
-        this._ws('game/fleet', { thread_id: m.thread_id, message_id: m.id })
-          .then(r => { if (r?.fleet) { this._fleets.set(key, r); this._refresh('messages', m.thread_id, true); } })
-          .catch(() => {}).finally(() => setTimeout(() => this._fleetAsk.delete(key), 5000));
-      }
-    }
-    const grid = (k, { fire = false, small = false } = {}) => {
-      const sh = shots[k] || [], wrecks = sunk[k] || [];
-      const sunkCells = new Set(wrecks.flat());
-      // your own ships (or everyone's once the game's over), minus any that have gone down
-      const whole = (g.reveal ? g.reveal[k] : k === side ? fleet : null) || [];
-      const ships = whole.map((cells, j) => [cells, SEA_SHIPS[j]?.[0]]).filter(([cells]) => !cells.every(c => sunkCells.has(c)));
-      const kinds = seaKinds(wrecks);
-      const art = ships.map(([cells, kind]) => seaShip(cells, kind, { ghost: !!g.reveal && k !== side })).join('')
-        + wrecks.map((cells, j) => seaShip(cells, kinds[j], { wreck: true })).join('')
-        + sh.map((v, i) => (v || (g.last === i && g.last_board === k) ? seaMark(i, v, g.last === i && g.last_board === k) : '')).join('');
-      const cells = Array.from({ length: 64 }, (_, i) => {
-        const v = sh[i] || 0, name = `${'ABCDEFGH'[i % 8]}${Math.floor(i / 8) + 1}`;
-        return fire && !v ? `<button data-x="gmove" data-mv="${i}" aria-label="Fire at ${name}"${mine ? '' : ' disabled'}></button>`
-          : `<span aria-label="${name}${v === 1 ? ' miss' : v === 2 ? ' hit' : v === 3 ? ' sunk' : ''}"></span>`;
-      }).join('');
-      return `<div class="g-sea${small ? ' small' : ''}">${cells}<svg class="sea-art" viewBox="0 0 8 8" preserveAspectRatio="none" aria-hidden="true">${art}</svg></div>`;
-    };
-    // the five ships on each side, crossed out as they're sunk
-    const roster = (k, label) => {
-      const gone = seaKinds(sunk[k] || []);
-      const marks = SEA_SHIPS.map(([nm, n]) => {
-        const i = gone.indexOf(nm); if (i >= 0) gone[i] = null;
-        return `<span class="sr-ship${i >= 0 ? ' sunk' : ''}" title="${nm}${i >= 0 ? ' (sunk)' : ''}"><svg viewBox="0 0 ${n} 1" style="width:${n * 11}px">${seaHull(n, nm, false)}</svg></span>`;
-      }).join('');
-      return `<div class="sr-row"><span class="sr-n">${label}</span><span class="sr-ships">${marks}</span></div>`;
-    };
-    const lastLine = (() => {
-      if (g.last == null || !g.result) return '';
-      const shooter = 1 - g.last_board, by = players[shooter] === me && !solo ? 'You' : esc(nm(players[shooter]) || 'They');
-      const at = side != null && !solo && g.last_board === side ? 'your' : 'a';
-      return `<div class="g-note">${by} ${g.result === 'miss' ? 'missed' : g.result === 'hit' ? `hit ${at} ship` : `sank ${at} ship`}${g.result === 'miss' ? '' : '!'}</div>`;
-    })();
-    if (side == null) {
-      return head(lastLine) + `<div class="sea-two"><div><div class="sea-l">${who(0)} · ${left(0)} left</div>${grid(0, { small: true })}</div><div><div class="sea-l">${who(1)} · ${left(1)} left</div>${grid(1, { small: true })}</div></div>`
-        + `<div class="sea-roster">${roster(0, who(0))}${roster(1, who(1))}</div>` + foot;
-    }
-    const opp = 1 - side, oppName = solo ? (side === 0 ? 'Fleet 2' : 'Fleet 1') : who(opp);
-    const canShuffle = !over && !(shots[side] || []).some(Boolean);
-    return head(lastLine)
-      + `<div class="sea-l">${oppName}’s waters · ${left(opp)} ship${left(opp) === 1 ? '' : 's'} left</div>${grid(opp, { fire: !over })}`
-      + `<div class="sea-own"><div><div class="sea-l">Your fleet · ${left(side)} left</div>${grid(side, { small: true })}</div>`
-      + `${canShuffle ? '<button class="sea-move" data-x="gshuffle">Move My Ships</button>' : ''}</div>`
-      + `<div class="sea-roster">${roster(opp, oppName)}${roster(side, 'You')}</div>` + foot;
-  },
+  
 
   // Draughts: tap one of your pieces, then where it goes (a capture takes the whole jump)
-  async _draughtsTap(x, tid, m) {
-    const g = m.game || {}, sq = +x.dataset.sq, card = x.closest('.xcard');
-    const legal = drMoves(g.board || [], g.turn);
-    const sel = this._drSel?.mid === m.id ? this._drSel.from : null;
-    const clear = () => { card.querySelectorAll('.sel,.tgt').forEach(e => e.classList.remove('sel', 'tgt')); this._drSel = null; };
-    if (sel != null) {
-      const opts = legal.filter(mv => mv.path[0] === sel && mv.path[mv.path.length - 1] === sq).sort((a, b) => b.taken.length - a.taken.length);
-      if (opts.length) {
-        clear();
-        this._gameNew = m.id;
-        await this._ws('game/move', { thread_id: tid, message_id: m.id, move: opts[0].path });
-        return;
-      }
-    }
-    clear();
-    const from = legal.filter(mv => mv.path[0] === sq);
-    if (!from.length) {
-      if (drOwner((g.board || [])[sq]) === g.turn) this._toast(legal.some(mv => mv.taken.length) ? 'You have to take a piece' : 'That piece can’t move');
-      return;
-    }
-    this._drSel = { mid: m.id, from: sq };
-    x.classList.add('sel');
-    from.forEach(mv => card.querySelector(`[data-sq="${mv.path[mv.path.length - 1]}"]`)?.classList.add('tgt'));
-  },
+  
 });
 
 // ── WhatsApp / Messenger / Apple extras: in the conversation ─────────────────
@@ -9307,7 +9415,7 @@ Object.assign(CrowMessengerCard.prototype, {
 // forwarded & starred marks, pinned messages, nicknames, Focus, activity
 // status, birthday nudges, drafts, and the pages for photos/links/files,
 // starred messages and searching a conversation.
-const MORE_TYPES = new Set(['location', 'checklist', 'event', 'contact', 'timer', 'game', 'status', 'locreq', 'ring']);
+const MORE_TYPES = new Set(['location', 'checklist', 'event', 'contact', 'timer', 'game', 'status', 'locreq', 'ring', 'post']);
 const MUTE_OPTS = [{ m: 60, name: 'For 1 Hour' }, { m: 480, name: 'For 8 Hours' }, { m: 10080, name: 'For 1 Week' }, { m: 0, name: 'Always' }];
 const QUICK_EMOJI = ['👍', '❤️', '😂', '🔥', '🙏', '🎉', '👋', '😍'];
 const MICON = {
@@ -9347,6 +9455,7 @@ Object.assign(CrowMessengerCard.prototype, {
     if (m.type === 'checklist') return this._checklistHtml(m);
     if (m.type === 'event') return this._eventHtml(m);
     if (m.type === 'contact') return this._contactCardHtml(m);
+    if (m.type === 'post') return this._postCardHtml(m);
     if (m.type === 'timer') return this._timerHtml(m);
     if (m.type === 'game') return this._gameHtml(m);
     if (m.type === 'status') return this._statusHtml(m);
@@ -9429,6 +9538,18 @@ Object.assign(CrowMessengerCard.prototype, {
     return `<div class="xcard contactc" data-x="contactc">
       <div class="ct-top">${this._avHtml({ pic: c.photo, name, size: 44 })}<div style="min-width:0;flex:1"><div class="cn">${esc(name)}</div>${sub ? `<div class="cs">${esc(sub)}</div>` : ''}</div><span class="gch" style="width:13px;height:13px;opacity:.4">${ICON.chevR}</span></div>
       <div class="xbtns"><button data-x="ctadd">${this._sameContact(c) ? 'View Contact' : 'Add to Contacts'}</button></div></div>`;
+  },
+
+  // a Feed post sent into the chat: who posted it, a line of it and its first photo; tap to open it
+  _postCardHtml(m) {
+    const p = m.post || {};
+    const t = p.thumb_att;
+    // a video without a still has no picture here (rather than downloading the whole video for one)
+    const pic = t && !t.removed && (t.has_thumb || !(t.mime || '').startsWith('video/')) ? `<div class="pc-pic"><img data-att="${esc(t.id)}" data-thumb="${t.has_thumb ? 1 : 0}" alt="" draggable="false">${(t.mime || '').startsWith('video/') ? `<span class="pc-play">${ICON.play}</span>` : ''}</div>` : '';
+    const who = p.author === HA_ID ? 'Home Assistant' : this._userName(p.author);
+    return `<div class="xcard postc" data-x="postopen" data-pid="${esc(p.id || '')}">${pic}
+      <div class="pc-b"><div class="pc-h">${this._userAv(p.author, 26)}<span class="pc-n">${esc(who)}</span><span class="pc-f">${FEED_ICON}Feed</span></div>
+      <div class="pc-t">${p.available === false ? '<i>This post isn’t available any more</i>' : esc(p.text || '')}</div></div></div>`;
   },
 
   _sameContact(c) {
@@ -9576,6 +9697,7 @@ Object.assign(CrowMessengerCard.prototype, {
     const x = e.target.closest('[data-x]');
     if (!x) return false;
     const kind = x.dataset.x;
+    if (kind === 'postopen') { if (x.dataset.pid) this._openFeed('fpost', { pid: x.dataset.pid }); return true; }
     const known = ['callback', 'locopen', 'locmaps', 'locstop', 'loczone', 'strow', 'stlock', 'stlights', 'tmadd', 'tmcancel', 'gmove', 'gagain', 'gdr', 'gshuffle', 'remchip', 'lqshare', 'lqno', 'ringok', 'ringstop', 'clt', 'clrm', 'cladd', 'rsvp', 'evcal', 'evmaps', 'evcheckin', 'ctadd', 'voopen', 'vomine', 'pinjump', 'anyway', 'bday', 'bdayx'];
     if (!known.includes(kind)) return false;
     const s = this._s;
@@ -9754,7 +9876,8 @@ Object.assign(CrowMessengerCard.prototype, {
     const s = this._s;
     const chosen = new Set();
     const many = Array.isArray(m) ? m : [m];
-    const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => b.updated_at - a.updated_at);
+    const favs = this._favUids();
+    const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => (this._threadFav(b, favs) - this._threadFav(a, favs)) || (b.updated_at - a.updated_at));
     const sh = this._xsheet({
       title: many.length > 1 ? `Forward ${many.length} Messages` : 'Forward', action: 'Send',
       body: `<input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>`,
@@ -9786,10 +9909,11 @@ Object.assign(CrowMessengerCard.prototype, {
     try { item = (await this._ws('share/get', { share_id: sid })).share; } catch (err) { this._toast(err?.message || 'That shared link has expired'); return; }
     const chosen = new Set();
     const me = s.me;
-    const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => (b.pinned - a.pinned) || (b.updated_at - a.updated_at));
+    const favs = this._favUids();
+    const threads = [...s.threads.values()].filter(t => t.visible !== false).sort((a, b) => (this._threadFav(b, favs) - this._threadFav(a, favs)) || (b.pinned - a.pinned) || (b.updated_at - a.updated_at));
     // people you don't have a one-to-one chat with yet
     const solo = new Set(threads.filter(t => !t.is_group && t.participants.length === 2).map(t => t.participants.find(p => p !== me)));
-    const people = [...s.users.values()].filter(u => u.id !== me && !solo.has(u.id)).sort((a, b) => this._userName(a.id).localeCompare(this._userName(b.id)));
+    const people = [...s.users.values()].filter(u => u.id !== me && !solo.has(u.id)).sort((a, b) => (favs.has(b.id) - favs.has(a.id)) || this._userName(a.id).localeCompare(this._userName(b.id)));
     const p = item.preview || {};
     const card = item.url
       ? `<div class="linkc shr-card">${p.image ? `<img src="${esc(p.image)}" alt="" draggable="false">` : ''}<div class="lt">${esc(p.title || item.title || item.url)}</div><div class="ls">${esc(p.site || item.url)}</div></div>`
@@ -9799,6 +9923,7 @@ Object.assign(CrowMessengerCard.prototype, {
     const sh = this._xsheet({
       title: 'Send To', action: 'Send',
       body: `${card}<textarea class="xfield shr-c" rows="2" maxlength="2000" placeholder="Add a comment" autocapitalize="sentences"></textarea>
+        ${s.feed?.enabled ? `<button class="shr-feed">${FEED_ICON}<span>Post on a Page instead</span></button>` : ''}
         <input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>
         <button class="shr-discard">Discard</button>`,
       onAction: async () => {
@@ -9831,6 +9956,12 @@ Object.assign(CrowMessengerCard.prototype, {
     };
     q.addEventListener('input', render);
     list.addEventListener('click', (e) => { const r = e.target.closest('[data-t]'); if (!r) return; chosen.has(r.dataset.t) ? chosen.delete(r.dataset.t) : chosen.add(r.dataset.t); render(); });
+    sh.el.querySelector('.shr-feed')?.addEventListener('click', async () => {
+      const comment = sh.el.querySelector('.shr-c').value.trim();
+      sh.close();
+      const pg = await this._openFeed('fcompose', { share: sid, comment });
+      if (!pg) this._toast('Couldn’t open the Feed');
+    });
     sh.el.querySelector('.shr-discard').addEventListener('click', () => {
       this._ws('share/done', { share_id: sid }).catch(() => {});
       sh.close();
@@ -10295,7 +10426,7 @@ Object.assign(CrowMessengerCard.prototype, {
       // Ask sits next to All, so it's in view without scrolling the chips
       const list = canAsk() ? [KINDS[0], ['ask', 'Ask'], ...KINDS.slice(1)] : KINDS;
       if (kind === 'ask' && !canAsk()) kind = '';
-      this._set(chips, list.map(([v, n]) => `<button data-k="${v}" class="${v === kind ? 'on' : ''}${v === 'ask' ? ' ask-chip' : ''}">${v === 'ask' ? `<span class="ask-sp">${ICON.askSearch}</span>` : ''}${n}</button>`).join(''));
+      this._set(chips, list.map(([v, n]) => `<button data-k="${v}" class="${v === kind ? 'on' : ''}${v === 'ask' ? ' ask-chip' : ''}">${v === 'ask' ? `<span class="ask-sp">${ICON.ai}</span>` : ''}${n}</button>`).join(''));
       q.placeholder = canAsk() ? (kind === 'ask' ? 'Ask about this chat' : 'Search or ask about this chat') : 'Search this conversation';
       q.setAttribute('enterkeyhint', kind === 'ask' ? 'go' : 'search');
     };
@@ -10305,18 +10436,18 @@ Object.assign(CrowMessengerCard.prototype, {
       if (!question) return;
       asked = question;
       const my = ++seq;
-      slot.innerHTML = `<div class="ask-card g"><div class="cu-h"><span class="ask-sp">${ICON.askSearch}</span><b>Ask</b></div><div class="ask-q">${esc(question)}</div><div class="cu-text cu-wait">Looking through this chat…</div></div>`;
+      slot.innerHTML = `<div class="ask-card g"><div class="cu-h"><span class="ask-sp">${ICON.ai}</span><b>Ask</b></div><div class="ask-q">${esc(question)}</div><div class="cu-text cu-wait">Looking through this chat…</div></div>`;
       try {
         const r = (await this._ws('ai', { action: 'ask', thread_id: tid, text: question })).result || {};
         if (my !== seq) return;
-        slot.innerHTML = `<div class="ask-card g"><div class="cu-h"><span class="ask-sp">${ICON.askSearch}</span><b>Ask</b><button class="ask-copy" data-a="askcopy" aria-label="Copy answer">${ICON.copy}</button></div>
+        slot.innerHTML = `<div class="ask-card g"><div class="cu-h"><span class="ask-sp">${ICON.ai}</span><b>Ask</b><button class="ask-copy" data-a="askcopy" aria-label="Copy answer">${ICON.copy}</button></div>
           <div class="ask-q">${esc(question)}</div><div class="cu-text ask-a${r.found === false ? ' none' : ''}">${esc(r.answer || '')}</div>
           ${(r.messages || []).length ? `<div class="ask-from">From the chat</div><div class="group ask-quotes">${quoteRows(r.messages)}</div>` : ''}
           <div class="ask-note">Answers come from this chat only, so check anything important.</div></div>`;
         slot.querySelector('.ask-card').dataset.answer = r.answer || '';
       } catch (err) {
         if (my !== seq) return;
-        slot.innerHTML = `<div class="ask-card g"><div class="cu-h"><span class="ask-sp">${ICON.askSearch}</span><b>Ask</b></div><div class="cu-text">${esc(this._aiError(err, 'Couldn’t answer that just now. Try again in a moment.'))}</div></div>`;
+        slot.innerHTML = `<div class="ask-card g"><div class="cu-h"><span class="ask-sp">${ICON.ai}</span><b>Ask</b></div><div class="cu-text">${esc(this._aiError(err, 'Couldn’t answer that just now. Try again in a moment.'))}</div></div>`;
       }
     };
     const run = async () => {
@@ -10330,7 +10461,7 @@ Object.assign(CrowMessengerCard.prototype, {
       if (asked !== t) slot.innerHTML = '';
       // a question gets an Ask row at the top of the results
       const offer = canAsk() && t.length > 3 && looksLikeQuestion(t) && asked !== t;
-      const offerHtml = offer ? `<button class="ask-offer g" data-a="askthis"><span class="ask-sp">${ICON.askSearch}</span><span class="ask-ot">Ask “${esc(t.length > 60 ? t.slice(0, 58) + '…' : t)}”</span>${ICON.chevR}</button>` : '';
+      const offerHtml = offer ? `<button class="ask-offer g" data-a="askthis"><span class="ask-sp">${ICON.ai}</span><span class="ask-ot">Ask “${esc(t.length > 60 ? t.slice(0, 58) + '…' : t)}”</span>${ICON.chevR}</button>` : '';
       if (!t && !kind) { res.innerHTML = offerHtml; return; }
       try {
         const r = await this._ws('search', { query: t, thread_id: tid, ...(kind ? { kind } : {}) });
@@ -10418,9 +10549,9 @@ Object.assign(CrowMessengerCard.prototype, {
   // ── Page: contacts list ────────────────────────────────────────────────────
   _pg_contacts() {
     const el = this._el(`<div>
-      <div class="scroll"><div class="ct-list"></div></div>
+      <div class="scroll"><div class="large-title ct-title">Contacts</div><div class="ct-list"></div></div>
       <div class="edge top"></div><div class="edge bottom"></div>
-      <div class="top"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><div class="title">Contacts</div>${this._config.show_people_map !== false ? `<div class="capsule g"><button data-a="people" aria-label="People">${FM_ICON.locate}</button><button data-a="more" aria-label="More">${ICON.more}</button></div>` : `<button class="cb g" data-a="more" aria-label="More">${ICON.more}</button>`}</div>
+      <div class="top">${this._appBarHtml('contacts')}<div class="title" style="opacity:0">Contacts</div>${this._config.show_people_map !== false ? `<div class="capsule g"><button data-a="people" aria-label="People">${FM_ICON.locate}</button><button data-a="more" aria-label="More">${ICON.more}</button></div>` : `<button class="cb g" data-a="more" aria-label="More">${ICON.more}</button>`}</div>
       <div class="az"></div>
       <div class="bottom">
         <label class="searchbar g">${ICON.search}<input type="text" placeholder="Search" autocomplete="off" enterkeyhint="search"><button class="sb-btn clr" hidden aria-label="Clear">${ICON.x}</button></label>
@@ -10431,6 +10562,7 @@ Object.assign(CrowMessengerCard.prototype, {
     const page = { el };
     const s = this._s;
     const listEl = el.querySelector('.ct-list'), scroll = el.querySelector('.scroll'), az = el.querySelector('.az');
+    scroll.addEventListener('scroll', () => { el.querySelector('.top .title').style.opacity = scroll.scrollTop > 44 ? '1' : '0'; }, { passive: true });
     const input = el.querySelector('.searchbar input'), clr = el.querySelector('.clr');
     input.addEventListener('input', () => { clr.hidden = !input.value; page.refresh('contacts'); });
     clr.addEventListener('click', (e) => { e.preventDefault(); input.value = ''; clr.hidden = true; page.refresh('contacts'); });
@@ -10493,9 +10625,43 @@ Object.assign(CrowMessengerCard.prototype, {
         else this._nav('contactEdit', { prefill: this._myPrefill(), myCard: true });
         return;
       }
+      const fv = e.target.closest('[data-fav]');
+      if (fv) {
+        if (fv._heldAt && Date.now() - fv._heldAt < 900) return;
+        const c = s.contacts.get(fv.dataset.fav);
+        if (!c) return;
+        if (c.ha_user && s.users.has(c.ha_user) && c.ha_user !== s.me) this._messageUser(c.ha_user);
+        else this._nav('contact', { cid: c.id });
+        return;
+      }
       const row = e.target.closest('.ct-row');
       if (row) this._nav('contact', { cid: row.dataset.cid });
     });
+    // press and hold a favourite: Message, Call or Contact Card
+    {
+      let timer = null;
+      const favMenu = async (fv) => {
+        fv._heldAt = Date.now();
+        const c = s.contacts.get(fv.dataset.fav);
+        if (!c) return;
+        const canMsg = c.ha_user && s.users.has(c.ha_user) && c.ha_user !== s.me;
+        const v = await this._menu(fv, [
+          ...(canMsg ? [{ text: 'Message', value: 'msg', icon: ICON.bubble }] : c.phones?.length ? [{ text: 'Text Message', value: 'sms', icon: ICON.bubble }] : []),
+          ...(c.phones?.length ? [{ text: 'Call', value: 'call', icon: ICON.phone }] : []),
+          { text: 'Contact Card', value: 'card', icon: ICON.contacts },
+          { sep: true }, { text: 'Remove from Favourites', value: 'unfav', icon: MICON.star },
+        ]);
+        if (v === 'msg') this._messageUser(c.ha_user);
+        else if (v === 'sms') this._pickThen(fv, c.phones, (ph) => this._confirmContactAction('sms', ph, c));
+        else if (v === 'call') this._pickThen(fv, c.phones, (ph) => this._confirmContactAction('phones', ph, c));
+        else if (v === 'card') this._nav('contact', { cid: c.id });
+        else if (v === 'unfav') this._ws('contacts/save', { contacts: [{ ...c, favourite: false }] }).then(r => { r.contacts?.forEach(x => s.contacts.set(x.id, x)); this._refresh('contacts'); }).catch(err => this._toast(err.message));
+      };
+      listEl.addEventListener('pointerdown', (e) => { const fv = e.target.closest('[data-fav]'); if (!fv || e.button > 0) return; clearTimeout(timer); timer = setTimeout(() => favMenu(fv), 480); });
+      ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => listEl.addEventListener(ev, () => clearTimeout(timer)));
+      listEl.addEventListener('pointermove', () => clearTimeout(timer), { passive: true });
+      listEl.addEventListener('contextmenu', (e) => { const fv = e.target.closest('[data-fav]'); if (fv) { e.preventDefault(); clearTimeout(timer); favMenu(fv); } });
+    }
 
     // A–Z index: tap or drag
     const jump = (x, y) => {
@@ -10509,6 +10675,7 @@ Object.assign(CrowMessengerCard.prototype, {
     az.addEventListener('pointermove', (e) => { if (e.buttons || e.pointerType === 'touch') jump(e.clientX, e.clientY); });
 
     page.refresh = (what) => {
+      if (what === 'feedcount' || what === 'all') this._appBarSync(el);
       if (!['all', 'contacts'].includes(what)) return;
       const q = input.value;
       const { list, order } = this._sortedContacts(q);
@@ -10518,6 +10685,11 @@ Object.assign(CrowMessengerCard.prototype, {
         const name = mc ? contactName(mc, this._config.contact_display) : (s.users.get(s.me)?.ha_name || s.users.get(s.me)?.name || 'My Card');
         const pic = mc?.photo || s.users.get(s.me)?.picture;
         html += `<div class="ct-me" data-a="me">${this._avHtml({ pic, name, size: 64 })}<div><div class="n">${esc(name)}</div><div class="s">My Card</div></div></div>`;
+      }
+      // your Favourites: tap to message, press and hold for more
+      const favs = !q ? [...s.contacts.values()].filter(c => c.favourite).sort((a, b) => contactName(a, this._config.contact_display).localeCompare(contactName(b, this._config.contact_display))) : [];
+      if (favs.length) {
+        html += `<div class="ct-favh">Favourites</div><div class="ct-favs">${favs.map(c => { const name = contactName(c, this._config.contact_display); return `<div class="ct-fav" data-fav="${esc(c.id)}" role="button" aria-label="${esc(name)}">${this._avHtml({ pic: this._contactPic(c), name, size: 60 })}<div class="n">${esc((c.first || name).split(' ')[0] || name)}</div></div>`; }).join('')}</div>`;
       }
       // Home Assistant is always there while its chat is on — built in, never saved, exported or edited
       const ql = q.trim().toLowerCase();
@@ -10550,6 +10722,92 @@ Object.assign(CrowMessengerCard.prototype, {
     try { const r = await this._ws('profile/set', patch); this._s.profile = r.profile; this._refresh('contacts'); } catch (err) { this._toast(err.message); }
   },
 
+  // ── Your photo: Move and Scale, then everywhere ───────────────────────────────
+  // Pick a part of a photo for a round picture. Resolves { photo (512px JPEG data URL), share } or null.
+  async _cropPhoto(file, { title = 'Move and Scale', feedShare = false, shareLabel = 'Share to Feed' } = {}) {
+    const url = URL.createObjectURL(file);
+    let img;
+    try { img = await loadImage(url); } catch (e) { URL.revokeObjectURL(url); this._toast('Couldn’t open that photo'); return null; }
+    return new Promise((resolve) => {
+      const wrap = this._el(`<div class="crop-wrap" role="dialog" aria-label="${esc(title)}">
+        <div class="crop-top"><button data-a="cancel">Cancel</button><div class="crop-t">${esc(title)}</div><button class="ok" data-a="ok">Choose</button></div>
+        <div class="crop-area"><div class="crop-stage"><img alt="" draggable="false"><div class="crop-mask"></div></div></div>
+        <div class="crop-foot"><div class="crop-hint">Drag to move · pinch or slide to zoom</div><input type="range" min="1" max="4" step="0.01" value="1" aria-label="Zoom">
+        ${feedShare ? `<label class="crop-share"><span>${esc(shareLabel)}</span><span class="tsw"><input type="checkbox" data-a="share"><span></span></span></label>` : ''}</div></div>`);
+      this._root.appendChild(wrap);
+      const stage = wrap.querySelector('.crop-stage'), im = stage.querySelector('img'), range = wrap.querySelector('input[type=range]');
+      im.src = url;
+      const W = img.naturalWidth, H = img.naturalHeight;
+      let S = 300, base = 1, z = 1, x = 0, y = 0;
+      const size = () => {
+        const area = wrap.querySelector('.crop-area').getBoundingClientRect();
+        S = Math.max(160, Math.min(area.width - 32, area.height - 32, 420));
+        stage.style.width = stage.style.height = `${S}px`;
+        base = S / Math.min(W, H);
+        paint();
+      };
+      const paint = () => {
+        const dw = W * base * z, dh = H * base * z;
+        x = clamp(x, -(dw - S) / 2, (dw - S) / 2); y = clamp(y, -(dh - S) / 2, (dh - S) / 2);
+        Object.assign(im.style, { width: `${dw}px`, height: `${dh}px`, left: `${S / 2 - dw / 2 + x}px`, top: `${S / 2 - dh / 2 + y}px` });
+      };
+      const zoomTo = (nz) => { const k = clamp(nz, 1, 4) / z; z *= k; x *= k; y *= k; range.value = String(z); paint(); };
+      const pts = new Map(); let pinch = null;
+      wrap.addEventListener('pointerdown', (e) => { if (e.target.closest('button, input, label')) return; pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); wrap.setPointerCapture?.(e.pointerId); if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), z }; } });
+      wrap.addEventListener('pointermove', (e) => {
+        const prev = pts.get(e.pointerId); if (!prev) return;
+        const cur = { x: e.clientX, y: e.clientY }; pts.set(e.pointerId, cur);
+        if (pts.size === 2 && pinch) { const [a, b] = [...pts.values()]; zoomTo(pinch.z * Math.hypot(a.x - b.x, a.y - b.y) / pinch.d); return; }
+        x += cur.x - prev.x; y += cur.y - prev.y; paint();
+      });
+      const up = (e) => { pts.delete(e.pointerId); if (pts.size < 2) pinch = null; };
+      wrap.addEventListener('pointerup', up); wrap.addEventListener('pointercancel', up);
+      wrap.addEventListener('wheel', (e) => { e.preventDefault(); zoomTo(z * (e.deltaY < 0 ? 1.08 : 1 / 1.08)); }, { passive: false });
+      range.addEventListener('input', () => zoomTo(+range.value));
+      const done = (v) => { URL.revokeObjectURL(url); wrap.remove(); resolve(v); };
+      wrap.addEventListener('click', (e) => {
+        const a = e.target.closest('button[data-a]')?.dataset.a;
+        if (a === 'cancel') done(null);
+        if (a === 'ok') {
+          const dw = W * base * z, L = S / 2 - dw / 2 + x, T = S / 2 - H * base * z / 2 + y, k = base * z;
+          const c = document.createElement('canvas'); c.width = c.height = 512;
+          c.getContext('2d').drawImage(img, -L / k, -T / k, S / k, S / k, 0, 0, 512, 512);
+          done({ photo: c.toDataURL('image/jpeg', 0.86), share: !!wrap.querySelector('[data-a="share"]')?.checked });
+        }
+      });
+      requestAnimationFrame(size);
+    });
+  },
+
+  // Your photo, for everyone: your shared photo (switching sharing on), and your own contact card's photo too.
+  // null goes back to your Home Assistant person picture.
+  async _setMyPhoto(photo) {
+    const s = this._s, patch = { photo };
+    if (photo && !s.profile?.share) {
+      const mc = s.profile?.my_card && s.contacts.get(s.profile.my_card);
+      const me = s.users.get(s.me) || {};
+      patch.share = true;
+      if (!s.profile?.name) patch.name = mc ? contactName(mc) : me.ha_name || me.name || '';
+    }
+    const r = await this._ws('profile/set', patch);
+    s.profile = r.profile;
+    const mc = s.profile.my_card && s.contacts.get(s.profile.my_card);
+    if (mc?.photo && photo) {
+      try { const c = await this._ws('contacts/save', { contacts: [{ ...mc, photo }] }); c.contacts?.forEach(x => s.contacts.set(x.id, x)); } catch (e) { /* the shared photo still changed */ }
+    }
+    this._refresh('contacts');
+    return s.profile;
+  },
+
+  // A picture (a Blob or data URL) uploaded like a photo in a message, ready to use: resolves its id
+  async _uploadPicture(pic, name = 'photo.jpg') {
+    const blob = typeof pic === 'string' ? await (await fetch(pic)).blob() : pic;
+    const item = await this._prepareAndUpload(new File([blob], name, { type: blob.type || 'image/jpeg' }), {}, null, () => {});
+    return item.id;
+  },
+
+  _coversOn() { return !!this._s.feed?.enabled && this._s.feed?.options?.covers !== false; },
+
   // ── Page: contact card ─────────────────────────────────────────────────────
   _pg_contact({ cid }) {
     const el = this._el(`<div class="cpage">
@@ -10560,6 +10818,24 @@ Object.assign(CrowMessengerCard.prototype, {
     const page = { el };
     const s = this._s, inner = el.querySelector('.c-inner');
     let tintFor = null;
+    // a household member's card also shows their Feed and your chats with them (this card's setting)
+    let extras = null, extrasAt = 0, extrasBusy = false;
+    const memberOf = (c) => (c?.ha_user && c.ha_user !== s.me && s.users.has(c.ha_user) && this._config.contact_extras !== false) ? c.ha_user : null;
+    const feedOn = () => !!s.feed?.enabled;
+    const loadExtras = async (force = false) => {
+      const uid = memberOf(s.contacts.get(cid));
+      if (!uid || !feedOn() || extrasBusy || (!force && extras && Date.now() - extrasAt < 30000)) return;
+      extrasBusy = true;
+      try { extras = await this._ws('feed/contact', { user_id: uid }); extrasAt = Date.now(); } catch (err) { extras = null; }
+      extrasBusy = false;
+      if (el.isConnected) page.refresh('contacts');
+    };
+    const bdayText = (b) => {
+      const m = /^(\d{4}|--)-?(\d{2})-(\d{2})$/.exec(b || '');
+      if (!m) return b || '';
+      const d = new Date(m[1] === '--' ? 2000 : +m[1], +m[2] - 1, +m[3]);
+      return d.toLocaleDateString(this._hass?.locale?.language || undefined, m[1] === '--' ? { day: 'numeric', month: 'long' } : { day: 'numeric', month: 'long', year: 'numeric' });
+    };
 
     const applyTint = async (c, name) => {
       const blur = this._config.contact_blur !== false;
@@ -10586,7 +10862,8 @@ Object.assign(CrowMessengerCard.prototype, {
     };
 
     page.refresh = (what) => {
-      if (!['all', 'contacts', 'states'].includes(what)) return;
+      if (['fpost', 'fnew', 'fgone', 'fmeta', 'feedcount'].includes(what)) { if (memberOf(s.contacts.get(cid))) { if (what !== 'feedcount') extrasAt = 0; loadExtras(what !== 'feedcount'); } if (what !== 'feedcount') return; }
+      if (!['all', 'contacts', 'states', 'list', 'thread', 'read', 'messages', 'presence', 'feedcount'].includes(what)) return;
       const c = s.contacts.get(cid);
       if (!c) { inner.innerHTML = '<div class="empty" style="padding-top:120px">This contact was deleted.</div>'; return; }
       const name = contactName(c, this._config.contact_display);
@@ -10599,12 +10876,18 @@ Object.assign(CrowMessengerCard.prototype, {
       const grp = (rows) => rows.length ? `<div class="group">${rows.join('')}</div>` : '';
       const sub = [c.nickname && `“${c.nickname}”`, c.pronouns, this._contactSub(c), c.department].filter(Boolean).join(' · ');
       const profile = s.profile || {};
-      let html = `<div class="c-hero">${this._avHtml({ pic: this._contactPic(c), name, size: 116 })}<div class="cn">${esc(name)}</div>${sub ? `<div class="cs">${esc(sub)}</div>` : ''}</div>
+      const member = memberOf(c);
+      const showFeed = !!member && feedOn() && extras?.enabled;
+      const pres = member ? this._presenceText(member) : '';
+      const coverOf = c.ha_user && s.users.get(c.ha_user)?.cover;
+      const coverHtml = coverOf && this._coversOn() ? `<div class="c-cover"><img data-att="${esc(coverOf.id)}" alt="" style="object-position:50% ${+coverOf.y || 50}%"></div>` : '';
+      let html = `${coverHtml}<div class="c-hero">${this._avHtml({ pic: this._contactPic(c), name, size: 116 })}<div class="cn">${esc(name)}${c.favourite ? '<span class="cfav" title="Favourite" aria-label="Favourite">★</span>' : ''}</div>${sub ? `<div class="cs">${esc(sub)}</div>` : ''}${pres ? `<div class="cs cpres${/now/.test(pres) ? ' on' : ''}">${esc(pres)}</div>` : ''}</div>
         <div class="c-actions">
           <button class="c-act g" data-act="message" ${canMsg && !isMe ? '' : 'disabled'}>${ICON.bubble}<span>message</span></button>
           <button class="c-act g" data-act="call" ${phone ? '' : 'disabled'}>${ICON.phone}<span>call</span></button>
           ${apple ? `<button class="c-act g" data-act="video" ${phone || email ? '' : 'disabled'}>${ICON.video}<span>video</span></button>` : ''}
           <button class="c-act g" data-act="mail" ${email ? '' : 'disabled'}>${ICON.mail}<span>mail</span></button>
+          ${member && feedOn() ? `<button class="c-act g" data-act="feed">${FEED_ICON}<span>feed</span></button>` : ''}
         </div><div class="c-body">`;
       if (isMe) {
         const pic = profile.photo || c.photo || s.users.get(s.me)?.picture;
@@ -10613,13 +10896,38 @@ Object.assign(CrowMessengerCard.prototype, {
       if (c.ha_user && c.ha_user !== s.me && s.users.has(c.ha_user)) {
         html += grp([`<div class="cf" data-a="hamsg"><div class="cmain"><div class="cl">Home Assistant</div><div class="cvv">${esc(s.users.get(c.ha_user).ha_name || s.users.get(c.ha_user).name)}</div></div><span class="ci">${ICON.bubble}</span></div>`]);
       }
+      if (showFeed) {
+        const first = this._userName(member, true);
+        const ph = extras.photos || [];
+        const thumb = ph[0] && !ph[0].removed ? `<span class="cthumb"><img data-att="${esc(ph[0].id)}" data-thumb="${ph[0].has_thumb ? 1 : 0}" alt=""></span>` : `<span class="ci">${FEED_ICON}</span>`;
+        const rows = [`<div class="cf" data-a="fprofile"><div class="cmain"><div class="cl">Feed</div><div class="cvv">See ${esc(first)}’s profile${extras.posts ? ` · ${extras.posts} ${extras.posts === 1 ? 'post' : 'posts'}` : ''}</div></div>${thumb}</div>`];
+        if (extras.latest) rows.push(`<div class="cf" data-a="fpost" data-pid="${esc(extras.latest.id)}"><div class="cmain"><div class="cl">latest post · ${esc(timeAgoShort(extras.latest.ts))}</div><div class="cvv">${esc(extras.latest.summary)}</div></div></div>`);
+        if (ph.length > 1) rows.push(`<div class="cf cphotos">${ph.map((x, i) => `<span data-fphoto="${i}"><img data-att="${esc(x.id)}" data-thumb="${x.has_thumb ? 1 : 0}" alt=""></span>`).join('')}</div>`);
+        if (extras.page_posts) rows.push(`<div class="gr blue" data-a="fonpage"><div class="gl">Post on ${esc(first)}’s Page</div></div>`);
+        html += grp(rows);
+      }
+      if (member) {
+        const both = [...s.threads.values()].filter(t => t.visible !== false && t.participants.includes(member) && t.participants.includes(s.me));
+        const one = both.find(t => !t.is_group && t.participants.length === 2);
+        const groups = both.filter(t => t.is_group).sort((a, b) => (b.last?.ts || 0) - (a.last?.ts || 0)).slice(0, 5);
+        const badge = (t) => t.unread ? `<span class="cbadge">${t.unread}</span>` : `<span class="ci">${ICON.chevR || ''}</span>`;
+        const rows = [];
+        if (one) rows.push(`<div class="cf" data-a="chat" data-tid="${esc(one.id)}"><div class="cmain"><div class="cl">chat</div><div class="cvv">${esc(one.last ? this._previewText(one) : 'No messages yet')}</div></div>${badge(one)}</div>`);
+        groups.forEach(t => rows.push(`<div class="cf" data-a="chat" data-tid="${esc(t.id)}"><div class="cmain"><div class="cl">group</div><div class="cvv">${esc(this._threadTitle(t))}</div></div>${badge(t)}</div>`));
+        if (one) {
+          rows.push(`<div class="cf" data-a="shared" data-tid="${esc(one.id)}"><div class="cmain"><div class="cl">shared in chats</div><div class="cvv">Photos, links and files</div></div><span class="ci">${ICON.chevR || ''}</span></div>`);
+          rows.push(`<label class="cf ctoggle"><div class="cmain"><div class="cvv">Hide Alerts</div></div><span class="tsw"><input type="checkbox" data-mute="${esc(one.id)}"${one.muted ? ' checked' : ''}><span></span></span></label>`);
+        }
+        html += grp(rows);
+      }
       const person = c.ha_user && this._config.show_people_map !== false && this._people().find(p => p.uid === c.ha_user && p.has);
-      if (person) html += grp([`<div class="cf" data-a="locate" data-eid="${esc(person.eid)}"><div class="cmain"><div class="cl">location</div><div class="cvv">${esc(this._placeLabel(person))} · ${esc(timeAgoShort(person.ts))}</div></div><span class="ci">${ICON.pin}</span></div>`]);
+      if (person) html += grp([`<div class="cf" data-a="locate" data-eid="${esc(person.eid)}"><div class="cmain"><div class="cl">location</div><div class="cvv">${esc(this._placeLabel(person))} · ${esc(timeAgoShort(person.ts))}</div></div><span class="ci">${ICON.pin}</span></div>`, ...(member ? [`<div class="gr blue" data-a="ring"><div class="gl">Ring Phone</div></div>`] : [])]);
       html += grp((c.phones || []).map((p, i) => field('phones', i, p.label || 'phone', p.value, 'phone')));
       html += grp((c.emails || []).map((p, i) => field('emails', i, p.label || 'email', p.value, 'mail')));
       html += grp((c.addresses || []).map((p, i) => field('addresses', i, p.label || 'address', formatAddress(p), 'pin')));
       const dates = [];
       if (c.birthday) dates.push(field('birthday', 0, 'birthday', fmtLongDate(c.birthday, this._hass), 'cal'));
+      else if (showFeed && extras.birthday) dates.push(`<div class="cf"${extras.birthday_post ? ` data-a="bdaycard" data-pid="${esc(extras.birthday_post)}"` : ''}><div class="cmain"><div class="cl">birthday · from the Feed</div><div class="cvv">${extras.birthday_today ? '🎂 ' : ''}${esc(bdayText(extras.birthday))}</div></div>${extras.birthday_post ? '<span class="cpill">Write on the Card</span>' : ''}</div>`);
       (c.dates || []).forEach((d, i) => dates.push(field('dates', i, d.label || 'date', fmtLongDate(d.value, this._hass), 'cal')));
       html += grp(dates);
       html += grp((c.urls || []).map((p, i) => field('urls', i, p.label || 'homepage', p.value, 'link')));
@@ -10630,12 +10938,19 @@ Object.assign(CrowMessengerCard.prototype, {
         ...(c.ha_user && c.ha_user !== s.me && s.users.has(c.ha_user) ? [`<div class="gr blue" data-a="hamsg"><div class="gl">Send Message</div></div>`] : []),
         `<div class="gr blue" data-a="share"><div class="gl">Share Contact</div></div>`,
         ...(this._pdfOn('contact') ? [`<div class="gr blue" data-a="pdf"><div class="gl">Export as PDF</div></div>`] : []),
+        ...(member && !person ? [`<div class="gr blue" data-a="ring"><div class="gl">Ring Phone</div></div>`] : []),
         `<div class="gr blue" data-a="fav"><div class="gl">${c.favourite ? 'Remove from Favourites' : 'Add to Favourites'}</div></div>`,
       ]);
       html += '</div>';
-      this._set(inner, html);
+      if (this._set(inner, html)) this._hydrate(inner);
+      if (member && feedOn() && !extras && !extrasBusy) loadExtras();
     };
+    page.onShow = () => { loadExtras(true); };
 
+    el.addEventListener('change', (e) => {
+      const m = e.target.closest('[data-mute]');
+      if (m) this._ws('update_thread', { thread_id: m.dataset.mute, muted: m.checked }).catch(err => { this._toast(err.message); m.checked = !m.checked; });
+    });
     el.addEventListener('click', async (e) => {
       const c = s.contacts.get(cid);
       if (!c) { if (e.target.closest('[data-a="back"]')) this._back(); return; }
@@ -10645,10 +10960,45 @@ Object.assign(CrowMessengerCard.prototype, {
       if (a === 'profile') { this._nav('profile'); return; }
       if (a === 'locate') { this._nav('people', { focus: e.target.closest('[data-eid]').dataset.eid }); return; }
       if (a === 'hamsg') { this._messageUser(c.ha_user); return; }
+      const uid = memberOf(c);
+      if (uid) {
+        if (a === 'fprofile') { this._openFeed('fprofile', { uid }); return; }
+        if (a === 'fpost') { this._openFeed('fpost', { pid: e.target.closest('[data-pid]').dataset.pid }); return; }
+        if (a === 'bdaycard') { this._openFeed('fpost', { pid: e.target.closest('[data-pid]').dataset.pid, focus: true }); return; }
+        if (a === 'fonpage') { this._openFeed('fcompose', { preset: { page: uid } }); return; }
+        if (a === 'chat') { this._nav('thread', { tid: e.target.closest('[data-tid]').dataset.tid }); return; }
+        if (a === 'shared') { this._nav('info', { tid: e.target.closest('[data-tid]').dataset.tid }); return; }
+        if (a === 'ring') { this._ringFromContact(uid); return; }
+        const fp = e.target.closest('[data-fphoto]');
+        if (fp && extras?.photos) {
+          try { await this._lazy('feed'); this._feedSetup(); this._fview(extras.photos.map(x => ({ ...x })), +fp.dataset.fphoto); } catch (err) { this._toast('Couldn’t open the photo'); }
+          return;
+        }
+      }
       if (a === 'share') { this._exportContacts([c], `${contactName(c).replace(/[\\/:*?"<>|]/g, '')}.vcf`); return; }
       if (a === 'pdf') { const nm = contactName(c).replace(/[\\/:*?"<>|]/g, '').trim() || 'Contact'; this._nav('pdf', { title: 'Contact', filename: `${nm}.pdf`, build: (status) => this._pdfContact(c, status) }); return; }
-      if (a === 'fav') { this._ws('contacts/save', { contacts: [{ ...c, favourite: !c.favourite }] }).catch(err => this._toast(err.message)); return; }
+      if (a === 'fav') {
+        const on = !c.favourite;
+        try {
+          const r = await this._ws('contacts/save', { contacts: [{ ...c, favourite: on }] });
+          r.contacts?.forEach(x => s.contacts.set(x.id, x));
+          this._refresh('contacts');
+        } catch (err) { this._toast(err.message); return; }
+        this._toast(on ? `${contactName(c, this._config.contact_display)} added to Favourites` : 'Removed from Favourites');
+        // a new favourite: offer once to pin your chat with them as well
+        const t = on && c.ha_user ? [...s.threads.values()].find(x => !x.is_group && x.participants.includes(c.ha_user) && x.participants.includes(s.me)) : null;
+        let asked = {};
+        try { asked = JSON.parse(localStorage.getItem('crow_favpin_asked') || '{}'); } catch (err) { asked = {}; }
+        if (t && !t.pinned && !asked[c.id]) {
+          asked[c.id] = 1;
+          try { localStorage.setItem('crow_favpin_asked', JSON.stringify(asked)); } catch (err) { /* */ }
+          const r = await this._alert({ title: `Pin Your Chat With ${c.first || contactName(c, this._config.contact_display)}?`, message: 'Pinned chats stay at the top of Messages.', buttons: [{ text: 'Not Now', style: 'cancel' }, { text: 'Pin', value: true }] });
+          if (r.value) { try { await this._ws('flag', { thread_id: t.id, flag: 'pinned', on: true }); this._toast('Pinned'); } catch (err) { this._toast(err.message); } }
+        }
+        return;
+      }
       const act = e.target.closest('[data-act]')?.dataset.act;
+      if (act === 'feed' && memberOf(c)) { this._openFeed('fprofile', { uid: memberOf(c) }); return; }
       if (act === 'message') {
         if (c.ha_user && s.users.has(c.ha_user) && c.ha_user !== s.me) this._messageUser(c.ha_user);
         else if (c.phones?.length) this._pickThen(e.target.closest('button'), c.phones, (p) => this._confirmContactAction('sms', p, c));
@@ -10707,6 +11057,19 @@ Object.assign(CrowMessengerCard.prototype, {
     if (items.length === 1) { fn(items[0]); return; }
     const v = await this._menu(anchor, items.map((p, i) => ({ text: `${p.label ? p.label + ': ' : ''}${p.value}`, value: String(i) })), { align: 'left' });
     if (v !== null && v !== undefined) fn(items[+v]);
+  },
+
+  async _ringFromContact(uid) {
+    const name = this._userName(uid, true);
+    const r = await this._alert({ title: `Ring ${name}’s Phone?`, message: 'It rings loudly, even on silent, until they say they’ve found it.',
+      buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Ring', value: true }] });
+    if (!r.value) return;
+    let t = [...this._s.threads.values()].find(x => !x.is_group && x.participants.includes(uid) && x.participants.includes(this._s.me) && x.participants.length === 2);
+    try {
+      if (!t) { const x = await this._ws('create_thread', { participants: [uid] }); this._upsertThread({ ...x.thread, visible: true }); t = x.thread; }
+      await this._ws('send', { thread_id: t.id, text: '', extra: { type: 'ring', ring: { to: [uid] } } });
+      this._toast(`Ringing ${name}’s phone`);
+    } catch (err) { this._toast(err.message); }
   },
 
   async _messageUser(uid) {
@@ -11070,7 +11433,9 @@ Object.assign(CrowMessengerCard.prototype, {
     el.querySelector('.f-photo').addEventListener('change', async (e) => {
       const f = e.target.files[0]; e.target.value = '';
       if (!f) return;
-      try { const photo = await fileToAvatar(f, 320); await this._setProfile({ photo }); page.refresh('all'); } catch (err) { this._toast('Couldn’t use that photo'); }
+      const r = await this._cropPhoto(f);
+      if (!r) return;
+      try { await this._setMyPhoto(r.photo); page.refresh('all'); } catch (err) { this._toast(err.message || 'Couldn’t use that photo'); }
     });
     el.addEventListener('click', async (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a;
@@ -11124,46 +11489,17 @@ Object.assign(CrowMessengerCard.prototype, {
 // ── People: Find My-style map of everyone's location (from person.* entities) ─
 // Map stack: MapLibre GL with OpenFreeMap vector
 // tiles (dark / positron), no API key needed.
-const FM_TILES = {
-  dark: 'https://tiles.openfreemap.org/styles/dark',
-  light: 'https://tiles.openfreemap.org/styles/positron',
-  satellite: {
-    version: 8,
-    sources: { sat: { type: 'raster', tileSize: 256, attribution: 'Imagery © Esri',
-      tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'] } },
-    layers: [{ id: 'sat', type: 'raster', source: 'sat' }],
-  },
-};
-const FM_LIB = 'https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl';
-let _fmLibPromise = null;
-function loadMapLibre() {
-  if (window.maplibregl) return Promise.resolve(window.maplibregl);
-  if (!_fmLibPromise) {
-    _fmLibPromise = new Promise((res, rej) => {
-      const s = document.createElement('script');
-      s.src = `${FM_LIB}.js`;
-      s.onload = () => res(window.maplibregl);
-      s.onerror = () => { _fmLibPromise = null; rej(new Error('map library unavailable')); };
-      document.head.appendChild(s);
-    });
-  }
-  return _fmLibPromise;
-}
-let _fmCss = null;
-async function mapLibreCss() {
-  if (_fmCss !== null) return _fmCss;
-  try { _fmCss = await (await fetch(`${FM_LIB}.css`)).text(); } catch (e) { _fmCss = ''; }
-  return _fmCss;
-}
+
+
+
+
+
+
 
 // Weather where someone is (Open-Meteo: free, no account), by the WMO weather code
-const FM_WX = { 0: 'Clear', 1: 'Mostly Clear', 2: 'Partly Cloudy', 3: 'Cloudy', 45: 'Fog', 48: 'Freezing Fog',
-  51: 'Light Drizzle', 53: 'Drizzle', 55: 'Heavy Drizzle', 56: 'Freezing Drizzle', 57: 'Freezing Drizzle',
-  61: 'Light Rain', 63: 'Rain', 65: 'Heavy Rain', 66: 'Freezing Rain', 67: 'Freezing Rain',
-  71: 'Light Snow', 73: 'Snow', 75: 'Heavy Snow', 77: 'Snow Grains', 80: 'Showers', 81: 'Heavy Showers', 82: 'Violent Showers',
-  85: 'Snow Showers', 86: 'Heavy Snow Showers', 95: 'Thunderstorm', 96: 'Thunderstorm with Hail', 99: 'Thunderstorm with Hail' };
+
 // Find Nearby: places from OpenStreetMap (the Overpass service, on whichever of its servers answers)
-const FM_OVERPASS = ['https://overpass-api.de/api/interpreter', 'https://overpass.kumi.systems/api/interpreter', 'https://overpass.private.coffee/api/interpreter'];
+
 const FM_NEARBY = [
   { id: 'toilets', name: 'Toilets', one: 'Toilets', emoji: '🚻', tags: ['amenity=toilets', 'toilets=yes'] },
   { id: 'cafe', name: 'Cafés', one: 'Café', emoji: '☕', tags: ['amenity=cafe'] },
@@ -11177,31 +11513,14 @@ const FM_NEARBY = [
   { id: 'ev', name: 'EV Charging', one: 'EV Charger', emoji: '⚡', tags: ['amenity=charging_station'] },
   { id: 'parking', name: 'Parking', one: 'Parking', emoji: '🅿️', tags: ['amenity=parking'] },
 ];
-const fmIco = (cat, size = 20) => `<span class="fm-emo" style="font-size:${Math.round(size * 0.9)}px">${cat.emoji}</span>`;
+
 // places found are remembered on this device (Find Nearby → Remember Results in the editor)
 const FM_NEAR_KEY = 'crowMessengerNearby:';
 // an address on separate lines: street, town, postcode
-const fmAddr = (it) => {
-  if (Array.isArray(it.addrLines)) return it.addrLines.filter(Boolean).join('\n');
-  const parts = String(it.address || '').split(/\s*,\s*/).filter(Boolean);
-  const out = [];
-  for (const x of parts) {
-    const m = x.match(/^(.*?)\s*\b([A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})$/i);
-    if (m && m[1]) out.push(m[1], m[2].toUpperCase()); else out.push(x);
-  }
-  return out.join('\n');
-};
-const fmSleep = (ms) => new Promise(r => setTimeout(r, ms));
+
+
 // OpenStreetMap's opening hours ("Mo-Sa 07:00-22:00; Su off") made easier to read
-const fmHours = (h) => {
-  if (!h) return '';
-  if (h.trim() === '24/7') return 'Open 24 Hours';
-  const days = { Mo: 'Mon', Tu: 'Tue', We: 'Wed', Th: 'Thu', Fr: 'Fri', Sa: 'Sat', Su: 'Sun', PH: 'Bank Holidays' };
-  return h.split(/\s*;\s*/).filter(Boolean).map(part => part
-    .replace(/\b(Mo|Tu|We|Th|Fr|Sa|Su|PH)\b/g, d => days[d])
-    .replace(/(\d\d:\d\d)-(\d\d:\d\d)/g, '$1–$2').replace(/([A-Za-z])-([A-Za-z])/g, '$1–$2')
-    .replace(/\boff\b|\bclosed\b/gi, 'Closed').replace(/,/g, ', ')).join('\n');
-};
+
 const FM_ICON = {
   map: _f('<path d="M9 4.2L3.8 6A1.2 1.2 0 003 7.1v12.2a.8.8 0 001.1.8L9 18.4zM10.5 4.1v14.3l5 1.6V5.7zM17 5.7V20l4.2-1.5a1.2 1.2 0 00.8-1.1V5.2a.8.8 0 00-1.1-.8z"/>'),
   locate: _s('<path d="M20.5 3.5L3.8 10.6a.5.5 0 00.1.9l7 1.7 1.7 7a.5.5 0 00.9.1z"/>', 'stroke-width="2.1"'),
@@ -11213,133 +11532,13 @@ const FM_ICON = {
 
 // A zone's circle as a GeoJSON polygon, and the point a given distance and
 // bearing away from a centre (used to place the radius handle on its edge).
-function fmDest(lat, lon, bearing, metres) {
-  const R = 6371000, toR = x => x * Math.PI / 180, toD = x => x * 180 / Math.PI;
-  const d = metres / R, b = toR(bearing), la = toR(lat), lo = toR(lon);
-  const la2 = Math.asin(Math.sin(la) * Math.cos(d) + Math.cos(la) * Math.sin(d) * Math.cos(b));
-  const lo2 = lo + Math.atan2(Math.sin(b) * Math.sin(d) * Math.cos(la), Math.cos(d) - Math.sin(la) * Math.sin(la2));
-  return [toD(la2), toD(lo2)];
-}
-function fmBearing(lat, lon, lat2, lon2) {
-  const toR = x => x * Math.PI / 180;
-  const y = Math.sin(toR(lon2 - lon)) * Math.cos(toR(lat2));
-  const x = Math.cos(toR(lat)) * Math.sin(toR(lat2)) - Math.sin(toR(lat)) * Math.cos(toR(lat2)) * Math.cos(toR(lon2 - lon));
-  return Math.atan2(y, x) * 180 / Math.PI;
-}
-function fmCircle(lat, lon, metres, props = {}, n = 72) {
-  const ring = [];
-  for (let i = 0; i < n; i++) { const [a, b] = fmDest(lat, lon, (i / n) * 360, metres); ring.push([b, a]); }
-  ring.push(ring[0]);
-  return { type: 'Feature', properties: props, geometry: { type: 'Polygon', coordinates: [ring] } };
-}
-const FM_EMPTY = { type: 'FeatureCollection', features: [] };
-const FM_ZONE_MIN = 10, FM_ZONE_MAX = 2000, FM_ZONE_DEFAULT = 20;
 
-const FM_CSS = `
-.fm-map { position: absolute; inset: 0; background: var(--cm-bg2); }
-.fm-map .maplibregl-ctrl-attrib { font-size: 9px; background: transparent !important; color: var(--cm-text3); }
-.fm-map .maplibregl-ctrl-attrib a { color: var(--cm-text2); }
-.fm-map .maplibregl-ctrl-bottom-right { bottom: auto; top: 0; }
-.fm-nomap { position: absolute; inset: 0; display: flex; align-items: flex-start; justify-content: center; padding-top: 120px; color: var(--cm-text2); font-size: 14px; text-align: center; }
-.fm-ctrls { position: absolute; right: 14px; top: 12px; z-index: 6; display: flex; flex-direction: column; align-items: center; gap: 10px; }
-.fm-vcap { width: 48px; border-radius: 24px; display: flex; flex-direction: column; align-items: center; padding: 4px 0; }
-.fm-vcap button { width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; }
-.fm-vcap button svg { width: 22px; height: 22px; }
-.fm-vcap button.on { color: var(--cm-accent); }
-.fm-3d { width: 48px; height: 48px; border-radius: 50%; font-size: 17px; font-weight: 600; }
-.fm-3d.on { color: var(--cm-accent); }
-.fm-sheet { position: absolute; left: 8px; right: 8px; bottom: 8px; z-index: 8; border-radius: 38px; display: flex; flex-direction: column; overflow: hidden;
-  background: var(--cm-glass); backdrop-filter: blur(30px) saturate(180%); -webkit-backdrop-filter: blur(30px) saturate(180%);
-  border: 0.5px solid var(--cm-glass-edge); box-shadow: inset 0 1px 0 var(--cm-glass-shine), 0 -6px 30px rgba(0,0,0,0.25);
-  transition: height 0.35s cubic-bezier(.2,.9,.25,1); touch-action: none; }
-:host([data-mode="dark"]) .fm-sheet { background: rgba(70,82,100,0.5); }
-:host([data-bars="solid"]) .fm-sheet { background: var(--cm-sheet-solid); backdrop-filter: none; -webkit-backdrop-filter: none; }
-.fm-sheet.dragging { transition: none; }
-.fm-grab { width: 40px; height: 5px; border-radius: 3px; background: var(--cm-text3); margin: 8px auto 0; flex-shrink: 0; }
-.fm-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 14px 6px 22px; flex-shrink: 0; min-height: 64px; }
-.fm-head h2 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: 0.01em; }
-.fm-head .cb { width: 46px; height: 46px; }
-.fm-head .cb.sm { width: 32px; height: 32px; background: var(--cm-fill); color: var(--cm-text2); box-shadow: none; border: 0; }
-.fm-head h2:empty + .cb.sm { margin-top: 6px; align-self: flex-start; }
-.fm-head .cb.sm svg { width: 15px; height: 15px; }
-.fm-list { flex: 1; overflow-y: auto; touch-action: pan-y; padding-bottom: 20px; scrollbar-width: none; }
-.fm-row { display: flex; align-items: center; gap: 14px; padding: 10px 20px; position: relative; cursor: pointer; }
-.fm-row + .fm-row::before { content: ''; position: absolute; top: 0; left: 86px; right: 20px; height: 1px; transform: scaleY(0.6); background: var(--cm-sep); }
-.fm-row:active { background: var(--cm-fill2); }
-.fm-row .fm-n { font-size: 17px; font-weight: 600; }
-.fm-row .fm-s { font-size: 15px; color: var(--cm-text2); margin-top: 1px; }
-.fm-row .fm-d { margin-left: auto; font-size: 15px; color: var(--cm-text2); align-self: flex-start; padding-top: 3px; white-space: nowrap; }
-.fm-avw { position: relative; flex-shrink: 0; }
-.fm-badge { position: absolute; top: -3px; right: -4px; width: 21px; height: 21px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-  border: 2px solid rgba(60,70,88,0.95); }
-:host([data-mode="light"]) .fm-badge { border-color: #fff; }
-.fm-badge.star { background: #FFD60A; color: #1c1c1e; }
-.fm-badge.off { background: #8E8E93; color: #fff; }
-.fm-badge svg { width: 11px; height: 11px; }
-.fm-detail { padding: 0 20px 20px; }
-.fm-detail .fm-dn { font-size: 26px; font-weight: 700; }
-.fm-detail .fm-dn.pl { font-size: 21px; line-height: 1.2; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
-.fm-detail .fm-ds { font-size: 15px; color: var(--cm-text2); margin-top: 3px; }
-.fm-acts { display: flex; gap: 10px; margin: 16px 0; }
-.fm-acts button { flex: 1; height: 62px; border-radius: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; font-size: 12px; font-weight: 500; color: var(--cm-accent); background: var(--cm-fill); }
-.fm-acts button svg { width: 21px; height: 21px; }
-.fm-acts button[disabled] { opacity: 0.4; pointer-events: none; }
-.fm-info { border-radius: 20px; background: var(--cm-fill2); overflow: hidden; }
-.fm-more { margin-top: 12px; }
-.fm-more .fi2 { cursor: pointer; }
-.fm-more .fi2 span:first-child { color: var(--cm-accent); }
-.fm-more .fi2 svg { width: 16px; height: 16px; color: var(--cm-text3); }
-.fm-nsub { font-size: 13px; color: var(--cm-text2); padding: 0 18px 6px; }
-.fm-nrow { display: flex; align-items: center; gap: 12px; padding: 9px 16px; cursor: pointer; border-radius: 14px; }
-.fm-nrow.sel, .fm-nrow:active { background: var(--cm-fill2); }
-.fm-nic { width: 40px; height: 40px; border-radius: 50%; background: var(--cm-fill2); display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; }
-.fm-ndir { width: 36px; height: 36px; border-radius: 50%; background: var(--cm-fill2); color: var(--cm-accent); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-.fm-ndir svg { width: 18px; height: 18px; }
-.fm-emo { line-height: 1; width: 1.2em; height: 1.2em; text-align: center; display: flex; align-items: center; justify-content: center; font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
-.fm-poi.saved { width: 22px; height: 22px; border-width: 1.5px; }
-.fm-poi.saved .fm-emo { font-size: 11px !important; }
-.fm-poi .fm-emo { font-size: 13px !important; }
-.fm-poi { width: 26px; height: 26px; border-radius: 50%; background: rgba(28,28,30,0.85); color: #fff; border: 2px solid #fff; box-sizing: border-box; box-shadow: 0 2px 8px rgba(0,0,0,0.35); display: flex; align-items: center; justify-content: center; cursor: pointer; transition: transform .2s; }
-.fm-nic { color: #fff; background: rgba(28,28,30,0.85); border: 2px solid #fff; box-sizing: border-box; box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
-.fm-link { color: var(--cm-accent); }
-/* on the glass sheet the blue is lightened (dark) or deepened (light), and buttons are a little more solid, so they stand out */
-:host([data-bars="glass"][data-mode="dark"]) .fm-sheet :is(.fm-acts button, .fm-ndir, .fm-link) { color: color-mix(in srgb, var(--cm-accent) 45%, #fff); }
-:host([data-bars="glass"][data-mode="dark"]) .fm-sheet :is(.fm-acts button, .fm-ndir) { background: rgba(255,255,255,0.16); font-weight: 600; }
-:host([data-bars="glass"]:not([data-mode="dark"])) .fm-sheet :is(.fm-acts button, .fm-ndir, .fm-link) { color: color-mix(in srgb, var(--cm-accent) 75%, #000); }
-:host([data-bars="glass"]:not([data-mode="dark"])) .fm-sheet :is(.fm-acts button, .fm-ndir) { background: rgba(255,255,255,0.6); font-weight: 600; }
-.fm-nic.big { width: 60px; height: 60px; }
-.fm-busy { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 28px 20px; color: var(--cm-text2); font-size: 15px; }
-.fm-spin { width: 28px; height: 28px; border-radius: 50%; border: 3px solid var(--cm-fill2); border-top-color: var(--cm-accent); animation: cm-spin 0.9s linear infinite; }
-.fm-info a.fi2 { color: inherit; text-decoration: none; }
-.fm-info a.fi2 b { color: var(--cm-accent); }
-.fm-src { font-size: 11px; color: var(--cm-text3); text-align: center; padding: 10px 0 4px; }
-.fm-poi.sel { transform: scale(1.35); box-shadow: 0 0 0 3px var(--cm-accent), 0 2px 10px rgba(0,0,0,0.4); }
-.fm-info .fi2 { display: flex; align-items: center; gap: 10px; padding: 12px 16px; font-size: 15px; }
-.fm-info .fi2 + .fi2 { border-top: 1px solid var(--cm-sep); }
-.fm-info .fi2 span:first-child { color: var(--cm-text2); flex: 1; }
-.fm-mk { cursor: pointer; }
-.fm-mk .av { border: 3px solid #fff; box-shadow: 0 3px 12px rgba(0,0,0,0.45); }
-.fm-mk.stale .av { filter: grayscale(0.7); opacity: 0.85; }
-.fm-mk.sel .av { border-color: var(--cm-accent); }
-.fm-me { width: 22px; height: 22px; border-radius: 50%; background: #0A84FF; border: 3px solid #fff; box-shadow: 0 0 0 0 rgba(10,132,255,0.5), 0 2px 6px rgba(0,0,0,0.35); animation: fm-pulse 2.2s infinite; }
-.fm-acts.four button { font-size: 11.5px; }
-.fm-zwrap { position: absolute; inset: 0; z-index: 60; overflow: hidden; background: var(--cm-bg2); transform: translateY(100%); transition: transform 0.32s cubic-bezier(.2,.9,.25,1); }
-.fm-zwrap.show { transform: none; }
-.fm-zf { padding: 0 20px 20px; }
-.fm-zf .fm-zs { font-size: 15px; color: var(--cm-text2); margin: 0 2px 14px; line-height: 1.35; }
-.fm-zg { border-radius: 20px; background: var(--cm-fill2); overflow: hidden; }
-.fm-zg label { display: flex; align-items: center; gap: 10px; padding: 0 16px; min-height: 50px; font-size: 16px; }
-.fm-zg label + label { border-top: 1px solid var(--cm-sep); }
-.fm-zg label > span:first-child { color: var(--cm-text2); flex-shrink: 0; }
-.fm-zg input { flex: 1; min-width: 0; background: none; border: 0; outline: 0; color: var(--cm-text); font: inherit; font-size: 16px; text-align: right; padding: 0; -moz-appearance: textfield; }
-.fm-zg input::-webkit-outer-spin-button, .fm-zg input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.fm-zg .fm-zu { color: var(--cm-text2); }
-.fm-zb { width: 100%; height: 52px; margin-top: 14px; border-radius: 26px; background: var(--cm-accent) !important; color: #fff !important; font-size: 17px; font-weight: 600; }
-.fm-zb[disabled] { opacity: 0.5; }
-.fm-zc { width: 16px; height: 16px; border-radius: 50%; background: var(--cm-accent); border: 3px solid #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.45); cursor: move; }
-.fm-zh { width: 24px; height: 24px; border-radius: 50%; background: #fff; border: 3px solid var(--cm-accent); box-shadow: 0 1px 6px rgba(0,0,0,0.45); cursor: ew-resize; }
-@keyframes fm-pulse { 0% { box-shadow: 0 0 0 0 rgba(10,132,255,0.45), 0 2px 6px rgba(0,0,0,0.35); } 70% { box-shadow: 0 0 0 18px rgba(10,132,255,0), 0 2px 6px rgba(0,0,0,0.35); } 100% { box-shadow: 0 0 0 0 rgba(10,132,255,0), 0 2px 6px rgba(0,0,0,0.35); } }
-`;
+
+
+
+
+
+
 
 function timeAgoShort(ts) {
   const diff = (Date.now() - ts) / 1000;
@@ -11422,199 +11621,26 @@ Object.assign(CrowMessengerCard.prototype, {
     return null;
   },
   // a sensor from the same phone as the person's location (the Companion app's own sensors)
-  _devState(p, re) {
-    const ents = this._hass.entities || {};
-    const dev = p.source && ents[p.source]?.device_id;
-    if (!dev) return null;
-    for (const e of Object.values(ents)) {
-      if (e.device_id === dev && re.test(e.entity_id)) {
-        const st = this._hass.states[e.entity_id];
-        if (st && !['unknown', 'unavailable'].includes(st.state)) return st;
-      }
-    }
-    return null;
-  },
+  
   // Charging / Full, from the phone's battery state
-  _charging(p) {
-    const st = this._devState(p, /^sensor\..*_battery_state$/);
-    const v = String(st?.state || '').toLowerCase().replace(/[\s-]+/g, '_');
-    if (v === 'charging') return 'Charging';
-    if (v === 'full') return 'Full';
-    if (this._devState(p, /^binary_sensor\..*_is_charging$/)?.state === 'on') return 'Charging';
-    return '';
-  },
+  
   // Walking, Running, Cycling, Driving or Still
-  _activity(p) {
-    const st = this._devState(p, /^sensor\..*_(activity|detected_activity)$/);
-    const v = String(st?.state || '').toLowerCase();
-    return { stationary: 'Still', still: 'Still', walking: 'Walking', on_foot: 'Walking', running: 'Running', automotive: 'Driving',
-      in_vehicle: 'Driving', cycling: 'Cycling', on_bicycle: 'Cycling' }[v] || '';
-  },
+  
   // Focus (iPhone) or Do Not Disturb (Android), when it's on
-  _focusOn(p) {
-    if (this._devState(p, /^binary_sensor\..*_focus$/)?.state === 'on') return 'Focus';
-    const dnd = String(this._devState(p, /^sensor\..*_do_not_disturb(_sensor)?$/)?.state || '').toLowerCase();
-    return dnd && dnd !== 'off' ? 'Do Not Disturb' : '';
-  },
+  
   // the Wi-Fi network the phone is on
-  _wifi(p) {
-    const st = this._devState(p, /^sensor\..*_(ssid|wifi_connection)$/);
-    if (!st) return null;
-    const v = String(st.state || '').trim();
-    return !v || /not connected|<not connected>/i.test(v) ? 'Not Connected' : v;
-  },
+  
   // when they arrived where they are (or left the last place they were)
-  _hereSince(p) {
-    const st = this._hass.states[p.eid];
-    if (!st?.last_changed || !p.has) return null;
-    const ts = new Date(st.last_changed).getTime();
-    const mins = Math.max(0, Math.round((Date.now() - ts) / 60000));
-    const dur = mins < 1 ? 'just now' : mins < 60 ? `${mins} min` : mins < 1440 ? `${Math.floor(mins / 60)} hr${mins % 60 ? ` ${mins % 60} min` : ''}` : `${Math.floor(mins / 1440)} day${mins >= 2880 ? 's' : ''}`;
-    const sameDayTs = new Date(ts).toDateString() === new Date().toDateString();
-    const when = new Date(ts).toLocaleString(locale(this._hass), sameDayTs ? { hour: 'numeric', minute: '2-digit', hour12: hour12(this._hass) }
-      : { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: hour12(this._hass) });
-    return { label: st.state === 'not_home' ? 'Away Since' : 'Here Since', value: `${when} · ${dur}` };
-  },
-  _battery(p) {
-    const tr = p.source && this._hass.states[p.source];
-    const b = tr?.attributes?.battery_level ?? tr?.attributes?.battery;
-    if (b != null) return Math.round(b);
-    const ents = this._hass.entities || {};
-    const dev = p.source && ents[p.source]?.device_id;
-    if (!dev) return null;
-    for (const e of Object.values(ents)) {
-      if (e.device_id === dev && /battery_level$/.test(e.entity_id)) {
-        const v = parseFloat(this._hass.states[e.entity_id]?.state);
-        if (Number.isFinite(v)) return Math.round(v);
-      }
-    }
-    return null;
-  },
+  
+  
   // the weather where someone is, kept for 15 minutes
-  _wxKey(lat, lon) { return `${(+lat).toFixed(2)},${(+lon).toFixed(2)},${this._hass?.config?.unit_system?.temperature === '°F'}`; },
-  async _weatherAt(lat, lon) {
-    const f = this._hass?.config?.unit_system?.temperature === '°F';
-    const key = this._wxKey(lat, lon);
-    this._wxCache = this._wxCache || new Map();
-    const hit = this._wxCache.get(key);
-    if (hit && Date.now() - hit.at < 15 * 60000) return hit.v;
-    const r = await fetch(`https://api.open-meteo.com/v1/forecast?latitude=${(+lat).toFixed(4)}&longitude=${(+lon).toFixed(4)}&current=temperature_2m,weather_code&temperature_unit=${f ? 'fahrenheit' : 'celsius'}`);
-    if (!r.ok) throw new Error('weather');
-    const c = (await r.json()).current || {};
-    if (c.temperature_2m == null) throw new Error('weather');
-    const v = `${Math.round(c.temperature_2m)}° · ${FM_WX[c.weather_code] || 'Unknown'}`;
-    this._wxCache.set(key, { at: Date.now(), v });
-    return v;
-  },
+  
+  
   // places near a point, nearest first. OpenStreetMap's Overpass service is busy at times, so
   // each of its public servers is tried in turn (with a short pause between them), then
   // OpenStreetMap's own search (Nominatim), which asks for a second between requests.
   // Results are remembered on this device for the time chosen in the editor.
-  async _nearby(cat, lat, lon, radius = 1500, signal = null) {
-    const stopped = () => { if (signal?.aborted) throw new DOMException('stopped', 'AbortError'); };
-    const keepH = [168, 336, 720].includes(+this._config.people_nearby_keep) ? +this._config.people_nearby_keep : 168;
-    const key = `${FM_NEAR_KEY}${cat.id}:${(+lat).toFixed(3)},${(+lon).toFixed(3)}`;
-    // anything already found for this kind of place within a few hundred metres is used again
-    // rather than asking OpenStreetMap a second time (distances are worked out from where you asked)
-    try {
-      const pre = `${FM_NEAR_KEY}${cat.id}:`;
-      let best = null;
-      for (let i = 0; i < localStorage.length; i++) {
-        const k = localStorage.key(i);
-        if (!k || !k.startsWith(pre)) continue;
-        const hit = JSON.parse(localStorage.getItem(k) || 'null');
-        if (!hit || !Array.isArray(hit.items) || Date.now() - hit.at >= keepH * 3600000) continue;
-        const [hl, ho] = hit.lat != null ? [hit.lat, hit.lon] : k.slice(pre.length).split(',').map(Number);
-        const d = haversine([lat, lon], [hl, ho]);
-        if (d <= 400 && (!best || d < best.d)) best = { d, hit };
-      }
-      if (best) {
-        return best.hit.items.map(it => ({ ...it, dist: haversine([lat, lon], [it.lat, it.lon]) }))
-          .filter(it => it.dist <= radius * 1.2).sort((x, y) => x.dist - y.dist);
-      }
-    } catch (e) { /* nothing kept */ }
-    const parts = cat.tags.map(t => { const [k, v] = t.split('='); return `nwr["${k}"="${v}"](around:${radius},${lat},${lon});`; }).join('');
-    const q = `[out:json][timeout:20];(${parts});out center 80;`;
-    let els = null;
-    for (const [n, url] of FM_OVERPASS.entries()) {
-      stopped();
-      if (n) await fmSleep(600);
-      stopped();
-      const ctl = new AbortController(), tm = setTimeout(() => ctl.abort(), 12000);
-      const onStop = () => ctl.abort();
-      signal?.addEventListener('abort', onStop, { once: true });
-      try {
-        const r = await fetch(url, { method: 'POST', body: 'data=' + encodeURIComponent(q), signal: ctl.signal });
-        clearTimeout(tm);
-        if (!r.ok) { console.warn('[Crow Messenger] Find Nearby:', url, r.status); continue; }
-        const j = await r.json();
-        if (Array.isArray(j.elements)) { els = j.elements; break; }
-      } catch (err) { clearTimeout(tm); stopped(); console.warn('[Crow Messenger] Find Nearby:', url, err?.message || err); }
-      finally { signal?.removeEventListener('abort', onStop); }
-    }
-    stopped();
-    const out = [], seen = new Set();
-    const main = cat.tags.filter(t => !t.endsWith('=yes')).map(t => t.split('='));
-    const add = (d) => {
-      const k = `${String(d.name).toLowerCase()}|${(+d.lat).toFixed(4)}|${(+d.lon).toFixed(4)}`;
-      if (seen.has(k)) return;
-      seen.add(k);
-      const dist = haversine([lat, lon], [+d.lat, +d.lon]);
-      if (dist <= radius * 1.2) out.push({ ...d, lat: +d.lat, lon: +d.lon, dist });
-    };
-    const fromTags = (t) => {
-      const street = [t['addr:housenumber'], t['addr:street']].filter(Boolean).join(' ');
-      const town = [t['addr:city'] || t['addr:town'] || t['addr:village'], t['addr:postcode']].filter(Boolean).join(' ');
-      // a cash machine or toilets inside a shop, bank or station
-      const inside = !main.some(([k, v]) => t[k] === v);
-      return {
-        sub: street || town || '', address: [street, town].filter(Boolean).join(', ') || t['addr:full'] || '',
-        addrLines: street || t['addr:city'] || t['addr:town'] || t['addr:village'] || t['addr:postcode']
-          ? [street, t['addr:city'] || t['addr:town'] || t['addr:village'], t['addr:postcode']] : null,
-        kind: inside ? `${cat.one} Inside` : '', hours: t.opening_hours || '', phone: t.phone || t['contact:phone'] || '',
-        web: t.website || t['contact:website'] || t.url || '', wheelchair: t.wheelchair || '',
-        operator: t.brand || t.operator || '', fee: t.fee || '', charge: t.charge || '',
-      };
-    };
-    if (els) {
-      for (const e of els) {
-        const la = e.lat ?? e.center?.lat, lo = e.lon ?? e.center?.lon;
-        if (la == null || lo == null) continue;
-        const t = e.tags || {};
-        add({ name: t.name || t.brand || t.operator || cat.one, lat: la, lon: lo, ...fromTags(t) });
-      }
-    } else {
-      // OpenStreetMap's search, inside a box around the point
-      const dLat = radius / 111000, dLon = radius / (111000 * Math.cos(lat * Math.PI / 180));
-      const box = `${lon - dLon},${lat + dLat},${lon + dLon},${lat - dLat}`;
-      let any = false, first = true;
-      for (const [k, v] of main) {
-        if (!first) await fmSleep(1100);
-        first = false;
-        stopped();
-        try {
-          const r = await fetch(`https://nominatim.openstreetmap.org/search?${new URLSearchParams({ format: 'jsonv2', [k]: v, bounded: '1', viewbox: box, limit: '40', addressdetails: '1', extratags: '1' })}`, { signal });
-          if (!r.ok) continue;
-          any = true;
-          for (const pl of await r.json()) {
-            const a = pl.address || {}, x = pl.extratags || {};
-            const street = [a.house_number, a.road].filter(Boolean).join(' ');
-            // an unnamed place is called by its brand or what it is, not by the road it's on
-            add({ name: pl.name || x.brand || x.operator || cat.one, lat: pl.lat, lon: pl.lon, sub: street,
-              address: [street, [a.town || a.city || a.village, a.postcode].filter(Boolean).join(' ')].filter(Boolean).join(', '),
-              addrLines: [street, a.town || a.city || a.village, a.postcode],
-              kind: '', hours: x.opening_hours || '', phone: x.phone || x['contact:phone'] || '', web: x.website || x['contact:website'] || '',
-              wheelchair: x.wheelchair || '', operator: x.brand || x.operator || '', fee: x.fee || '', charge: x.charge || '' });
-          }
-        } catch (err) { stopped(); console.warn('[Crow Messenger] Find Nearby (search):', err?.message || err); }
-      }
-      stopped();
-      if (!any) throw new Error('nearby');
-    }
-    const items = out.sort((x, y) => x.dist - y.dist).slice(0, 25);
-    try { localStorage.setItem(key, JSON.stringify({ at: Date.now(), lat: +lat, lon: +lon, items })); } catch (e) { /* storage full or blocked */ }
-    return items;
-  },
+  
   // everything Find Nearby has found and still remembers, one entry per place
   _savedNearby() {
     const keepH = [168, 336, 720].includes(+this._config.people_nearby_keep) ? +this._config.people_nearby_keep : 168;
@@ -11637,20 +11663,7 @@ Object.assign(CrowMessengerCard.prototype, {
     return out;
   },
   // Remove from Map: one place taken out of everything Find Nearby remembers
-  _forgetPlace(cat, it) {
-    const k = (x) => `${String(x.name).toLowerCase()}|${(+x.lat).toFixed(4)}|${(+x.lon).toFixed(4)}`;
-    const want = k(it);
-    try {
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (!key || !key.startsWith(`${FM_NEAR_KEY}${cat.id}:`)) continue;
-        const hit = JSON.parse(localStorage.getItem(key) || 'null');
-        if (!hit || !Array.isArray(hit.items)) continue;
-        const items = hit.items.filter(x => k(x) !== want);
-        if (items.length !== hit.items.length) localStorage.setItem(key, JSON.stringify({ ...hit, items }));
-      }
-    } catch (e) { /* */ }
-  },
+  
   // Find Nearby → Clear Saved Places in the editor
   _clearNearby() {
     let n = 0;
@@ -11662,10 +11675,7 @@ Object.assign(CrowMessengerCard.prototype, {
     } catch (e) { /* */ }
     return n;
   },
-  _mapsUrl(lat, lon, name) {
-    const q = `${lat},${lon}`;
-    return isApple() ? `https://maps.apple.com/?daddr=${q}` : isAndroid() ? `geo:${q}?q=${q}(${encodeURIComponent(name || '')})` : `https://www.google.com/maps/dir/?api=1&destination=${q}`;
-  },
+  
   // Distances, in the units chosen in the editor (Automatic follows Home Assistant's unit system):
   // kilometres and metres, miles and metres, miles and yards, or miles and feet
   _units() {
@@ -11694,612 +11704,7 @@ Object.assign(CrowMessengerCard.prototype, {
     return this._fmtDist(haversine([me.lat, me.lon], [p.lat, p.lon]));
   },
 
-  _pg_people({ focus } = {}) {
-    const el = this._el(`<div>
-      <style>${FM_CSS}</style>
-      <div class="fm-map"></div>
-      <div class="top"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><div></div></div>
-      <div class="fm-ctrls">
-        <div class="fm-vcap g"><button data-a="maptype" aria-label="Map style">${FM_ICON.map}</button><button data-a="locate" aria-label="Show me">${FM_ICON.locate}</button>${this._config.people_nearby === true ? `<button data-a="nearbyhere" aria-label="Find nearby">${ICON.search}</button>` : ''}</div>
-        <button class="fm-3d g" data-a="3d" aria-label="3D">3D</button>
-      </div>
-      <div class="fm-sheet"><div class="fm-grab"></div><div class="fm-head"><h2>People</h2><button class="cb g" data-a="add" aria-label="Choose people">${ICON.plus}</button></div><div class="fm-list"></div></div>
-    </div>`);
-    const page = { el };
-    const s = this._s;
-    const mapEl = el.querySelector('.fm-map'), sheet = el.querySelector('.fm-sheet'), list = el.querySelector('.fm-list'), head = el.querySelector('.fm-head');
-    let map = null, markers = new Map(), meMarker = null, selected = focus || null, mapType = 'auto', threeD = false, fitted = false;
-    // a zone being made: { lat, lon, r, bearing, name, intro, back } and its two map handles
-    let draft = null;
-    // Find Nearby: { cat, lat, lon, label, items, busy, err, back } and the places' pins on the map
-    let nearbyRes = null, poiMarkers = [];
-    const canZone = () => this._zoneCan();
-    try { mapType = localStorage.getItem('crowMessengerMapType') || 'auto'; } catch (e) { /* */ }
-
-    // ── bottom sheet: collapsed / half / full ──
-    // Half height shows two whole people with the third peeking out, like Find My.
-    const heights = () => {
-      const H = el.clientHeight || 600;
-      const top = (el.querySelector('.fm-grab')?.offsetHeight || 5) + 8 + (head.offsetHeight || 64);
-      const rowH = list.querySelector('.fm-row')?.offsetHeight || 72;
-      const rows = list.querySelectorAll('.fm-row').length;
-      const form = list.querySelector('.fm-zf');
-      const half = form ? top + form.offsetHeight + 24
-        : rows ? top + rowH * Math.min(rows, 2.45) + (rows <= 2 ? 16 : 0) : Math.round(H * 0.4);
-      return { min: top + 8, half: Math.min(Math.round(half), H - 72), full: H - 72 };
-    };
-    let snap = 'half';
-    const setSheet = (name) => { snap = name; sheet.style.height = `${heights()[name]}px`; };
-    let drag = null;
-    const onDown = (e) => {
-      if (e.target.closest('button, input') || (e.target.closest('.fm-list') && list.scrollTop > 0)) return;
-      if (e.target.closest('.fm-list') && snap === 'full') return;
-      drag = { y: e.clientY, h: sheet.offsetHeight, moved: false };
-      sheet.classList.add('dragging');
-    };
-    sheet.addEventListener('pointerdown', onDown);
-    window.addEventListener('pointermove', page._pm = (e) => {
-      if (!drag) return;
-      const dy = drag.y - e.clientY;
-      if (Math.abs(dy) > 6) drag.moved = true;
-      const hs = heights();
-      sheet.style.height = `${clamp(drag.h + dy, hs.min, hs.full)}px`;
-    });
-    window.addEventListener('pointerup', page._pu = () => {
-      if (!drag) return;
-      sheet.classList.remove('dragging');
-      const h = sheet.offsetHeight, hs = heights();
-      const moved = drag.moved;
-      drag = null;
-      if (!moved) return;
-      const best = Object.entries(hs).sort((a, b) => Math.abs(a[1] - h) - Math.abs(b[1] - h))[0][0];
-      setSheet(best);
-    });
-    el.querySelector('.fm-grab').addEventListener('click', () => setSheet(snap === 'half' ? 'full' : snap === 'full' ? 'min' : 'half'));
-
-    const visible = () => { const hid = this._hiddenPeople(); return this._people().filter(p => !hid.has(p.eid)); };
-    const meP = () => this._people().find(p => p.me);
-
-    // ── list / detail ──
-    const badge = (p) => p.stale ? `<span class="fm-badge off">${FM_ICON.noLoc}</span>` : p.fav ? `<span class="fm-badge star">${ICON.starFill}</span>` : '';
-    const renderList = () => {
-      if (draft) { renderZone(); return; }
-      if (nearbyRes) { renderNearby(); return; }
-      const me = meP();
-      const ppl = visible().filter(p => !p.me);
-      if (selected) {
-        const p = this._people().find(x => x.eid === selected);
-        if (p) { renderDetail(p, me); return; }
-        selected = null;
-      }
-      head.querySelector('h2').textContent = 'People';
-      head.querySelector('[data-a]').dataset.a = 'add';
-      head.querySelector('[data-a]').innerHTML = ICON.plus;
-      head.querySelector('[data-a]').classList.remove('sm');
-      this._set(list, ppl.length ? ppl.map(p => `<div class="fm-row" data-eid="${esc(p.eid)}">
-          <div class="fm-avw">${this._avHtml({ pic: p.pic, name: p.name, size: 52 })}${badge(p)}</div>
-          <div style="min-width:0"><div class="fm-n">${esc(p.name)}</div><div class="fm-s">${esc(this._placeLabel(p))}${p.has ? ` · ${esc(timeAgoShort(p.ts))}` : ''}</div></div>
-          <div class="fm-d">${esc(this._distance(p, me))}</div></div>`).join('')
-        : `<div class="empty" style="padding:24px 30px">No one to show yet. People appear here when their Home Assistant person has a location — usually from the Companion app on their phone.</div>`);
-    };
-    const renderDetail = (p, me) => {
-      head.querySelector('h2').textContent = '';
-      head.querySelector('[data-a]').dataset.a = 'closedetail';
-      head.querySelector('[data-a]').innerHTML = ICON.x;
-      head.querySelector('[data-a]').classList.add('sm');
-      const batt = this._battery(p);
-      const addr = this._geocoded(p);
-      const cfg = this._config;
-      const on = (k) => cfg[k] !== false;
-      const since = on('people_here_since') ? this._hereSince(p) : null;
-      const act = on('people_activity') && p.has ? this._activity(p) : '';
-      const focus = on('people_focus') ? this._focusOn(p) : '';
-      const charging = on('people_charging') ? this._charging(p) : '';
-      const wifi = on('people_wifi') ? this._wifi(p) : null;
-      const wxOn = on('people_weather') && p.has;
-      const row = (k, v) => `<div class="fi2"><span>${esc(k)}</span><b style="font-weight:500;text-align:right">${esc(v)}</b></div>`;
-      const canMsg = p.uid && !p.me && s.users.has(p.uid);
-      this._set(list, `<div class="fm-detail">
-        <div style="display:flex;align-items:center;gap:14px"><div class="fm-avw">${this._avHtml({ pic: p.pic, name: p.name, size: 60 })}${badge(p)}</div>
-          <div style="min-width:0"><div class="fm-dn">${esc(p.name)}</div><div class="fm-ds">${esc(this._placeLabel(p))}${p.has ? ` · ${esc(timeAgoShort(p.ts))}` : ''}${this._distance(p, me) ? ` · ${esc(this._distance(p, me))}` : ''}</div></div></div>
-        <div class="fm-acts${canZone() ? ' four' : ''}">
-          <button data-fa="message" ${canMsg ? '' : 'disabled'}>${ICON.bubble}<span>Message</span></button>
-          <button data-fa="directions" ${p.has && !p.me ? '' : 'disabled'}>${ICON.pin}<span>Directions</span></button>
-          <button data-fa="contact" ${p.contact ? '' : 'disabled'}>${ICON.contacts}<span>Contact</span></button>
-          ${canZone() ? `<button data-fa="zone" ${p.has ? '' : 'disabled'}>${FM_ICON.zone}<span>Add Zone</span></button>` : ''}
-        </div>
-        <div class="fm-info">
-          ${addr ? `<div class="fi2"><span>Address</span><b style="font-weight:500;text-align:right">${esc(addr.replace(/\n/g, ', '))}</b></div>` : ''}
-          ${since ? row(since.label, since.value) : ''}
-          ${wxOn ? `<div class="fi2" data-wx="1"><span>Weather</span><b style="font-weight:500;text-align:right">${esc(this._wxCache?.get(this._wxKey(p.lat, p.lon))?.v || '…')}</b></div>` : ''}
-          ${act ? row('Activity', act) : ''}
-          ${focus ? row(focus, 'On') : ''}
-          ${batt != null ? row('Battery', `${batt}%${charging ? ` · ${charging}` : ''}`) : ''}
-          ${wifi ? row('Wi-Fi', wifi) : ''}
-          <div class="fi2"><span>Updated</span><b style="font-weight:500">${p.has ? esc(new Date(p.ts).toLocaleString(locale(this._hass), { weekday: 'short', hour: 'numeric', minute: '2-digit', hour12: hour12(this._hass) })) : '—'}</b></div>
-        </div>
-        ${cfg.people_nearby === true && p.has ? `<div class="fm-info fm-more"><div class="fi2" role="button" data-fa="nearby"><span>Find Nearby</span>${ICON.chevR}</div></div>` : ''}
-        </div>`);
-      if (wxOn) {
-        this._weatherAt(p.lat, p.lon).then(v => {
-          const b = list.querySelector('[data-wx] b');
-          if (b && selected === p.eid) b.textContent = v;
-        }).catch(() => { list.querySelector('[data-wx]')?.remove(); });
-      }
-    };
-
-    // ── New Zone: a name, a radius you can
-    // type or drag on the map, then Create Zone adds it to Home Assistant ──
-    let ed = null;   // the zone editor, once the map is up
-    const clearPois = () => { poiMarkers.forEach(m => m.remove()); poiMarkers = []; };
-    const setHead = (title, action) => {
-      head.querySelector('h2').textContent = title;
-      head.querySelector('[data-a]').dataset.a = action;
-      head.querySelector('[data-a]').innerHTML = ICON.x;
-      head.querySelector('[data-a]').classList.add('sm');
-      head.querySelector('[data-a]').setAttribute('aria-label', action === 'nearbyback' ? 'Back to the list' : 'Close');
-    };
-    // distances are from the person you're looking at (as they move), otherwise from where you searched
-    const fromWho = () => {
-      const eid = nearbyRes?.back || nearbyRes?.from;
-      const p = eid ? this._people().find(x => x.eid === eid) : null;
-      return p?.has ? { lat: p.lat, lon: p.lon, label: p.me ? 'you' : p.name } : null;
-    };
-    const distOf = (it) => { const w = fromWho(); return w ? haversine([w.lat, w.lon], [it.lat, it.lon]) : it.dist; };
-    const distFrom = () => fromWho()?.label || nearbyRes.label;
-    const renderNearby = () => {
-      const r = nearbyRes;
-      if (r.detail != null && r.items[r.detail]) { renderPlace(r.items[r.detail]); return; }
-      setHead(`${r.cat.name} Nearby`, 'closenearby');
-      const body = r.busy ? `<div class="fm-busy"><span class="fm-spin"></span><span>Looking for ${esc(r.cat.name.toLowerCase())}…</span></div>`
-        : r.err ? `<div class="empty" style="padding:24px 30px">${esc(r.err)}</div>`
-        : !r.items.length ? `<div class="empty" style="padding:24px 30px">No ${esc(r.cat.name.toLowerCase())} found within ${esc(this._fmtDist(1500, true))} of ${esc(r.label)}.</div>`
-        : `<div class="fm-nsub">Near ${esc(r.label)}</div>` + r.items.map((it, i) => `<div class="fm-nrow" data-ni="${i}">
-            <div class="fm-nic">${fmIco(r.cat, 22)}</div>
-            <div style="min-width:0;flex:1"><div class="fm-n">${esc(it.name)}</div><div class="fm-s">${esc([this._fmtDist(distOf(it)), it.kind || it.sub].filter(Boolean).join(' · '))}</div></div>
-            <button class="fm-ndir" data-nd="${i}" aria-label="Directions">${ICON.pin}</button></div>`).join('');
-      this._set(list, body);
-    };
-    // one place: its address, opening hours, phone, website and access, with Directions
-    const renderPlace = (it) => {
-      setHead('', 'nearbyback');
-      const yesNo = (v) => ({ yes: 'Yes', no: 'No', limited: 'Limited', designated: 'Yes' }[String(v).toLowerCase()] || v);
-      const rows = [
-        ['Type', it.kind || nearbyRes.cat.one],
-        ['Distance', `${this._fmtDist(distOf(it))} from ${distFrom()}`],
-        ['Address', fmAddr(it)],
-        ...(it.phone ? [['Phone', it.phone, 'np']] : []),
-        ...(it.web ? [['Website', it.web.replace(/^https?:\/\/(www\.)?/i, '').replace(/\/$/, ''), 'nw']] : []),
-        ['Opening Hours', fmHours(it.hours)],
-        ['Run By', it.operator && it.operator !== it.name ? it.operator : ''],
-        ['Charge', it.charge || (it.fee ? (String(it.fee).toLowerCase() === 'no' ? 'Free' : yesNo(it.fee) === 'Yes' ? 'Paid' : it.fee) : '')],
-        ['Wheelchair Access', it.wheelchair ? yesNo(it.wheelchair) : ''],
-      ].filter(([, v]) => v);
-      const zone = canZone();
-      const rowHtml = ([k, v, link]) => link
-        ? `<div class="fi2" role="button" data-${link}="${nearbyRes.detail}"><span>${esc(k)}</span><b class="fm-link" style="font-weight:500;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:62%">${esc(v)}</b></div>`
-        : `<div class="fi2"><span>${esc(k)}</span><b style="font-weight:500;text-align:right;white-space:pre-line">${esc(v)}</b></div>`;
-      this._set(list, `<div class="fm-detail">
-        <div style="display:flex;align-items:center;gap:14px"><div class="fm-nic big">${fmIco(nearbyRes.cat, 30)}</div>
-          <div style="min-width:0"><div class="fm-dn pl">${esc(it.name)}</div><div class="fm-ds">${esc([it.kind || nearbyRes.cat.one, this._fmtDist(distOf(it))].join(' · '))}</div></div></div>
-        <div class="fm-acts"><button data-nd="${nearbyRes.detail}">${ICON.pin}<span>Directions</span></button>
-          <button data-nsh="${nearbyRes.detail}">${ICON.share}<span>Share</span></button>
-          ${zone ? `<button data-nz="${nearbyRes.detail}">${FM_ICON.zone}<span>Add Zone</span></button>` : ''}</div>
-        <div class="fm-info">${rows.map(rowHtml).join('')}</div>
-        <div class="fm-src">From OpenStreetMap</div></div>`);
-    };
-    const showPois = (stay = false) => {
-      clearPois();
-      if (!map || !nearbyRes?.items?.length) return;
-      nearbyRes.items.forEach((it, i) => {
-        const d = document.createElement('div');
-        d.className = 'fm-poi'; d.innerHTML = fmIco(nearbyRes.cat, 18);
-        d.addEventListener('click', (ev) => { ev.stopPropagation(); openPlace(i); });
-        pinHold(d, () => it, nearbyRes.cat);
-        poiMarkers.push(new window.maplibregl.Marker({ element: d }).setLngLat([it.lon, it.lat]).addTo(map));
-      });
-      // the map stays at the same zoom: it only moves if none of the places are in view
-      const b = map.getBounds();
-      if (!stay && !nearbyRes.items.some(it => b.contains([it.lon, it.lat]))) {
-        const it = nearbyRes.items[0];
-        map.easeTo({ center: [it.lon, it.lat], padding: { bottom: heights()[snap], top: 60 }, duration: 700 });
-      }
-    };
-    // places found before stay on the map (smaller) so they don't have to be looked up again
-    let savedMarkers = [];
-    const savedOn = () => { try { return localStorage.getItem('crowMessengerShowSaved') !== 'off'; } catch (e) { return true; } };
-    // press and hold a place's pin: Share, Directions, or Remove from Map
-    const pinHold = (d, getIt, cat) => {
-      let t = null, held = false;
-      const go = async () => {
-        held = true;
-        try { navigator.vibrate?.(10); } catch (err) { /* */ }
-        const it = getIt();
-        if (!it) return;
-        const v = await this._menu(d, [{ header: it.name }, { text: 'Directions', value: 'dir', icon: ICON.pin }, { text: 'Share', value: 'share', icon: ICON.share },
-          { sep: true }, { text: 'Remove from Map', value: 'rm', icon: ICON.trash, red: true }]);
-        if (v === 'dir') this._alert({ title: `Get Directions to ${it.name}?`, message: nearbyRes ? `${this._fmtDist(distOf(it))} from ${distFrom()}` : '', buttons: [{ text: 'Open in Maps', style: 'ok', value: true, href: this._mapsUrl(it.lat, it.lon, it.name) }, { text: 'Cancel', style: 'cancel' }] });
-        if (v === 'share') sharePlace(d, it);
-        if (v === 'rm') {
-          this._forgetPlace(cat, it);
-          if (nearbyRes?.cat.id === cat.id) {
-            const k = (x) => `${String(x.name).toLowerCase()}|${(+x.lat).toFixed(4)}|${(+x.lon).toFixed(4)}`;
-            const was = nearbyRes.items[nearbyRes.detail];
-            nearbyRes.items = nearbyRes.items.filter(x => k(x) !== k(it));
-            if (was && k(was) === k(it)) nearbyRes.detail = null;
-            else if (was) nearbyRes.detail = nearbyRes.items.indexOf(was);
-            renderList(); showPois(true);
-          }
-          showSaved();
-        }
-      };
-      d.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); held = false; clearTimeout(t); t = setTimeout(go, 500); });
-      ['pointerup', 'pointerleave', 'pointercancel'].forEach(n => d.addEventListener(n, () => clearTimeout(t)));
-      d.addEventListener('contextmenu', (ev) => { ev.preventDefault(); clearTimeout(t); go(); });
-      // a hold doesn't also count as a tap
-      d.addEventListener('click', (ev) => { if (held) { ev.stopPropagation(); ev.stopImmediatePropagation(); held = false; } }, true);
-    };
-    const showSaved = () => {
-      savedMarkers.forEach(m => m.remove()); savedMarkers = [];
-      if (!map || this._config.people_nearby !== true || !savedOn()) return;
-      const live = new Set((nearbyRes?.items || []).map(it => `${nearbyRes.cat.id}|${String(it.name).toLowerCase()}|${(+it.lat).toFixed(4)}|${(+it.lon).toFixed(4)}`));
-      for (const sp of this._savedNearby()) {
-        if (live.has(sp.id)) continue;
-        const d = document.createElement('div');
-        d.className = 'fm-poi saved'; d.innerHTML = fmIco(sp.cat, 14);
-        d.title = sp.it.name;
-        d.addEventListener('click', (ev) => { ev.stopPropagation(); openSaved(sp); });
-        pinHold(d, () => sp.it, sp.cat);
-        savedMarkers.push(new window.maplibregl.Marker({ element: d }).setLngLat([+sp.it.lon, +sp.it.lat]).addTo(map));
-      }
-    };
-    // a saved place tapped on the map: its details, with the others of that kind around it
-    const openSaved = (sp) => {
-      if (draft) return;
-      const me = meP();
-      const group = this._savedNearby().filter(x => x.cat.id === sp.cat.id && haversine([+sp.it.lat, +sp.it.lon], [+x.it.lat, +x.it.lon]) <= 1500)
-        .map(x => ({ ...x.it, lat: +x.it.lat, lon: +x.it.lon, dist: me?.has ? haversine([me.lat, me.lon], [+x.it.lat, +x.it.lon]) : 0 }));
-      nearbyRes = { cat: sp.cat, lat: +sp.it.lat, lon: +sp.it.lon, label: me?.has ? 'you' : sp.it.name, items: group, busy: false,
-        back: nearbyRes ? nearbyRes.back : selected, from: me?.eid || null, detail: null };
-      nearbyRes.items.sort((x, y) => distOf(x) - distOf(y));
-      const i = nearbyRes.items.findIndex(x => Math.abs(x.lat - sp.it.lat) < 1e-6 && Math.abs(x.lon - sp.it.lon) < 1e-6);
-      showPois(); showSaved();
-      if (snap === 'min') setSheet('half');
-      openPlace(Math.max(0, i));
-    };
-    const markPoi = (i) => {
-      poiMarkers.forEach((m, j) => m.getElement().classList.toggle('sel', j === i));
-      list.querySelectorAll('.fm-nrow').forEach(r => r.classList.toggle('sel', +r.dataset.ni === i));
-    };
-    const openPlace = (i) => {
-      const it = nearbyRes?.items?.[i];
-      if (!it) return;
-      nearbyRes.detail = i;
-      renderList(); markPoi(i);
-      // moves to the place without zooming out
-      map?.easeTo({ center: [it.lon, it.lat], zoom: Math.max(map.getZoom(), 16), padding: { bottom: heights()[snap], top: 60 }, duration: 700 });
-    };
-    const openNearby = async (anchor, lat, lon, label) => {
-      const v = await this._menu(anchor, [{ header: 'Find Nearby' }, ...FM_NEARBY.map(c => ({ text: c.name, value: c.id, icon: fmIco(c, 20) }))], { align: 'left' });
-      const cat = FM_NEARBY.find(c => c.id === v);
-      if (!cat) return;
-      clearPois();
-      nearbyRes?.ctl?.abort();   // a search still running stops
-      nearbyRes = { cat, lat, lon, label, items: [], busy: true, back: nearbyRes ? nearbyRes.back : selected, from: nearbyRes?.from || null, detail: null, ctl: new AbortController() };
-      renderList(); setSheet('half');
-      const mine = nearbyRes;
-      try { mine.items = (await this._nearby(cat, lat, lon, 1500, mine.ctl.signal)).sort((x, y) => distOf(x) - distOf(y)); }
-      catch (err) { if (err?.name === 'AbortError') return; mine.err = 'OpenStreetMap didn’t answer just now, so nearby places couldn’t be looked up. Please try again in a moment.'; }
-      mine.busy = false;
-      if (nearbyRes !== mine) return;
-      renderList(); showPois(); showSaved();
-    };
-    // Share: as a location in one or more chats, or with the phone's own share sheet
-    const sharePlace = async (anchor, it) => {
-      if (!it) return;
-      const label = [it.name, (fmAddr(it).split('\n')[0] || '')].filter((x, i, a) => x && a.indexOf(x) === i).join(', ');
-      const url = isApple() ? `https://maps.apple.com/?ll=${it.lat},${it.lon}&q=${encodeURIComponent(it.name)}` : `https://www.google.com/maps/search/?api=1&query=${it.lat},${it.lon}`;
-      const items = [{ text: 'Send in a Chat', value: 'chat', icon: ICON.bubble }];
-      items.push(navigator.share ? { text: 'Share…', value: 'os', icon: ICON.share } : { text: 'Copy Link', value: 'copy', icon: ICON.share });
-      const v = await this._menu(anchor, items);
-      if (v === 'chat') this._sendPlace({ lat: it.lat, lon: it.lon, label });
-      else if (v === 'os') { try { await navigator.share({ title: it.name, text: [it.name, fmAddr(it).replace(/\n/g, ', ')].filter(Boolean).join('\n'), url }); } catch (err) { /* cancelled */ } }
-      else if (v === 'copy') { this._toast((await copyText(`${it.name}\n${url}`)) ? 'Copied' : 'Copy not available here'); }
-    };
-    const closeNearby = () => {
-      if (!nearbyRes) return;
-      // closing while it's still looking stops the search
-      nearbyRes.ctl?.abort();
-      selected = nearbyRes.back;
-      nearbyRes = null;
-      clearPois();
-      renderList();
-      showSaved();
-    };
-    const renderZone = () => {
-      head.querySelector('h2').textContent = 'New Zone';
-      head.querySelector('[data-a]').dataset.a = 'closezone';
-      head.querySelector('[data-a]').innerHTML = ICON.x;
-      head.querySelector('[data-a]').classList.add('sm');
-      if (list.querySelector('.fm-zf')) return;   // keep what's being typed when people move
-      this._set(list, this._zoneFormHtml(draft.intro));
-      this._fillZoneForm(list, draft);
-    };
-    const openZone = (lat, lon, { intro, name = '', back = null } = {}) => {
-      if (!this._zoneCan() || !ed) return;
-      if (draft) { ed.move(lat, lon); return; }
-      draft = ed.start(lat, lon, { name, back, intro: this._zoneIntro(intro) });
-      renderList();
-      requestAnimationFrame(() => {
-        setSheet('half');
-        map?.flyTo({ center: [lon, lat], zoom: Math.max(map.getZoom(), 17.5), padding: { bottom: heights().half, top: 60 }, duration: 900 });
-      });
-    };
-    const closeZone = () => {
-      if (!draft) return;
-      selected = draft.back;
-      draft = null;
-      ed?.stop();
-      renderList();
-      setSheet('half');
-    };
-    this._wireZoneForm(list, () => ed, () => closeZone());
-
-    list.addEventListener('click', async (e) => {
-      if (e.target.closest('[data-za]')) return;
-      const nd = e.target.closest('[data-nd]');
-      if (nd && nearbyRes) {
-        const it = nearbyRes.items[+nd.dataset.nd];
-        if (it) await this._alert({ title: `Get Directions to ${it.name}?`, message: `${this._fmtDist(distOf(it))} from ${distFrom()}`, buttons: [{ text: 'Open in Maps', style: 'ok', value: true, href: this._mapsUrl(it.lat, it.lon, it.name) }, { text: 'Cancel', style: 'cancel' }] });
-        return;
-      }
-      const np = e.target.closest('[data-np]');
-      if (np && nearbyRes) {
-        const it = nearbyRes.items[+np.dataset.np];
-        if (it?.phone) await this._alert({ title: `Call ${it.phone}?`, message: it.name, buttons: [{ text: 'Call', style: 'ok', value: true, href: `tel:${telValue(it.phone)}` }, { text: 'Cancel', style: 'cancel' }] });
-        return;
-      }
-      const nw = e.target.closest('[data-nw]');
-      if (nw && nearbyRes) {
-        const it = nearbyRes.items[+nw.dataset.nw];
-        if (!it?.web) return;
-        const href = /^https?:/i.test(it.web) ? it.web : `https://${it.web}`;
-        let host = it.web; try { host = new URL(href).host.replace(/^www\./, ''); } catch (err) { /* */ }
-        await this._alert({ title: `Open ${host}?`, message: it.name, buttons: [{ text: 'Open', style: 'ok', value: true, href }, { text: 'Cancel', style: 'cancel' }] });
-        return;
-      }
-      const nsh = e.target.closest('[data-nsh]');
-      if (nsh && nearbyRes) { sharePlace(nsh, nearbyRes.items[+nsh.dataset.nsh]); return; }
-      const nz = e.target.closest('[data-nz]');
-      if (nz && nearbyRes) {
-        const it = nearbyRes.items[+nz.dataset.nz];
-        if (it) openZone(it.lat, it.lon, { back: selected, name: it.name, intro: `This makes a zone at ${it.name}.` });
-        return;
-      }
-      const nr = e.target.closest('[data-ni]');
-      if (nr && nearbyRes) { openPlace(+nr.dataset.ni); return; }
-      const row = e.target.closest('.fm-row');
-      if (row) { select(row.dataset.eid); return; }
-      const fa = e.target.closest('[data-fa]')?.dataset.fa;
-      const p = this._people().find(x => x.eid === selected);
-      if (!fa || !p) return;
-      if (fa === 'message') this._messageUser(p.uid);
-      if (fa === 'contact' && p.contact) this._nav('contact', { cid: p.contact.id });
-      if (fa === 'directions') this._confirmMapsTo(p);
-      if (fa === 'nearby' && p.has) openNearby(e.target.closest('[data-fa]'), p.lat, p.lon, p.me ? 'you' : p.name);
-      if (fa === 'zone' && p.has) {
-        const zoned = !['not_home', 'unknown', 'unavailable'].includes(p.state);
-        const who = p.me ? 'You’re' : `${p.name} is`;
-        openZone(p.lat, p.lon, {
-          back: p.eid,
-          name: zoned ? '' : (this._geocoded(p) || '').split(/\n|,/)[0].trim(),
-          intro: zoned ? `${who} in ${this._placeLabel(p)}. This makes another zone at this exact spot.` : `${who} here, and it isn’t a zone yet.`,
-        });
-      }
-    });
-
-    const select = (eid) => {
-      if (draft) return;
-      selected = eid;
-      renderList();
-      if (snap === 'min') setSheet('half');
-      const p = this._people().find(x => x.eid === eid);
-      markers.forEach((m, id) => m.getElement().classList.toggle('sel', id === eid));
-      if (map && p?.has) map.flyTo({ center: [p.lon, p.lat], zoom: Math.max(map.getZoom(), 15.5), padding: { bottom: heights()[snap] }, duration: 900 });
-    };
-
-    // ── map ──
-    const styleFor = () => {
-      const t = mapType === 'auto' ? (this._isDark() ? 'dark' : 'light') : mapType;
-      return FM_TILES[t] || FM_TILES.dark;
-    };
-    const add3D = () => {
-      if (!map || !threeD || map.getLayer('fm-3d')) return;
-      const src = Object.keys(map.getStyle().sources || {}).find(k => map.getSource(k)?.type === 'vector');
-      if (!src) return;
-      try {
-        map.addLayer({ id: 'fm-3d', type: 'fill-extrusion', source: src, 'source-layer': 'building', minzoom: 14,
-          paint: { 'fill-extrusion-color': this._isDark() ? '#3a4150' : '#d9d9de', 'fill-extrusion-height': ['coalesce', ['get', 'render_height'], 8],
-            'fill-extrusion-base': ['coalesce', ['get', 'render_min_height'], 0], 'fill-extrusion-opacity': 0.85 } });
-      } catch (e) { /* style without buildings */ }
-    };
-    const fitAll = (animate = true) => {
-      if (!map) return;
-      const pts = visible().filter(p => p.has);
-      if (!pts.length) return;
-      const pad = { top: 90, left: 50, right: 80, bottom: heights()[snap] + 30 };
-      if (pts.length === 1) { map.jumpTo({ center: [pts[0].lon, pts[0].lat], zoom: 15, padding: pad }); return; }
-      const lons = pts.map(p => p.lon), lats = pts.map(p => p.lat);
-      map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: pad, maxZoom: 16, duration: animate ? 800 : 0 });
-    };
-    const updateMarkers = () => {
-      if (!map) return;
-      const ppl = visible();
-      const seen = new Set();
-      for (const p of ppl) {
-        if (!p.has) continue;
-        if (p.me) {
-          if (!meMarker) { const d = document.createElement('div'); d.className = 'fm-me'; meMarker = new window.maplibregl.Marker({ element: d }).setLngLat([p.lon, p.lat]).addTo(map); }
-          else meMarker.setLngLat([p.lon, p.lat]);
-          continue;
-        }
-        seen.add(p.eid);
-        let m = markers.get(p.eid);
-        const html = this._avHtml({ pic: p.pic, name: p.name, size: 48 });
-        if (!m) {
-          const d = document.createElement('div');
-          d.className = 'fm-mk';
-          d.addEventListener('click', (ev) => { ev.stopPropagation(); select(p.eid); });
-          m = new window.maplibregl.Marker({ element: d }).setLngLat([p.lon, p.lat]).addTo(map);
-          markers.set(p.eid, m);
-        }
-        const d = m.getElement();
-        if (d.dataset.html !== html) { d.innerHTML = html; d.dataset.html = html; }
-        d.classList.toggle('stale', p.stale);
-        d.classList.toggle('sel', p.eid === selected);
-        m.setLngLat([p.lon, p.lat]);
-      }
-      for (const [eid, m] of markers) if (!seen.has(eid)) { m.remove(); markers.delete(eid); }
-      if (meMarker && !ppl.some(p => p.me && p.has)) { meMarker.remove(); meMarker = null; }
-      sideBySide();
-    };
-    // people in (almost) the same spot sit side by side instead of on top of each other
-    const sideBySide = () => {
-      if (!map) return;
-      const all = [...markers.entries()].map(([eid, m]) => ({ eid, m, pt: map.project(m.getLngLat()) }))
-        .sort((a, b) => a.eid.localeCompare(b.eid));
-      const groups = [];
-      for (const it of all) {
-        const g = groups.find(gr => gr.some(o => Math.hypot(o.pt.x - it.pt.x, o.pt.y - it.pt.y) < 46));
-        if (g) g.push(it); else groups.push([it]);
-      }
-      for (const g of groups) g.forEach((it, i) => it.m.setOffset([(i - (g.length - 1) / 2) * 46, 0]));
-    };
-    const initMap = async () => {
-      try {
-        const lib = await this._mapLib();
-        if (!el.isConnected) return;
-        const first = visible().find(p => p.has);
-        map = new lib.Map({ container: mapEl, style: styleFor(), center: first ? [first.lon, first.lat] : [-0.12, 51.5], zoom: first ? 14 : 5,
-          attributionControl: { compact: true }, pitchWithRotate: true, dragRotate: true });
-        ed = this._zoneEditor(map, el, list);
-        map.on('load', () => {
-          add3D(); ed.addLayers(); updateMarkers(); showSaved();
-          if (!fitted) { fitted = true; map.resize(); if (selected) select(selected); else fitAll(false); }
-        });
-        map.on('styledata', () => { add3D(); ed.addLayers(); });
-        ['zoomend', 'rotateend', 'pitchend'].forEach(ev => map.on(ev, sideBySide));
-        map.on('click', (e) => {
-          // while making a zone, a tap moves it there
-          if (draft) { ed.move(e.lngLat.lat, e.lngLat.lng); return; }
-          if (selected) { selected = null; renderList(); markers.forEach(m => m.getElement().classList.remove('sel')); }
-        });
-        // press and hold anywhere on the map (or right-click) to make a zone there
-        let lp = null;
-        const lpCancel = () => { if (lp) { clearTimeout(lp.t); lp = null; } };
-        map.on('touchstart', (e) => {
-          lpCancel();
-          if (draft || !canZone() || e.originalEvent.touches.length !== 1) return;
-          const pt = e.point, ll = e.lngLat;
-          lp = { pt, t: setTimeout(() => { lp = null; try { navigator.vibrate?.(12); } catch (err) { /* */ } openZone(ll.lat, ll.lng, { back: selected }); }, 550) };
-        });
-        map.on('touchmove', (e) => { if (lp && (Math.abs(e.point.x - lp.pt.x) > 8 || Math.abs(e.point.y - lp.pt.y) > 8 || e.originalEvent.touches.length !== 1)) lpCancel(); });
-        map.on('touchend', lpCancel);
-        map.on('touchcancel', lpCancel);
-        map.on('contextmenu', (e) => { if (!draft && !lp && canZone()) openZone(e.lngLat.lat, e.lngLat.lng, { back: selected }); });
-        page._styleKey = JSON.stringify(styleFor()) + this._isDark();
-      } catch (err) {
-        mapEl.innerHTML = `<div class="fm-nomap">The map couldn’t load here.<br>People and their places are listed below.</div>`;
-      }
-    };
-
-    el.addEventListener('click', async (e) => {
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a === 'back') { this._back(); return; }
-      if (a === 'closedetail') { selected = null; renderList(); markers.forEach(m => m.getElement().classList.remove('sel')); return; }
-      if (a === 'closezone') { closeZone(); return; }
-      if (a === 'closenearby') { closeNearby(); return; }
-      if (a === 'nearbyback') { if (nearbyRes) { nearbyRes.detail = null; markPoi(-1); renderList(); } return; }
-      if (a === 'nearbyhere') {
-        if (!map) return;
-        const c = map.getCenter();
-        openNearby(e.target.closest('button'), c.lat, c.lng, 'the middle of the map');
-        return;
-      }
-      if (a === 'locate') {
-        const me = meP();
-        if (map && me?.has) map.flyTo({ center: [me.lon, me.lat], zoom: 15.5, padding: { bottom: heights()[snap] } });
-        else fitAll();
-        return;
-      }
-      if (a === '3d') {
-        threeD = !threeD;
-        e.target.closest('button').classList.toggle('on', threeD);
-        if (!map) return;
-        if (threeD) { add3D(); map.easeTo({ pitch: 60, zoom: Math.max(map.getZoom(), 16), duration: 900 }); }
-        else { if (map.getLayer('fm-3d')) map.removeLayer('fm-3d'); map.easeTo({ pitch: 0, bearing: 0, duration: 700 }); }
-        return;
-      }
-      if (a === 'maptype') {
-        const v = await this._menu(e.target.closest('button'), [
-          { header: 'Map' },
-          { text: 'Automatic', value: 'auto', checked: mapType === 'auto' },
-          { text: 'Light', value: 'light', checked: mapType === 'light' },
-          { text: 'Dark', value: 'dark', checked: mapType === 'dark' },
-          { text: 'Satellite', value: 'satellite', checked: mapType === 'satellite' },
-          ...(this._config.people_nearby === true ? [{ sep: true }, { header: 'Places' },
-            { text: 'Show Saved Places', value: 'saved', checked: savedOn() },
-            { text: 'Clear Saved Places', value: 'clearsaved', icon: ICON.trash, red: true }] : []),
-        ]);
-        if (v === 'saved') {
-          try { localStorage.setItem('crowMessengerShowSaved', savedOn() ? 'off' : 'on'); } catch (err) { /* */ }
-          showSaved();
-          this._toast(savedOn() ? 'Saved places shown' : 'Saved places hidden');
-          return;
-        }
-        if (v === 'clearsaved') {
-          const r = await this._alert({ title: 'Clear Saved Places?', message: 'Places Find Nearby has found are forgotten on this device and taken off the map. They’re looked up again next time you search.', buttons: [{ text: 'Clear', style: 'destructive', value: true }, { text: 'Cancel', style: 'cancel' }] });
-          if (r.value) { const n = this._clearNearby(); showSaved(); this._toast(n ? 'Saved places cleared' : 'No saved places'); }
-          return;
-        }
-        if (v && v !== mapType) {
-          mapType = v;
-          try { localStorage.setItem('crowMessengerMapType', v); } catch (err) { /* */ }
-          if (map) { map.setStyle(styleFor()); page._styleKey = JSON.stringify(styleFor()) + this._isDark(); }
-        }
-        return;
-      }
-      if (a === 'add') {
-        const hid = this._hiddenPeople();
-        const v = await this._menu(e.target.closest('button'), [{ header: 'Show on the map' }, ...this._people().filter(p => !p.me).map(p => ({ text: p.name, value: p.eid, checked: !hid.has(p.eid) }))]);
-        if (v) { hid.has(v) ? hid.delete(v) : hid.add(v); this._setHiddenPeople(hid); renderList(); updateMarkers(); }
-      }
-    });
-
-    let lastSig = '';
-    page.refresh = (what) => {
-      if (!['all', 'contacts', 'states', 'users'].includes(what)) return;
-      ed?.refresh();
-      const sig =this._people().map(p => `${p.eid}|${p.lat}|${p.lon}|${p.state}|${p.ts}|${p.name}|${p.fav}`).join(';');
-      if (what === 'states' && sig === lastSig) return;
-      lastSig = sig;
-      renderList();
-      updateMarkers();
-      if (!drag && snap === 'half' && !selected) sheet.style.height = `${heights().half}px`;
-      const key = JSON.stringify(styleFor()) + this._isDark();
-      if (map && page._styleKey && key !== page._styleKey) { page._styleKey = key; map.setStyle(styleFor()); }
-    };
-    page.onShow = () => {
-      requestAnimationFrame(() => { setSheet(snap); if (!map) initMap(); else map.resize(); });
-    };
-    page.destroy = () => {
-      window.removeEventListener('pointermove', page._pm);
-      window.removeEventListener('pointerup', page._pu);
-      clearPois();
-      try { map?.remove(); } catch (e) { /* */ }
-    };
-    return page;
-  },
+  
 
   // ── Zones: made from the People map, Check In, Send Later, a shared location or
   // a Check In's last location. All of them use the editor below. ──────────────
@@ -12312,246 +11717,33 @@ Object.assign(CrowMessengerCard.prototype, {
   },
 
   // MapLibre, with its stylesheet in the card (once)
-  async _mapLib() {
-    const [lib, css] = await Promise.all([loadMapLibre(), mapLibreCss()]);
-    if (css && !this.shadowRoot.getElementById('fm-maplibre-css')) {
-      const st = document.createElement('style'); st.id = 'fm-maplibre-css'; st.textContent = css;
-      this.shadowRoot.insertBefore(st, this.shadowRoot.firstChild);
-    }
-    return lib;
-  },
+  
 
-  _zoneIntro(intro) { return `${intro ? intro + ' ' : ''}Drag the handle to resize it, or the dot to move it.`; },
+  
 
-  _zoneFormHtml(intro) {
-    return `<div class="fm-zf">
-      <div class="fm-zs">${esc(intro || '')}</div>
-      <div class="fm-zg">
-        <label><span>Name</span><input data-z="name" type="text" placeholder="Zone name" autocomplete="off" enterkeyhint="done"></label>
-        <label><span>Radius</span><input data-z="r" type="number" inputmode="numeric" min="${Math.round(this._units().toSmall(FM_ZONE_MIN))}" max="${Math.round(this._units().toSmall(FM_ZONE_MAX))}" step="${this._units().small === 'ft' ? 25 : 10}"><span class="fm-zu">${this._units().small}</span></label>
-      </div>
-      <button type="button" class="fm-zb" data-za="create">Create Zone</button></div>`;
-  },
-  _fillZoneForm(box, d) {
-    const n = box.querySelector('[data-z="name"]'), r = box.querySelector('[data-z="r"]');
-    if (n) n.value = d.name || '';
-    if (r) r.value = Math.round(this._units().toSmall(d.r));
-  },
+  
+  
 
   // Draws Home Assistant's zones on a MapLibre map, and the zone being made: a circle with
   // a dot to move it and a handle on its edge to resize it, like Home Assistant's own.
-  _zoneEditor(map, host, box) {
-    let zC = null, zH = null, sig = '';
-    const states = () => Object.values(this._hass.states).filter(z => z.entity_id.startsWith('zone.'));
-    const data = () => ({ type: 'FeatureCollection', features: states()
-      .filter(z => !z.attributes.passive && Number.isFinite(+z.attributes.latitude) && Number.isFinite(+z.attributes.longitude))
-      .map(z => fmCircle(+z.attributes.latitude, +z.attributes.longitude, +z.attributes.radius || 100, { home: z.entity_id === 'zone.home' })) });
-    const zsig = () => states().map(z => `${z.entity_id}|${z.attributes.latitude}|${z.attributes.longitude}|${z.attributes.radius}|${z.attributes.passive}`).join(';');
-    const accent = () => getComputedStyle(host).getPropertyValue('--cm-accent').trim() || '#007AFF';
-    const ed = {
-      draft: null,
-      // added again after a change of map style, which clears them
-      addLayers() {
-        try {
-          if (!map.getSource('fm-zones')) {
-            sig = zsig();
-            map.addSource('fm-zones', { type: 'geojson', data: data() });
-            const col = ['case', ['get', 'home'], '#34C759', '#5AC8FA'];
-            map.addLayer({ id: 'fm-zones-fill', type: 'fill', source: 'fm-zones', paint: { 'fill-color': col, 'fill-opacity': 0.14 } });
-            map.addLayer({ id: 'fm-zones-line', type: 'line', source: 'fm-zones', paint: { 'line-color': col, 'line-width': 1.5, 'line-opacity': 0.75 } });
-          }
-          if (!map.getSource('fm-draft')) {
-            const ac = accent(), d = ed.draft;
-            map.addSource('fm-draft', { type: 'geojson', data: d ? fmCircle(d.lat, d.lon, d.r) : FM_EMPTY });
-            map.addLayer({ id: 'fm-draft-fill', type: 'fill', source: 'fm-draft', paint: { 'fill-color': ac, 'fill-opacity': 0.2 } });
-            map.addLayer({ id: 'fm-draft-line', type: 'line', source: 'fm-draft', paint: { 'line-color': ac, 'line-width': 2.5 } });
-          }
-        } catch (e) { /* the style is still loading — styledata calls this again */ }
-      },
-      // a zone added or changed elsewhere
-      refresh() {
-        const z = zsig();
-        if (z !== sig && map.getSource('fm-zones')) { sig = z; map.getSource('fm-zones').setData(data()); }
-      },
-      draw() {
-        const d = ed.draft;
-        map.getSource('fm-draft')?.setData(d ? fmCircle(d.lat, d.lon, d.r) : FM_EMPTY);
-        if (!d) return;
-        zC?.setLngLat([d.lon, d.lat]);
-        const [hl, hn] = fmDest(d.lat, d.lon, d.bearing, d.r);
-        zH?.setLngLat([hn, hl]);
-      },
-      start(lat, lon, extra = {}) {
-        ed.draft = { lat, lon, r: FM_ZONE_DEFAULT, bearing: 90, name: '', ...extra };
-        if (!zC && window.maplibregl) {
-          const mk = (cls) => { const d = document.createElement('div'); d.className = cls; d.addEventListener('click', ev => ev.stopPropagation()); return d; };
-          zC = new window.maplibregl.Marker({ element: mk('fm-zc'), draggable: true }).setLngLat([lon, lat]).addTo(map);
-          zH = new window.maplibregl.Marker({ element: mk('fm-zh'), draggable: true }).setLngLat([lon, lat]).addTo(map);
-          zC.on('drag', () => { const ll = zC.getLngLat(); ed.draft.lat = ll.lat; ed.draft.lon = ll.lng; ed.draw(); });
-          zH.on('drag', () => {
-            const d = ed.draft, ll = zH.getLngLat();
-            d.r = clamp(Math.round(haversine([d.lat, d.lon], [ll.lat, ll.lng])), FM_ZONE_MIN, FM_ZONE_MAX);
-            d.bearing = fmBearing(d.lat, d.lon, ll.lat, ll.lng);
-            map.getSource('fm-draft')?.setData(fmCircle(d.lat, d.lon, d.r));
-            const ri = box?.querySelector('[data-z="r"]'); if (ri) ri.value = Math.round(this._units().toSmall(d.r));
-          });
-          zH.on('dragend', () => ed.draw());   // back onto the edge if dragged past the limits
-        }
-        ed.addLayers();
-        ed.draw();
-        return ed.draft;
-      },
-      move(lat, lon) { if (ed.draft) { ed.draft.lat = lat; ed.draft.lon = lon; ed.draw(); } },
-      setR(r) { if (ed.draft) { ed.draft.r = clamp(r, FM_ZONE_MIN, FM_ZONE_MAX); ed.draw(); } },
-      // zoom so the whole circle shows above the sheet (after a radius is typed)
-      fit() {
-        const d = ed.draft;
-        if (!d) return;
-        const n = fmDest(d.lat, d.lon, 0, d.r)[0], so = fmDest(d.lat, d.lon, 180, d.r)[0];
-        const e = fmDest(d.lat, d.lon, 90, d.r)[1], w = fmDest(d.lat, d.lon, 270, d.r)[1];
-        const sheet = host.querySelector('.fm-sheet');
-        // the padding from earlier flyTo/jumpTo calls sticks, and would be added to this
-        try { map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 }); map.fitBounds([[w, so], [e, n]], { padding: { top: 80, left: 50, right: 50, bottom: (sheet?.offsetHeight || 0) + 30 }, maxZoom: 18.5, duration: 600 }); } catch (err) { /* too small a map */ }
-      },
-      stop() { ed.draft = null; zC?.remove(); zH?.remove(); zC = zH = null; ed.draw(); },
-    };
-    return ed;
-  },
+  
 
   // The Name and Radius fields and Create Zone, kept in step with the editor on the map.
   // getEd is a function, as the map (and so the editor) may arrive after the form.
-  _wireZoneForm(box, getEd, onCreated) {
-    const d = () => getEd()?.draft;
-    box.addEventListener('input', (e) => {
-      const z = e.target.dataset?.z;
-      if (!d() || !z) return;
-      if (z === 'name') d().name = e.target.value;
-      if (z === 'r') { const v = parseInt(e.target.value, 10); if (Number.isFinite(v)) getEd().setR(Math.round(this._units().fromSmall(v))); }
-    });
-    box.addEventListener('change', (e) => { if (d() && e.target.dataset?.z === 'r') { e.target.value = Math.round(this._units().toSmall(d().r)); getEd()?.fit?.(); } });
-    box.addEventListener('keydown', (e) => { if (d() && e.key === 'Enter' && e.target.dataset?.z) { e.preventDefault(); e.target.blur(); } });
-    box.addEventListener('click', async (e) => {
-      const btn = e.target.closest('[data-za="create"]');
-      if (!btn || !d() || btn.disabled) return;
-      // what the fields say now (the map may have arrived after some typing)
-      d().name = box.querySelector('[data-z="name"]')?.value || '';
-      const rv = parseInt(box.querySelector('[data-z="r"]')?.value, 10);
-      if (Number.isFinite(rv)) d().r = clamp(Math.round(this._units().fromSmall(rv)), FM_ZONE_MIN, FM_ZONE_MAX);
-      const z = await this._createZone(d(), btn, box.querySelector('[data-z="name"]'));
-      if (z) onCreated(z);
-    });
-  },
+  
 
   // Adds the zone through the integration, which checks you're allowed. Answers with the
   // zone ({ entity_id, name, lat, lon }) once Home Assistant has it, or null.
-  async _createZone(d, btn, nameIn) {
-    const name = (d.name || '').trim();
-    if (!name) { this._toast('Enter a name for the zone first'); nameIn?.focus(); return null; }
-    const clash = (z) => z.entity_id.startsWith('zone.') && (z.attributes.friendly_name || '').toLowerCase() === name.toLowerCase();
-    if (Object.values(this._hass.states).some(clash)) { this._toast(`There’s already a zone called “${name}”`); nameIn?.focus(); return null; }
-    d.r = clamp(Math.round(d.r) || FM_ZONE_DEFAULT, FM_ZONE_MIN, FM_ZONE_MAX);
-    if (btn) { btn.disabled = true; btn.textContent = 'Creating…'; }
-    try {
-      const r = await this._ws('zone_create', { name, latitude: +d.lat.toFixed(6), longitude: +d.lon.toFixed(6), radius: d.r });
-      const zone = r.zone || { name, lat: d.lat, lon: d.lon };
-      // wait (briefly) for the new zone to reach this browser, so lists and the map include it
-      for (let i = 0; i < 20; i++) {
-        const st = zone.entity_id ? this._hass.states[zone.entity_id] : Object.values(this._hass.states).find(clash);
-        if (st) { zone.entity_id = st.entity_id; break; }
-        await new Promise(res => setTimeout(res, 150));
-      }
-      this._toast(`Zone “${name}” created`);
-      return zone;
-    } catch (err) {
-      console.warn('[crow-messenger] zone_create failed:', err);
-      this._toast(err?.code === 'unknown_command' ? 'Update the Crow Messenger integration to add zones from here'
-        : err?.message ? `Couldn’t create the zone: ${err.message}` : 'Couldn’t create the zone');
-      if (btn?.isConnected) { btn.disabled = false; btn.textContent = 'Create Zone'; }
-      return null;
-    }
-  },
+  
 
   // Where a new zone starts when nothing else says: where you are, else Home
-  _zoneStart() {
-    const me = this._people?.().find(p => p.me && p.has);
-    if (me) return { lat: me.lat, lon: me.lon, here: true };
-    const home = this._hass.states['zone.home']?.attributes;
-    if (home?.latitude != null) return { lat: +home.latitude, lon: +home.longitude };
-    return { lat: +this._hass.config?.latitude || 51.5, lon: +this._hass.config?.longitude || -0.12 };
-  },
+  
 
   // A full-screen map for making a zone from anywhere (over a sheet, if one is open).
   // Answers with the new zone, or null if it was cancelled.
-  _newZone({ lat, lon, name = '', intro } = {}) {
-    if (!this._zoneCan()) { this._toast('Only a Home Assistant administrator can add zones'); return Promise.resolve(null); }
-    if (lat == null || lon == null) {
-      const st = this._zoneStart();
-      ({ lat, lon } = st);
-      if (intro === undefined) intro = st.here ? 'It starts where you are now.' : '';
-    }
-    return new Promise((resolve) => {
-      const wrap = this._el(`<div class="fm-zwrap"><style>${FM_CSS}</style>
-        <div class="fm-map"></div>
-        <div class="top"><button class="cb g" data-a="cancel" aria-label="Cancel">${ICON.x}</button><div></div></div>
-        <div class="fm-ctrls"><div class="fm-vcap g"><button data-a="locate" aria-label="Show me">${FM_ICON.locate}</button></div></div>
-        <div class="fm-sheet"><div class="fm-grab"></div><div class="fm-head"><h2>New Zone</h2></div>
-          <div class="fm-list">${this._zoneFormHtml(this._zoneIntro(intro))}</div></div></div>`);
-      this._root.appendChild(wrap);
-      requestAnimationFrame(() => wrap.classList.add('show'));
-      const box = wrap.querySelector('.fm-list'), sheet = wrap.querySelector('.fm-sheet'), head = wrap.querySelector('.fm-head');
-      const draft = { lat, lon, r: FM_ZONE_DEFAULT, bearing: 90, name };
-      this._fillZoneForm(box, draft);
-      const sheetH = () => (wrap.querySelector('.fm-grab').offsetHeight + 8 + head.offsetHeight + box.querySelector('.fm-zf').offsetHeight + 24);
-      requestAnimationFrame(() => { sheet.style.height = `${sheetH()}px`; });
-      let map = null, ed = null, finished = false;
-      const done = (z) => {
-        if (finished) return;
-        finished = true;
-        wrap.classList.remove('show');
-        setTimeout(() => { try { map?.remove(); } catch (e) { /* */ } wrap.remove(); }, 300);
-        resolve(z);
-      };
-      this._wireZoneForm(box, () => ed, done);
-      wrap.addEventListener('click', (e) => {
-        const a = e.target.closest('[data-a]')?.dataset.a;
-        if (a === 'cancel') done(null);
-        if (a === 'locate' && map) {
-          const me = this._people().find(p => p.me && p.has);
-          if (me) { ed?.move?.(me.lat, me.lon); map.flyTo({ center: [me.lon, me.lat], zoom: Math.max(map.getZoom(), 17), padding: { bottom: sheet.offsetHeight, top: 60 } }); }
-          else this._toast('Your location isn’t known');
-        }
-      });
-      (async () => {
-        try {
-          const lib = await this._mapLib();
-          if (finished) return;
-          let type = 'auto';
-          try { type = localStorage.getItem('crowMessengerMapType') || 'auto'; } catch (e) { /* */ }
-          const style = FM_TILES[type === 'auto' ? (this._isDark() ? 'dark' : 'light') : type] || FM_TILES.dark;
-          map = new lib.Map({ container: wrap.querySelector('.fm-map'), style, center: [lon, lat], zoom: 17,
-            attributionControl: { compact: true }, pitchWithRotate: false, dragRotate: false });
-          ed = this._zoneEditor(map, wrap, box);
-          ed.draft = draft;   // the fields write to it until the map is ready
-          map.on('load', () => {
-            map.resize();
-            ed.start(ed.draft.lat, ed.draft.lon, ed.draft);
-            map.jumpTo({ center: [lon, lat], zoom: 17, padding: { bottom: sheet.offsetHeight, top: 60 } });
-          });
-          map.on('styledata', () => ed.addLayers());
-          map.on('click', (e) => ed.move(e.lngLat.lat, e.lngLat.lng));
-        } catch (err) {
-          wrap.querySelector('.fm-map').innerHTML = `<div class="fm-nomap">The map couldn’t load here.<br>The zone will be made at the place shown.</div>`;
-          ed = { draft, setR: (r) => { draft.r = clamp(r, FM_ZONE_MIN, FM_ZONE_MAX); } };
-        }
-      })();
-    });
-  },
+  
 
-  async _confirmMapsTo(p) {
-    const q = `${p.lat},${p.lon}`;
-    const url = isApple() ? `https://maps.apple.com/?daddr=${q}` : isAndroid() ? `geo:${q}?q=${q}(${encodeURIComponent(p.name)})` : `https://www.google.com/maps/dir/?api=1&destination=${q}`;
-    await this._alert({ title: `Get Directions to ${p.name}?`, message: `${this._placeLabel(p)} · ${timeAgoShort(p.ts)}`, buttons: [{ text: 'Open in Maps', style: 'ok', value: true, href: url }, { text: 'Cancel', style: 'cancel' }] });
-  },
+  
 });
 
 // ── Live Wallpaper ───────────────────────────────────────────────────────────
@@ -12575,1240 +11767,9 @@ const CM_LIVE = [
 ];
 const cmLiveInfo = (id) => CM_LIVE.find(l => l.id === id) || null;
 
-const CM_LIVE_CSS = `
-.cm-live { overflow: hidden; background: #000; }
-.cm-live > .cs-stage { position: absolute; inset: 0; }
-.cm-live img { pointer-events: none; }
-        .cm-live .cs-stage, .cm-live .cs-stage > * { position: absolute; inset: 0; }
-        .cm-live canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-        .cm-live .cs-aurora { background: radial-gradient(ellipse at 50% 120%, #0b1430 0%, #04060f 70%); overflow: hidden; }
-        .cm-live .cs-stars { position: absolute; inset: 0; opacity: 0.55;
-          background-image: radial-gradient(1px 1px at 12% 18%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 33% 9%, #fff 50%, transparent 51%),
-            radial-gradient(1.4px 1.4px at 58% 22%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 76% 12%, #fff 50%, transparent 51%),
-            radial-gradient(1px 1px at 88% 31%, #fff 50%, transparent 51%), radial-gradient(1.2px 1.2px at 22% 40%, #fff 50%, transparent 51%),
-            radial-gradient(1px 1px at 47% 36%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 67% 44%, #fff 50%, transparent 51%),
-            radial-gradient(1.3px 1.3px at 8% 62%, #fff 50%, transparent 51%), radial-gradient(1px 1px at 93% 58%, #fff 50%, transparent 51%); }
-        .cm-live .cs-glow { position: absolute; width: 85%; height: 85%; border-radius: 50%; mix-blend-mode: screen; opacity: 0;
-          will-change: transform, opacity; animation: cs-glowmove 26s ease-in-out infinite alternate, cs-glowfade 21s ease-in-out infinite; }
-        .cm-live .cs-glow.g0 { left: -20%; top: -15%; background: radial-gradient(circle, rgba(61,255,138,0.85) 0%, transparent 62%); animation-delay: 0s, 0s; }
-        .cm-live .cs-glow.g1 { right: -25%; top: -5%; background: radial-gradient(circle, rgba(0,229,192,0.8) 0%, transparent 62%); animation-delay: -6s, -3s; animation-duration: 31s, 23s; }
-        .cm-live .cs-glow.g2 { left: 10%; top: 20%; background: radial-gradient(circle, rgba(34,199,255,0.8) 0%, transparent 62%); animation-delay: -11s, -6s; animation-duration: 28s, 19s; }
-        .cm-live .cs-glow.g3 { right: -10%; bottom: -25%; background: radial-gradient(circle, rgba(61,107,255,0.85) 0%, transparent 62%); animation-delay: -4s, -9s; animation-duration: 34s, 25s; }
-        .cm-live .cs-glow.g4 { left: -25%; bottom: -20%; background: radial-gradient(circle, rgba(155,92,255,0.85) 0%, transparent 62%); animation-delay: -15s, -12s; animation-duration: 29s, 22s; }
-        .cm-live .cs-glow.g5 { left: 25%; top: -30%; background: radial-gradient(circle, rgba(255,79,216,0.75) 0%, transparent 62%); animation-delay: -9s, -15s; animation-duration: 33s, 27s; }
-        .cm-live .cs-glow.g6 { right: 5%; top: 35%; background: radial-gradient(circle, rgba(255,179,71,0.65) 0%, transparent 62%); animation-delay: -19s, -18s; animation-duration: 37s, 29s; }
-        @keyframes cs-glowmove {
-          0% { transform: translate(0,0) scale(1); } 33% { transform: translate(18%,10%) scale(1.15); }
-          66% { transform: translate(-12%,16%) scale(0.92); } 100% { transform: translate(10%,-14%) scale(1.1); } }
-        @keyframes cs-glowfade { 0%, 100% { opacity: 0.08; } 30% { opacity: 0.85; } 55% { opacity: 0.35; } 75% { opacity: 0.75; } }
-        .cm-live .cs-curtain { position: absolute; top: -20%; width: 38%; height: 130%; opacity: 0; mix-blend-mode: screen; will-change: transform, opacity;
-          -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 65%, transparent 100%); mask-image: linear-gradient(90deg, transparent 0%, #000 35%, #000 65%, transparent 100%);
-          animation: cs-sway 19s ease-in-out infinite alternate, cs-curtainfade 15s ease-in-out infinite; }
-        .cm-live .cs-curtain.c0 { left: 8%; background: linear-gradient(180deg, transparent 0%, rgba(61,255,138,0.55) 38%, rgba(0,229,192,0.25) 62%, transparent 92%); }
-        .cm-live .cs-curtain.c1 { left: 38%; background: linear-gradient(180deg, transparent 0%, rgba(34,199,255,0.5) 34%, rgba(155,92,255,0.28) 64%, transparent 92%); animation-delay: -7s, -5s; animation-duration: 23s, 17s; }
-        .cm-live .cs-curtain.c2 { left: 62%; background: linear-gradient(180deg, transparent 0%, rgba(255,79,216,0.42) 36%, rgba(61,107,255,0.25) 64%, transparent 92%); animation-delay: -13s, -10s; animation-duration: 27s, 21s; }
-        @keyframes cs-sway { 0% { transform: translateX(-14%) skewX(-16deg); } 50% { transform: translateX(10%) skewX(-6deg); } 100% { transform: translateX(22%) skewX(-20deg); } }
-        @keyframes cs-curtainfade { 0%, 100% { opacity: 0; } 35% { opacity: 0.9; } 60% { opacity: 0.45; } 80% { opacity: 0.8; } }
-        .cm-live .cs-vignette { background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.45) 100%); pointer-events: none; }
-        .cm-live .cs-lava { background: #050507; }
-        .cm-live .cs-lava canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: auto; }
-        .cm-live .cs-rainbg { background: #0d1118; }
-        .cm-live .cs-night { background: #02030a; }
-        .cm-live .cs-firebg { background: #060302; }
-        .cm-live .cs-oceanbg { background: #0c1a3c; }
-        .cm-live .cs-rainbg img { position: absolute; inset: -8%; width: 116%; height: 116%; object-fit: cover; filter: blur(16px) saturate(1.1) brightness(0.62); }
-@media (prefers-reduced-motion: reduce) { .cm-live .cs-glow, .cm-live .cs-curtain { opacity: 0.55; } }
-`;
 
-class CrowLiveWallpaper {
-  constructor(host, kind, hass) {
-    this._saverEl = host;
-    this._hass = hass;
-    this._config = {};          // no weather entity: the Ocean follows the sun only
-    this.shadowRoot = null;     // no album artwork: the Lava Lamp cycles through colours
-    host.classList.add('cm-live');
-    this._stage = document.createElement('div');
-    this._stage.className = 'cs-stage';
-    host.appendChild(this._stage);
-    const info = cmLiveInfo(kind) || CM_LIVE[1];
-    try { this[info.fn](this._stage); } catch (err) { console.warn('Crow Messenger: live wallpaper', err); }
-  }
 
-  set hass(h) { this._hass = h; }
 
-  stop() {
-    const host = this._saverEl;
-    this._liveOff?.forEach(f => f()); this._liveOff = null;
-    this._saverEl = null;
-    cancelAnimationFrame(this._saverRaf);
-    this._stage?.remove();
-    host?.classList.remove('cm-live');
-  }
-
-  // Rain on Glass runs down a window in front of soft, out-of-focus lights
-  _saverArtList() {
-    if (!CrowLiveWallpaper._rainArt) {
-      const c = document.createElement('canvas'); c.width = 240; c.height = 400;
-      const g = c.getContext('2d');
-      const bg = g.createLinearGradient(0, 0, 0, 400);
-      bg.addColorStop(0, '#1a2436'); bg.addColorStop(0.55, '#24304a'); bg.addColorStop(1, '#3a2a30');
-      g.fillStyle = bg; g.fillRect(0, 0, 240, 400);
-      const cols = ['255,176,92', '255,214,150', '96,178,220', '255,110,90', '170,140,255', '120,220,190'];
-      let seed = 11; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
-      for (let i = 0; i < 46; i++) {
-        const x = rnd() * 240, y = 120 + rnd() * 280, r = 8 + rnd() * 34, col = cols[(rnd() * cols.length) | 0];
-        const gr = g.createRadialGradient(x, y, 0, x, y, r);
-        gr.addColorStop(0, `rgba(${col},${(0.35 + rnd() * 0.45).toFixed(2)})`); gr.addColorStop(1, `rgba(${col},0)`);
-        g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-      }
-      CrowLiveWallpaper._rainArt = c.toDataURL('image/jpeg', 0.85);
-    }
-    return [{ src: CrowLiveWallpaper._rainArt }];
-  }
-  _saverArtHues() { return null; }
-
-  _saverAurora(stage) {
-    const box = document.createElement('div');
-    box.className = 'cs-aurora';
-    box.innerHTML = '<div class="cs-stars"></div>'
-      + [0, 1, 2, 3, 4, 5, 6].map(i => '<div class="cs-glow g' + i + '"></div>').join('')
-      + [0, 1, 2].map(i => '<div class="cs-curtain c' + i + '"></div>').join('');
-    const v = document.createElement('div'); v.className = 'cs-vignette';
-    stage.appendChild(box); stage.appendChild(v);
-  }
-
-  _saverLava(stage) {
-    const box = document.createElement('div');
-    box.className = 'cs-lava';
-    const cv = document.createElement('canvas');
-    cv.setAttribute('aria-hidden', 'true');
-    box.appendChild(cv);
-    stage.appendChild(box);
-    const ctx = cv.getContext('2d');
-    let W = 0, H = 0, img = null, px = null;
-    // the album colours follow the cover: a skipped track's new cover is picked up and the wax
-    // blends across to its colours over a couple of seconds
-    let artHues = this._saverArtHues(), artSrc = this.shadowRoot?.getElementById('albumImg')?.src || '', artCheckAt = 0;
-    let shown = artHues ? artHues.slice() : null;
-    const towards = (from, to, k) => { const d = ((to - from + 540) % 360) - 180; return (from + d * k + 360) % 360; };
-    // the blobs, in fractions of the panel: two big pools that sit at the bottom, and floating blobs
-    const blobs = [
-      { pool: true, x: 0.28, r: 0.17, ph: 0.4, wob: 0.05 },
-      { pool: true, x: 0.72, r: 0.15, ph: 2.1, wob: 0.06 },
-      ...Array.from({ length: 6 }, (_, i) => ({
-        x: 0.18 + Math.random() * 0.64, r: 0.05 + Math.random() * 0.055,
-        sp: 0.010 + Math.random() * 0.016, ph: Math.random() * Math.PI * 2, wob: 0.03 + Math.random() * 0.06, i,
-      })),
-    ];
-    const hsl = (h, s, l) => {
-      const a = s * Math.min(l, 1 - l);
-      const f = n => { const k = (n + h / 30) % 12; return l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
-      return [f(0) * 255, f(8) * 255, f(4) * 255];
-    };
-    // light from the upper left, for the glossy shading
-    const Lx = -0.42, Ly = -0.52, Lz = 0.74;
-    const size = () => {
-      const el = this._saverEl;
-      if (!el) return false;
-      const cw = el.offsetWidth, ch = el.offsetHeight;
-      if (!cw || !ch) return false;
-      // drawn at a bit over half the panel's size and smoothed up: sharp enough, still light on the battery
-      const w = Math.max(120, Math.min(el.classList.contains('cs-full') ? 360 : 280, Math.round(cw * 0.6)));
-      const h = Math.max(120, Math.round(w * ch / cw));
-      if (w === W && h === H) return true;
-      W = w; H = h;
-      cv.width = W; cv.height = H;
-      img = ctx.createImageData(W, H); px = img.data;
-      return true;
-    };
-    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const t0 = performance.now() - Math.random() * 90000;
-    let lastDraw = 0;
-    const pos = new Float64Array(blobs.length * 4);
-    // each blob adds a smooth bump to a field; the wax is wherever the field is over T. Its own reach (R) is
-    // a little wider than the blob looks, so neighbours start to merge before they touch.
-    const T = 0.18, REACH = 1 / Math.sqrt(1 - Math.cbrt(T));
-    const frame = (now) => {
-      if (!this._saverEl || !cv.isConnected) return;
-      if (!still) this._saverRaf = requestAnimationFrame(frame);
-      if (now - lastDraw < 33) return;   // about 30 frames a second is plenty
-      lastDraw = now;
-      if (!size()) return;
-      const t = (now - t0) / 1000;
-      // the last song's album colours, drifting gently around them (or every colour in turn, for a cover
-      // with no real colour in it), always bright enough for the wax to glow
-      if (now - artCheckAt > 1000) {
-        artCheckAt = now;
-        const im = this.shadowRoot?.getElementById('albumImg');
-        if (im && im.src !== artSrc && im.complete && im.naturalWidth) {
-          artSrc = im.src;
-          artHues = this._saverArtHues();
-          // from colour cycling to album colours (or back), start from the colour on screen now
-          if (artHues && !shown) shown = [(t * 3) % 360, ((t * 3) + 28) % 360];
-        }
-      }
-      let hue, hue2;
-      if (artHues) {
-        const k = 0.04;   // per frame (about 30 a second): most of the way there in two seconds
-        shown[0] = towards(shown[0], artHues[0], k);
-        shown[1] = towards(shown[1] ?? shown[0], artHues[1] ?? (artHues[0] + 28), k);
-        const sway = Math.sin(t * 0.045);
-        hue = (shown[0] + 16 * sway + 360) % 360;
-        hue2 = (shown[1] + 12 * Math.sin(t * 0.037 + 1) + 360) % 360;
-      } else { hue = (t * 3) % 360; hue2 = (hue + 28) % 360; shown = null; }
-      // the wax is one colour family (lighter in the middle), on a plain dark background
-      const rim = hsl(hue, 0.9, 0.26), mid = hsl((hue + 10) % 360, 0.9, 0.48), core = hsl((hue + 24) % 360, 0.95, 0.66);
-      let rAvg = 0;
-      blobs.forEach((b, k) => {
-        let x, y, r;
-        if (b.pool) {
-          // the pools bulge and settle at the bottom, as if warmed by the bulb
-          x = b.x + b.wob * Math.sin(t * 0.13 + b.ph);
-          y = 1.04 - 0.05 * (0.5 + 0.5 * Math.sin(t * 0.21 + b.ph * 3));
-          r = b.r * (1 + 0.08 * Math.sin(t * 0.17 + b.ph));
-        } else {
-          // each floating blob rises and sinks at its own slow pace, wobbling and swelling a little
-          y = 0.52 - 0.5 * Math.sin(t * b.sp * 2 * Math.PI + b.ph);
-          x = b.x + b.wob * Math.sin(t * 0.23 + b.ph * 2);
-          r = b.r * (1 + 0.12 * Math.sin(t * 0.4 + b.i));
-        }
-        const M = Math.min(W, H);   // the same as W over the (square) artwork
-        const R = r * M * REACH;
-        pos[k * 4] = x * W; pos[k * 4 + 1] = y * H; pos[k * 4 + 2] = R * R; pos[k * 4 + 3] = 1 / (R * R);
-        rAvg += r * M;
-      });
-      rAvg /= blobs.length;
-      const dome = rAvg * 0.9;   // how tall the blobs look, for the shading
-      const n = blobs.length;
-      let p = 0;
-      for (let y = 0; y < H; y++) {
-        const fy = y / H;
-        for (let x = 0; x < W; x++) {
-          let f = 0, gx = 0, gy = 0;
-          for (let k = 0; k < n; k++) {
-            const o = k * 4;
-            const dx = x - pos[o], dy = y - pos[o + 1];
-            const d2 = dx * dx + dy * dy;
-            if (d2 >= pos[o + 2]) continue;
-            const w = 1 - d2 * pos[o + 3];
-            f += w * w * w;
-            const g = -6 * w * w * pos[o + 3];
-            gx += g * dx; gy += g * dy;
-          }
-          if (f <= 0) { px[p++] = 0; px[p++] = 0; px[p++] = 0; px[p++] = 0; continue; }
-          let al = 0;
-          let r = mid[0], g = mid[1], b = mid[2];
-          const gm = Math.sqrt(gx * gx + gy * gy);
-          const e = Math.max(0.004, gm * 0.75);   // about a pixel of soft edge, so it stays clean when scaled up
-          if (f > T - e) {
-            const a = Math.min(1, (f - (T - e)) / (2 * e));
-            const aa = a * a * (3 - 2 * a);
-            // a rounded surface: flat on top, curving down to upright at the edge
-            const sq = Math.sqrt(Math.max(f - T, 0.0004));
-            let nx = -gx * dome / (2 * sq), ny = -gy * dome / (2 * sq);
-            const il = 1 / Math.sqrt(nx * nx + ny * ny + 1);
-            nx *= il; ny *= il;
-            const dif = Math.max(0, nx * Lx + ny * Ly + il * Lz);
-            const lit = dif * dif;
-            let wr = rim[0] + (mid[0] - rim[0]) * dif + (core[0] - mid[0]) * lit * 0.6;
-            let wg = rim[1] + (mid[1] - rim[1]) * dif + (core[1] - mid[1]) * lit * 0.6;
-            let wb = rim[2] + (mid[2] - rim[2]) * dif + (core[2] - mid[2]) * lit * 0.6;
-            // glossy highlight, and warmth from the bulb below on the undersides
-            const spec = Math.pow(dif, 36) * 0.75 * 255;
-            const under = Math.max(0, ny) * fy * 0.45;
-            wr += spec + core[0] * under; wg += spec + core[1] * under; wb += spec + core[2] * under;
-            r += (wr - r) * aa; g += (wg - g) * aa; b += (wb - b) * aa;
-            al += (1 - al) * aa;
-          }
-          px[p++] = r; px[p++] = g; px[p++] = b; px[p++] = al * 255;
-        }
-      }
-      ctx.putImageData(img, 0, 0);
-    };
-    this._saverRaf = requestAnimationFrame(frame);
-  }
-
-  _saverRain(stage) {
-    const box = document.createElement('div');
-    box.className = 'cs-rainbg';
-    const cur = this.shadowRoot?.getElementById('albumImg');
-    let src = cur?.src && cur.naturalWidth && !/^data:/.test(cur.src) ? cur.src : '';
-    if (!src) src = this._saverArtList()[0]?.src || '';
-    let art = null;
-    if (src) {
-      art = document.createElement('img');
-      art.alt = '';
-      art.src = src;
-      box.appendChild(art);
-    }
-    const cv = document.createElement('canvas');
-    cv.setAttribute('aria-hidden', 'true');
-    cv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;';
-    box.appendChild(cv);
-    const v = document.createElement('div'); v.className = 'cs-vignette';
-    stage.appendChild(box); stage.appendChild(v);
-    const ctx = cv.getContext('2d');
-    const mist = document.createElement('canvas');   // the small, still droplets
-    const mctx = mist.getContext('2d');
-    let W = 0, H = 0, S = 1, Rs = 1, maxDrops = Infinity;
-    const drops = [];
-    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const size = () => {
-      const el = this._saverEl;
-      if (!el) return false;
-      const w = el.offsetWidth, h = el.offsetHeight;
-      if (!w || !h) return false;
-      if (w === W && h === H) return true;
-      W = w; H = h; S = Math.min(2, window.devicePixelRatio || 1);
-      if (el.classList.contains('cs-full')) {
-        S = Math.max(1, Math.min(S, Math.sqrt(2.4e6 / (W * H))));   // keep a big screen light on the processor
-        Rs = Math.max(1, Math.min(1.8, Math.min(W, H) / 380));        // drops in proportion to the screen
-        maxDrops = 150;
-      }
-      cv.width = mist.width = Math.round(W * S); cv.height = mist.height = Math.round(H * S);
-      mctx.setTransform(S, 0, 0, S, 0, 0);
-      for (let i = 0; i < Math.min(W * H / 260, 9000); i++) dot(Math.random() * W, Math.random() * H, (0.6 + Math.random() * 1.8) * Rs);
-      return true;
-    };
-    const dot = (x, y, r) => {
-      mctx.fillStyle = 'rgba(0,0,0,0.22)';
-      mctx.beginPath(); mctx.arc(x, y + r * 0.35, r, 0, Math.PI * 2); mctx.fill();
-      mctx.fillStyle = 'rgba(255,255,255,0.32)';
-      mctx.beginPath(); mctx.arc(x, y, r * 0.8, 0, Math.PI * 2); mctx.fill();
-    };
-    const spawn = (y) => drops.push({
-      x: Math.random() * W, y: y ?? Math.random() * H * 0.8, r: (3 + Math.random() * 6) * Rs,
-      vy: 0, hold: 40 + Math.random() * 300, lastTrail: 0, drift: (Math.random() - 0.5) * 0.3,
-    });
-    const drawDrop = (d) => {
-      const rx = d.r, ry = d.r * (d.vy > 0.5 ? 1.25 : 1.05);
-      ctx.save();
-      ctx.beginPath(); ctx.ellipse(d.x, d.y, rx, ry, 0, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(0,0,0,0.28)'; ctx.fill();
-      ctx.clip();
-      if (art && art.complete && art.naturalWidth && (art._lens !== null)) {
-        // a water drop works like a little lens, showing the colours behind it upside down. It uses a
-        // tiny, soft copy of the cover, so lettering on the artwork never shows through the drops.
-        if (!art._lens) {
-          try { const lc = document.createElement('canvas'); lc.width = lc.height = 24; lc.getContext('2d').drawImage(art, 0, 0, 24, 24); art._lens = lc; } catch (_) { art._lens = null; }
-        }
-        const src = art._lens || art;
-        const nw = src.width, nh = src.height;
-        const k = Math.max(nw / (W * 1.16), nh / (H * 1.16));
-        const sw = rx * 5 * k, sh = ry * 5 * k;
-        const sx = Math.max(0, Math.min(nw - sw, (d.x + W * 0.08) * k + (nw - W * 1.16 * k) / 2 - sw / 2));
-        const sy = Math.max(0, Math.min(nh - sh, (d.y + H * 0.08) * k + (nh - H * 1.16 * k) / 2 - sh / 2));
-        ctx.translate(d.x, d.y); ctx.scale(1, -1);
-        ctx.imageSmoothingEnabled = true; try { ctx.drawImage(src, sx, sy, sw, sh, -rx * 1.1, -ry * 1.1, rx * 2.2, ry * 2.2); } catch (_) {}
-        ctx.setTransform(S, 0, 0, S, 0, 0);
-      }
-      const g = ctx.createRadialGradient(d.x, d.y, rx * 0.3, d.x, d.y, rx * 1.1);
-      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(1, 'rgba(0,0,0,0.35)');
-      ctx.fillStyle = g; ctx.fillRect(d.x - rx * 1.2, d.y - ry * 1.2, rx * 2.4, ry * 2.4);
-      ctx.restore();
-      ctx.fillStyle = 'rgba(255,255,255,0.55)';
-      ctx.beginPath(); ctx.arc(d.x - rx * 0.35, d.y - ry * 0.4, Math.max(0.8, rx * 0.2), 0, Math.PI * 2); ctx.fill();
-    };
-    let lastT = 0;
-    const frame = (now) => {
-      if (!this._saverEl || !cv.isConnected) return;
-      if (!still) this._saverRaf = requestAnimationFrame(frame);
-      if (!size()) return;
-      const dt = lastT ? Math.min(3, (now - lastT) / 16.7) : 1;
-      lastT = now;
-      if (!still) {
-        if (drops.length < Math.min(maxDrops, Math.max(10, W * H / 3500)) && Math.random() < 0.08 * dt) spawn();
-        if (Math.random() < 0.5 * dt) dot(Math.random() * W, Math.random() * H, (0.5 + Math.random() * 1.6) * Rs);
-        for (let i = drops.length - 1; i >= 0; i--) {
-          const d = drops[i];
-          if (d.hold > 0) { d.hold -= dt; if (d.hold <= 0) d.vy = 0.4; continue; }
-          // running drops speed up, pause now and then, wander a little and wipe a path through the mist
-          d.vy = Math.min(d.r * 0.9, d.vy + 0.03 * d.r * dt * (Math.random() < 0.97 ? 1 : -8));
-          if (d.vy < 0.2) d.vy = 0.2;
-          d.y += d.vy * dt;
-          d.x += d.drift * dt + (Math.random() - 0.5) * 0.4;
-          mctx.save(); mctx.globalCompositeOperation = 'destination-out';
-          mctx.beginPath(); mctx.ellipse(d.x, d.y, d.r * 0.9, d.r * 1.2, 0, 0, Math.PI * 2); mctx.fill(); mctx.restore();
-          if (d.y - d.lastTrail > d.r * 1.6) { d.lastTrail = d.y; dot(d.x + (Math.random() - 0.5) * 2, d.y - d.r * 1.8, d.r * (0.2 + Math.random() * 0.2)); d.r *= 0.985; }
-          if (d.y - d.r > H || d.r < 1.5) drops.splice(i, 1);
-        }
-      } else if (!drops.length) { for (let i = 0; i < 14; i++) spawn(); }
-      ctx.setTransform(1, 0, 0, 1, 0, 0);
-      ctx.clearRect(0, 0, cv.width, cv.height);
-      ctx.drawImage(mist, 0, 0);
-      ctx.setTransform(S, 0, 0, S, 0, 0);
-      drops.forEach(drawDrop);
-    };
-    if (still) { const go = () => frame(performance.now()); if (art && !art.complete) art.onload = go; requestAnimationFrame(go); }
-    else this._saverRaf = requestAnimationFrame(frame);
-  }
-
-  _saverCanvasLoop(box, frame, { scale = 2, fps = 30 } = {}) {
-    const cv = document.createElement('canvas');
-    cv.setAttribute('aria-hidden', 'true');
-    box.appendChild(cv);
-    const ctx = cv.getContext('2d');
-    let W = 0, H = 0, S = 1;
-    const size = () => {
-      const el = this._saverEl;
-      if (!el) return false;
-      const w = el.offsetWidth, h = el.offsetHeight;
-      if (!w || !h) return false;
-      if (w === W && h === H) return true;
-      W = w; H = h; S = Math.min(scale, window.devicePixelRatio || 1);
-      // full screen on a big, high-density display is a lot of pixels: stay within a budget (Raspberry Pi heat)
-      if (el.classList.contains('cs-full')) S = Math.max(1, Math.min(S, Math.sqrt(2.4e6 / (W * H))));
-      cv.width = Math.round(W * S); cv.height = Math.round(H * S);
-      return 'resized';
-    };
-    const still = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    const t0 = performance.now();
-    let last = 0, prev = 0;
-    const step = (now) => {
-      if (!this._saverEl || !cv.isConnected) return;
-      if (!still) this._saverRaf = requestAnimationFrame(step);
-      if (now - last < 1000 / fps - 2) return;
-      last = now;
-      const sz = size();
-      if (!sz) return;
-      const dt = prev ? Math.min(0.1, (now - prev) / 1000) : 1 / fps;
-      prev = now;
-      ctx.setTransform(S, 0, 0, S, 0, 0);
-      ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-      frame(ctx, (now - t0) / 1000, dt, W, H, sz === 'resized', S);
-    };
-    this._saverRaf = requestAnimationFrame(step);
-    return { cv, ctx };
-  }
-
-  _saverOff(W, H, S) {
-    const c = document.createElement('canvas');
-    c.width = Math.max(1, Math.round(W * S)); c.height = Math.max(1, Math.round(H * S));
-    const g = c.getContext('2d'); g.setTransform(S, 0, 0, S, 0, 0);
-    return [c, g];
-  }
-
-  _saverGrain(ctx, W, H, alpha = 0.035) {
-    if (!this._saverGrainTile) {
-      const c = document.createElement('canvas'); c.width = c.height = 128;
-      const g = c.getContext('2d'), im = g.createImageData(128, 128), d = im.data;
-      for (let i = 0; i < d.length; i += 4) { const v = Math.random() < 0.5 ? 0 : 255; d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = (Math.random() * 255) | 0; }
-      g.putImageData(im, 0, 0);
-      this._saverGrainTile = c;
-    }
-    const p = ctx.createPattern(this._saverGrainTile, 'repeat');
-    if (!p) return;
-    ctx.save(); ctx.globalAlpha = alpha; ctx.fillStyle = p; ctx.fillRect(0, 0, W, H); ctx.restore();
-  }
-
-  _saverStarSprites() {
-    if (this._saverSprites) return this._saverSprites;
-    const mk = (col) => {
-      const c = document.createElement('canvas'); c.width = c.height = 64;
-      const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-      gr.addColorStop(0, 'rgba(255,255,255,1)'); gr.addColorStop(0.08, 'rgba(' + col + ',0.95)');
-      gr.addColorStop(0.22, 'rgba(' + col + ',0.35)'); gr.addColorStop(0.5, 'rgba(' + col + ',0.08)'); gr.addColorStop(1, 'rgba(' + col + ',0)');
-      g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-      return c;
-    };
-    return (this._saverSprites = [mk('255,255,255'), mk('255,214,170'), mk('180,205,255')]);
-  }
-
-  _saverMoon(ctx, cx, cy, r, S = 1, glow = 1) {
-    const age = (((Date.now() - Date.UTC(2000, 0, 6, 18, 14)) / 86400000) % 29.530588853 + 29.530588853) % 29.530588853;
-    const f = age / 29.530588853, k = Math.cos(f * Math.PI * 2);
-    const south = (this._hass?.config?.latitude ?? 51) < 0;
-    const side = (f < 0.5 ? 1 : -1) * (south ? -1 : 1);
-    const lit = (1 - k) / 2;
-    const key = [Math.round(r * 10), S, Math.round(f * 2000), side].join('|');
-    if (this._saverMoonC?.key !== key) {
-      const pad = Math.ceil(r * 0.15), D = (r + pad) * 2;
-      const [c, g] = this._saverOff(D, D, S);
-      const o = r + pad;
-      // the surface: limb darkening, seas and a few craters
-      const base = g.createRadialGradient(o - r * 0.25, o - r * 0.3, r * 0.1, o, o, r);
-      base.addColorStop(0, '#fbf8ee'); base.addColorStop(0.7, '#e6e1d2'); base.addColorStop(1, '#bfb9a8');
-      g.fillStyle = base; g.beginPath(); g.arc(o, o, r, 0, Math.PI * 2); g.fill();
-      g.save(); g.beginPath(); g.arc(o, o, r, 0, Math.PI * 2); g.clip();
-      const sea = (x, y, rx, ry, a) => { const gr = g.createRadialGradient(o + x * r, o + y * r, 0, o + x * r, o + y * r, Math.max(rx, ry) * r); gr.addColorStop(0, 'rgba(110,108,100,' + a + ')'); gr.addColorStop(0.7, 'rgba(110,108,100,' + a * 0.6 + ')'); gr.addColorStop(1, 'rgba(110,108,100,0)'); g.fillStyle = gr; g.beginPath(); g.ellipse(o + x * r, o + y * r, rx * r, ry * r, 0.3, 0, Math.PI * 2); g.fill(); };
-      sea(-0.28, -0.28, 0.3, 0.24, 0.42); sea(-0.05, -0.05, 0.24, 0.2, 0.35); sea(0.22, -0.32, 0.18, 0.14, 0.32); sea(-0.42, 0.12, 0.2, 0.26, 0.3); sea(0.12, 0.25, 0.16, 0.12, 0.28); sea(0.36, 0.05, 0.12, 0.16, 0.25);
-      let seed = 7; const rnd = () => (seed = (seed * 9301 + 49297) % 233280) / 233280;
-      for (let i = 0; i < 26; i++) {
-        const a = rnd() * Math.PI * 2, d = Math.sqrt(rnd()) * r * 0.9, cr = r * (0.02 + rnd() * 0.06);
-        const x = o + Math.cos(a) * d, y = o + Math.sin(a) * d;
-        g.fillStyle = 'rgba(90,86,78,0.22)'; g.beginPath(); g.arc(x + cr * 0.15, y + cr * 0.15, cr, 0, Math.PI * 2); g.fill();
-        g.fillStyle = 'rgba(255,255,250,0.25)'; g.beginPath(); g.arc(x - cr * 0.2, y - cr * 0.2, cr * 0.7, 0, Math.PI * 2); g.fill();
-      }
-      // a bright rayed crater low on the face
-      g.fillStyle = 'rgba(255,255,255,0.45)'; g.beginPath(); g.arc(o - r * 0.12, o + r * 0.6, r * 0.05, 0, Math.PI * 2); g.fill();
-      g.restore();
-      // the shadow: the unlit part taken away, in a few slightly different shapes for a soft terminator
-      const N = 48;
-      g.save(); g.globalCompositeOperation = 'destination-out';
-      [[0, 1], [0.04, 0.35], [0.08, 0.25], [0.13, 0.15]].forEach(([dk, a]) => {
-        const kk = Math.max(-1, Math.min(1, k + dk));
-        g.globalAlpha = a; g.beginPath();
-        for (let i = 0; i <= N; i++) { const t = -Math.PI / 2 + Math.PI * i / N; const x = o - side * (r + 1) * Math.cos(t), y = o + (r + 1) * Math.sin(t); i ? g.lineTo(x, y) : g.moveTo(x, y); }
-        for (let i = N; i >= 0; i--) { const t = -Math.PI / 2 + Math.PI * i / N; g.lineTo(o + side * kk * r * Math.cos(t), o + r * Math.sin(t)); }
-        g.closePath(); g.fill();
-      });
-      g.restore();
-      // earthshine behind
-      g.save(); g.globalCompositeOperation = 'destination-over';
-      g.fillStyle = 'rgba(120,135,170,0.16)'; g.beginPath(); g.arc(o, o, r, 0, Math.PI * 2); g.fill();
-      g.restore();
-      this._saverMoonC = { key, c, D };
-    }
-    const m = this._saverMoonC;
-    if (glow > 0) {
-      const gr = ctx.createRadialGradient(cx, cy, r * 0.8, cx, cy, r * 6);
-      gr.addColorStop(0, 'rgba(210,222,255,' + (0.22 * (0.25 + lit) * glow).toFixed(3) + ')');
-      gr.addColorStop(0.3, 'rgba(200,214,255,' + (0.07 * (0.25 + lit) * glow).toFixed(3) + ')');
-      gr.addColorStop(1, 'rgba(200,214,255,0)');
-      ctx.save(); ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(cx, cy, r * 6, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-    }
-    ctx.drawImage(m.c, cx - m.D / 2, cy - m.D / 2, m.D, m.D);
-  }
-
-  _saverNightSky(stage) {
-    const box = document.createElement('div');
-    box.className = 'cs-night';
-    stage.appendChild(box);
-    const SPR = this._saverStarSprites();
-    let B = null, shoot = null, nextShoot = 5 + Math.random() * 8;
-    const gauss = () => (Math.random() + Math.random() + Math.random() + Math.random() - 2) / 2;
-    const build = (W, H, S) => {
-      // the stars across the sky
-      const stars = [];
-      const n = Math.min(Math.round(W * H / 300), 2600);
-      for (let i = 0; i < n; i++) {
-        const r = Math.random(), tier = r < 0.035 ? 2 : r < 0.3 ? 1 : 0;
-        stars.push({ x: Math.random() * W, y: Math.random() * H * 0.95, tier, size: tier === 2 ? 7 + Math.random() * 9 : tier === 1 ? 0.7 + Math.random() * 0.6 : 0.35 + Math.random() * 0.4,
-          al: tier === 2 ? 0.75 + Math.random() * 0.25 : tier === 1 ? 0.5 + Math.random() * 0.35 : 0.22 + Math.random() * 0.3,
-          tw: 0.5 + Math.random() * 2.5, ph: Math.random() * 6.3, spr: Math.random() < 0.2 ? 1 : Math.random() < 0.35 ? 2 : 0 });
-      }
-      // the Milky Way, laid out along its own length (u) and across it (v). It repeats every L, so as it
-      // flows toward the top right, what leaves at the top comes back in at the bottom left without a join.
-      const ang = -0.62, cx = W * 0.5, cy = H * 0.44;
-      const L = Math.ceil(Math.hypot(W, H) * 1.25), BH = Math.ceil(H * 0.6);
-      const dust = [];
-      for (let i = 0; i < Math.min(W * 4.5, 5200); i++) {
-        const u = Math.random() * L;
-        dust.push({ u, v: gauss() * H * 0.07 * (1 + 0.45 * Math.sin(u / L * Math.PI * 2 * 3)), s: 0.3 + Math.random() * 0.55, al: 0.18 + Math.random() * 0.45 });
-      }
-      // a few brighter knots of stars in it
-      for (let k = 0; k < 7; k++) {
-        const u0 = Math.random() * L, v0 = gauss() * H * 0.03;
-        for (let i = 0; i < 70; i++) dust.push({ u: (u0 + gauss() * W * 0.05 + L) % L, v: v0 + gauss() * H * 0.025, s: 0.3 + Math.random() * 0.5, al: 0.25 + Math.random() * 0.5 });
-      }
-      // its glow and dark dust lanes, drawn once at half size (they're soft), on a strip that wraps round
-      const GS = 0.5, glow = document.createElement('canvas');
-      glow.width = Math.ceil(L * GS); glow.height = Math.ceil(BH * GS);
-      const g = glow.getContext('2d');
-      g.setTransform(GS, 0, 0, GS, 0, BH * GS / 2);   // CSS pixels; v = 0 along the middle of the strip
-      const blob = (u, v, rr, col) => {
-        [u - L, u, u + L].forEach(x => {
-          if (x + rr < 0 || x - rr > L) return;
-          const gr = g.createRadialGradient(x, v, 0, x, v, rr);
-          gr.addColorStop(0, col); gr.addColorStop(1, 'rgba(0,0,0,0)');
-          g.fillStyle = gr; g.beginPath(); g.arc(x, v, rr, 0, Math.PI * 2); g.fill();
-        });
-      };
-      for (let i = 0; i < 190; i++) blob(Math.random() * L, gauss() * H * 0.06, W * (0.05 + Math.random() * 0.12), Math.random() < 0.3 ? 'rgba(235,205,215,0.05)' : 'rgba(170,185,240,0.055)');
-      g.globalCompositeOperation = 'destination-out';
-      for (let i = 0; i < 80; i++) blob(Math.random() * L, gauss() * H * 0.018 + H * 0.008, W * (0.015 + Math.random() * 0.04), 'rgba(0,0,0,0.35)');
-      // the land: a glow along the horizon, distant hills in the haze, and a nearer ridge with trees
-      const [land, l] = this._saverOff(W, H, S);
-      const hg = l.createLinearGradient(0, H * 0.55, 0, H * 0.9);
-      hg.addColorStop(0, 'rgba(70,90,150,0)'); hg.addColorStop(0.7, 'rgba(80,95,150,0.16)'); hg.addColorStop(0.9, 'rgba(255,170,110,0.07)'); hg.addColorStop(1, 'rgba(255,170,110,0)');
-      l.fillStyle = hg; l.fillRect(0, H * 0.55, W, H * 0.35);
-      const ridge = (base, amp, fr, top, bottom, trees) => {
-        const p1 = Math.random() * 6, p2 = Math.random() * 6, p3 = Math.random() * 6;
-        const yAt = x => H * (base - amp * (0.55 * Math.sin(x / W * Math.PI * fr + p1) + 0.3 * Math.sin(x / W * Math.PI * fr * 2.3 + p2) + 0.15 * Math.sin(x / W * Math.PI * fr * 6.1 + p3)));
-        const gr = l.createLinearGradient(0, H * (base - amp), 0, H);
-        gr.addColorStop(0, top); gr.addColorStop(1, bottom);
-        l.fillStyle = gr; l.beginPath(); l.moveTo(0, H);
-        for (let x = 0; x <= W; x += 2) l.lineTo(x, yAt(x));
-        l.lineTo(W, H); l.closePath(); l.fill();
-        if (!trees) return;
-        l.fillStyle = bottom;
-        let x = -10;
-        while (x < W + 10) {
-          if (Math.random() < 0.55) {
-            const n = 2 + Math.floor(Math.random() * 7);
-            for (let i = 0; i < n; i++) {
-              const tx = x + Math.random() * 14, th = H * (0.03 + Math.random() * 0.05), tw = th * (0.28 + Math.random() * 0.12), ty = yAt(tx) + 2;
-              l.beginPath(); l.moveTo(tx, ty - th);
-              for (let j = 1; j <= 4; j++) { const yy = ty - th + th * j / 4; l.lineTo(tx + tw * j / 4 * 1.1, yy); l.lineTo(tx + tw * j / 4 * 0.55, yy); }
-              l.lineTo(tx + tw * 0.08, ty); l.lineTo(tx - tw * 0.08, ty);
-              for (let j = 4; j >= 1; j--) { const yy = ty - th + th * j / 4; l.lineTo(tx - tw * j / 4 * 0.55, yy); l.lineTo(tx - tw * j / 4 * 1.1, yy); }
-              l.closePath(); l.fill();
-              x += 4 + Math.random() * 7;
-            }
-          }
-          x += 10 + Math.random() * 40;
-        }
-      };
-      ridge(0.8, 0.05, 1.4, '#141c36', '#0b1124', false);
-      ridge(0.87, 0.045, 2.2, '#080c19', '#05070f', false);
-      ridge(0.93, 0.03, 3.1, '#030409', '#020306', true);
-      B = { stars, dust, glow, GS, L, BH, ang, cx, cy, land };
-    };
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized, S) => {
-      if (resized || !B) build(W, H, S);
-      const { L, BH, ang, cx, cy } = B;
-      const sky = ctx.createLinearGradient(0, 0, 0, H);
-      sky.addColorStop(0, '#010208'); sky.addColorStop(0.45, '#040719'); sky.addColorStop(0.75, '#0a1230'); sky.addColorStop(1, '#141d40');
-      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, H);
-      // the Milky Way flowing up toward the top right: across the panel in about four minutes
-      const off = (t * W / 240) % L;
-      ctx.save();
-      ctx.translate(cx, cy); ctx.rotate(ang);
-      ctx.globalCompositeOperation = 'lighter';
-      for (const k of [-1, 0]) ctx.drawImage(B.glow, -L / 2 + off + k * L, -BH / 2, L, BH);
-      ctx.fillStyle = '#dfe6ff';
-      for (const s of B.dust) {
-        const u = ((s.u + off) % L) - L / 2;
-        ctx.globalAlpha = s.al; ctx.fillRect(u, s.v, s.s, s.s);
-      }
-      ctx.restore();
-      ctx.globalCompositeOperation = 'lighter';
-      ctx.fillStyle = '#dfe6ff';
-      for (const s of B.stars) {
-        const tw = 0.7 + 0.3 * Math.sin(t * s.tw + s.ph) + 0.1 * Math.sin(t * s.tw * 2.7 + s.ph);
-        if (s.tier === 2) {
-          const z = s.size * (0.9 + 0.1 * tw);
-          ctx.globalAlpha = s.al * tw; ctx.drawImage(SPR[s.spr], s.x - z / 2, s.y - z / 2, z, z);
-          if (s.size > 12) { ctx.globalAlpha = s.al * tw * 0.25; ctx.fillStyle = '#fff'; ctx.fillRect(s.x - z * 0.55, s.y - 0.25, z * 1.1, 0.5); ctx.fillRect(s.x - 0.25, s.y - z * 0.55, 0.5, z * 1.1); ctx.fillStyle = '#dfe6ff'; }
-        } else {
-          ctx.globalAlpha = s.al * tw; ctx.fillRect(s.x - s.size / 2, s.y - s.size / 2, s.size, s.size);
-        }
-      }
-      ctx.globalAlpha = 1;
-      // a shooting star now and then
-      nextShoot -= dt;
-      if (!shoot && nextShoot <= 0) {
-        const a = 0.3 + Math.random() * 0.6;
-        shoot = { x: W * (0.25 + Math.random() * 0.7), y: H * (0.04 + Math.random() * 0.3), vx: -Math.cos(a) * W * 0.8, vy: Math.sin(a) * W * 0.8, life: 0, dur: 0.6 + Math.random() * 0.6 };
-        nextShoot = 15 + Math.random() * 40;
-      }
-      if (shoot) {
-        shoot.life += dt;
-        const k = shoot.life / shoot.dur;
-        if (k >= 1) shoot = null;
-        else {
-          const hx = shoot.x + shoot.vx * shoot.life, hy = shoot.y + shoot.vy * shoot.life;
-          const tl = 0.16, tx = hx - shoot.vx * tl, ty = hy - shoot.vy * tl;
-          const al = Math.sin(k * Math.PI);
-          const gr = ctx.createLinearGradient(hx, hy, tx, ty);
-          gr.addColorStop(0, 'rgba(255,255,255,' + al.toFixed(2) + ')'); gr.addColorStop(0.3, 'rgba(200,220,255,' + (al * 0.4).toFixed(2) + ')'); gr.addColorStop(1, 'rgba(200,220,255,0)');
-          ctx.strokeStyle = gr; ctx.lineCap = 'round';
-          ctx.lineWidth = 1.4; ctx.beginPath(); ctx.moveTo(hx, hy); ctx.lineTo(tx, ty); ctx.stroke();
-          ctx.globalAlpha = al; ctx.drawImage(SPR[0], hx - 5, hy - 5, 10, 10); ctx.globalAlpha = 1;
-        }
-      }
-      ctx.globalCompositeOperation = 'source-over';
-      const mr = Math.max(11, Math.min(W, H) * 0.06);
-      this._saverMoon(ctx, W - mr * 2.6, mr * 2.8, mr, S);
-      ctx.drawImage(B.land, 0, 0, W, H);
-      this._saverGrain(ctx, W, H, 0.03);
-    });
-  }
-
-  _saverFireplace(stage) {
-    const box = document.createElement('div');
-    box.className = 'cs-firebg';
-    stage.appendChild(box);
-    // the flames are hundreds of soft glowing wisps, drawn on top of each other so the fire builds up
-    // white-hot at the base and cools through yellow and orange to red at the tips
-    const SPR = [[255, 252, 230], [255, 236, 160], [255, 208, 100], [255, 172, 60], [252, 132, 36], [238, 96, 24], [205, 62, 14], [150, 38, 8]].map(c => {
-      const cv = document.createElement('canvas'); cv.width = cv.height = 64;
-      const g = cv.getContext('2d'), gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
-      gr.addColorStop(0, 'rgba(' + c + ',0.9)'); gr.addColorStop(0.3, 'rgba(' + c + ',0.5)'); gr.addColorStop(0.65, 'rgba(' + c + ',0.12)'); gr.addColorStop(1, 'rgba(' + c + ',0)');
-      g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
-      return cv;
-    });
-    let B = null, flames = [], sparks = [];
-    // the fire's width (fw) and scale (M): over the square artwork these are 0.86 of the width and the height,
-    // as before; full screen keeps them in proportion to each other
-    const dimsOf = (W, H) => ({ fw: Math.min(W * 0.86, H * 1.3), M: Math.min(H, W * 1.15) });
-    const build = (W, H, S) => {
-      const { fw, M } = dimsOf(W, H);
-      // where flames start: along the bottom, most in the middle
-      const emit = [];
-      for (let x = W / 2 - fw / 2; x <= W / 2 + fw / 2; x += 2) { const c = 1 - Math.abs(x - W / 2) / (fw / 2); if (c > 0) emit.push({ x, y: H - M * (0.015 + 0.09 * Math.pow(c, 1.4)), c: Math.min(1, c * 1.4), front: false }); }
-      B = { emit, fw, M };
-      flames = []; sparks = [];
-    };
-    const drawFlames = (ctx, front, mult = 1) => {
-      for (const p of flames) {
-        if (p.front !== front) continue;
-        const k = p.life / p.max;
-        const sz = p.s * (k < 0.15 ? 0.55 + k / 0.15 * 0.45 : 1 - (k - 0.15) * 0.85);
-        const ci = Math.min(7, Math.floor(k * 7.5 + p.heat));
-        const a = (k < 0.08 ? k / 0.08 : 1) * Math.pow(1 - k, 1.25) * p.a;
-        if (a < 0.01 || sz < 1) continue;
-        ctx.globalAlpha = a * mult;
-        ctx.drawImage(SPR[ci], p.x - sz / 2, p.y - sz * 0.95, sz, sz * 1.7);
-      }
-      ctx.globalAlpha = 1;
-    };
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized, S) => {
-      if (resized || !B) build(W, H, S);
-      const flick = 0.82 + 0.1 * Math.sin(t * 7.1) * Math.sin(t * 2.9) + 0.08 * Math.sin(t * 13.7 + Math.sin(t * 3));
-      // new flames: more where the fire is strongest, gathering into tongues that wander along the logs
-      const want = 720 * dt;
-      for (let i = 0; i < Math.floor(want) + (Math.random() < want % 1 ? 1 : 0); i++) {
-        const e = B.emit[(Math.random() * B.emit.length) | 0];
-        if (!e) break;
-        const tongue = 0.45 + 0.55 * Math.max(0, Math.sin(e.x * 0.045 + t * 1.6) * 0.6 + Math.sin(e.x * 0.11 - t * 2.3) * 0.4 + 0.3);
-        if (Math.random() > e.c * tongue) continue;
-        flames.push({ x: e.x + (Math.random() - 0.5) * 6, y: e.y + 3 + Math.random() * 3, vx: (Math.random() - 0.5) * 12, vy: -B.M * (0.17 + Math.random() * 0.22) * (0.7 + e.c * 0.5),
-          life: 0, max: (0.45 + Math.random() * 0.75) * (0.55 + e.c * 0.6) * (0.7 + tongue * 0.5), s: B.M * (0.06 + Math.random() * 0.06) * (0.7 + e.c * 0.5),
-          a: 0.38 + Math.random() * 0.3, heat: Math.random() * 0.6, ph: Math.random() * 6.3, front: e.front });
-      }
-      flames = flames.filter(p => {
-        p.life += dt;
-        if (p.life >= p.max) return false;
-        p.x += (p.vx + Math.sin(t * 4.2 + p.ph + p.y * 0.05) * B.M * 0.035) * dt;
-        p.y += p.vy * dt; p.vy *= 1 + dt * 0.5;
-        p.x += (W / 2 - p.x) * dt * 0.06;
-        return true;
-      });
-      // darkness, warmed by the fire and breathing with it
-      ctx.fillStyle = '#040201'; ctx.fillRect(0, 0, W, H);
-      ctx.globalCompositeOperation = 'lighter';
-      const warm = ctx.createRadialGradient(W / 2, H * 0.8, 0, W / 2, H * 0.8, Math.max(W, H) * (0.7 + 0.05 * flick));
-      warm.addColorStop(0, 'rgba(150,50,10,' + (0.55 * flick).toFixed(3) + ')'); warm.addColorStop(0.45, 'rgba(70,20,5,' + (0.35 * flick).toFixed(3) + ')'); warm.addColorStop(1, 'rgba(20,5,0,0)');
-      ctx.fillStyle = warm; ctx.fillRect(0, 0, W, H);
-      // the flames
-      drawFlames(ctx, false);
-      // the bright glow at the base of the fire
-      ctx.globalCompositeOperation = 'lighter';
-      const cg = ctx.createRadialGradient(W / 2, H - B.M * 0.06, 0, W / 2, H - B.M * 0.06, B.fw * 0.44);
-      cg.addColorStop(0, 'rgba(255,100,20,' + (0.28 * flick).toFixed(3) + ')'); cg.addColorStop(1, 'rgba(255,60,0,0)');
-      ctx.fillStyle = cg; ctx.fillRect(0, 0, W, H);
-      // sparks rising and fading
-      const sk = this._saverEl?.classList.contains('cs-full') ? Math.max(1, B.M / 380) : 1;
-      if (sparks.length < 30 && Math.random() < dt * 5) sparks.push({ x: W / 2 + B.fw * (Math.random() - 0.5) * 0.42, y: H - B.M * 0.28, vx: (Math.random() - 0.5) * 20 * sk, vy: -(40 + Math.random() * 70) * sk, life: 0, max: 1 + Math.random() * 2.2, r: (0.5 + Math.random() * 0.9) * sk, ph: Math.random() * 6 });
-      sparks = sparks.filter(e => {
-        e.life += dt;
-        if (e.life > e.max) return false;
-        e.x += (e.vx + Math.sin(t * 2.5 + e.ph) * 16) * dt; e.y += e.vy * dt; e.vy *= 0.993;
-        const a = (1 - e.life / e.max) * (0.55 + 0.45 * Math.sin(t * 14 + e.ph));
-        ctx.fillStyle = 'rgba(255,' + (160 + Math.round(70 * (1 - e.life / e.max))) + ',70,' + a.toFixed(2) + ')';
-        ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2); ctx.fill();
-        return true;
-      });
-      ctx.globalCompositeOperation = 'source-over';
-      this._saverGrain(ctx, W, H, 0.025);
-    });
-  }
-
-  _saverOcean(stage) {
-    const box = document.createElement('div');
-    box.className = 'cs-oceanbg';
-    stage.appendChild(box);
-    const SPR = this._saverStarSprites();
-    // sky top, sky middle, horizon, far sea, near sea, sun, cloud lit, cloud shade
-    const P = {
-      night: ['#01030c', '#06102c', '#16264e', '#0c1a3a', '#01040b', '#eef2ff', '#3c4a74', '#0b1226'],
-      dawn:  ['#1b2152', '#6d5c92', '#f8b8a2', '#7c6f98', '#121833', '#ffe6c8', '#ffcdb8', '#5c4c7c'],
-      dusk:  ['#160f3a', '#73396c', '#ff9654', '#8b5262', '#140c1f', '#ffc06a', '#ffb877', '#5a2f52'],
-      day:   ['#1b5fb8', '#5a9bdc', '#f0dcc0', '#3d86c1', '#08355f', '#ffd98e', '#fff3e2', '#b8b8c8'],
-    };
-    const hex = h => [1, 3, 5].map(i => parseInt(h.slice(i, i + 2), 16));
-    const mix = (a, b, k) => a.map((v, i) => hex(v).map((c, j) => Math.round(c + (hex(b[i])[j] - c) * k)));
-    const rgb = (c, a = 1) => 'rgba(' + c[0] + ',' + c[1] + ',' + c[2] + ',' + a + ')';
-    const sun = () => {
-      const s = this._hass?.states?.['sun.sun']?.attributes;
-      if (s && typeof s.elevation === 'number') return { el: s.elevation, rising: !!s.rising };
-      const now = new Date(), hr = now.getHours() + now.getMinutes() / 60;
-      return { el: 50 * Math.sin((hr - 6) / 12 * Math.PI), rising: hr < 12 };
-    };
-    const palette = () => {
-      const { el, rising } = sun();
-      const tw = rising ? P.dawn : P.dusk;
-      let c, dark = 0;
-      if (el <= -10) { c = mix(P.night, P.night, 0); dark = 1; }
-      else if (el < 0) { c = mix(P.night, tw, (el + 10) / 10); dark = -el / 10; }
-      else if (el < 14) c = mix(tw, P.day, el / 14);
-      else c = mix(P.day, P.day, 0);
-      // how cloudy: from a weather entity when one is given, otherwise a clear sky
-      // (the soft grey cloud banks read as storm clouds, especially at dawn, dusk and night)
-      const w = this._hass?.states?.[(this._config?.screensaver_weather || '').trim()]?.state || '';
-      const cloud = ({ sunny: 0.15, 'clear-night': 0.1, partlycloudy: 0.5, cloudy: 0.85, fog: 0.9, rainy: 0.9, pouring: 1, snowy: 0.9, 'snowy-rainy': 0.9, lightning: 1, 'lightning-rainy': 1, hail: 1, windy: 0.45, 'windy-variant': 0.6 })[w] ?? 0;
-      return { c, el, rising, dark, cloud };
-    };
-    let pal = palette(), palAt = -99, B = null;
-    // the water's ripples: one tile, worked out once, that repeats seamlessly; light on the crests, shade in the troughs
-    const TW = 256, TH = 128;
-    const tex = (() => {
-      const comps = Array.from({ length: 16 }, (_, i) => ({ kx: Math.round((Math.random() - 0.5) * (i < 4 ? 4 : i < 10 ? 10 : 18)), ky: (i < 4 ? 3 : i < 10 ? 6 : 12) + Math.floor(Math.random() * (i < 4 ? 4 : i < 10 ? 10 : 16)), a: i < 4 ? 1 : i < 10 ? 0.5 : 0.25, p: Math.random() * 6.3 }));
-      const hv = new Float32Array(TW * TH);
-      let mx = 0;
-      for (let y = 0; y < TH; y++) for (let x = 0; x < TW; x++) {
-        let v = 0;
-        for (const c of comps) v += c.a * Math.sin(Math.PI * 2 * (c.kx * x / TW + c.ky * y / TH) + c.p);
-        hv[y * TW + x] = v; mx = Math.max(mx, Math.abs(v));
-      }
-      const mk = (fn) => {
-        const c = document.createElement('canvas'); c.width = TW; c.height = TH;
-        const g = c.getContext('2d'), im = g.createImageData(TW, TH), d = im.data;
-        for (let i = 0; i < hv.length; i++) {
-          // the slope toward the viewer catches the light, so take the change from the row behind
-          const y = (i / TW) | 0, x = i % TW, up = hv[((y + TH - 1) % TH) * TW + x];
-          const [r, gg, b, a] = fn(hv[i] / mx, (hv[i] - up) / mx * 6);
-          d[i * 4] = r; d[i * 4 + 1] = gg; d[i * 4 + 2] = b; d[i * 4 + 3] = a;
-        }
-        g.putImageData(im, 0, 0);
-        return c;
-      };
-      const ss = (a, b, v) => { const t = Math.max(0, Math.min(1, (v - a) / (b - a))); return t * t * (3 - 2 * t); };
-      return {
-        hi: mk((v, s) => [255, 255, 255, Math.round(255 * Math.min(1, ss(0.4, 1, v) * 0.55 + ss(0.3, 1, -s) * 0.8))]),
-        lo: mk((v, s) => [0, 8, 24, Math.round(255 * Math.min(1, ss(0.1, 0.95, -v) * 0.7 + ss(0.2, 0.9, s) * 0.35))]),
-      };
-    })();
-    const build = (W, H, S, hy) => {
-      // rows of water from the horizon down: thin far away, thicker close up
-      const rows = [];
-      let y = hy;
-      while (y < H) { const d = (y - hy) / (H - hy); const ny = Math.min(H, Math.round((y + 0.6 + d * 1.9) * S) / S); if (ny <= y) { y += 1 / S; continue; } rows.push([y, ny - y]); y = ny; }
-      // clouds: soft banks low in the sky
-      const clouds = Array.from({ length: 7 }, (_, i) => ({ x: Math.random() * W * 1.4 - W * 0.2, y: hy * (0.15 + Math.random() * 0.6), w: W * (0.45 + Math.random() * 0.5),
-        puffs: Array.from({ length: 10 }, () => ({ dx: (Math.random() - 0.5) * 0.9, dy: (Math.random() - 0.5) * 0.25, r: 0.22 + Math.random() * 0.24 })), sp: 1.5 + Math.random() * 3, rank: i / 9 }));
-      const stars = Array.from({ length: Math.round(W * hy / 450) }, () => ({ x: Math.random() * W, y: Math.random() * hy * 0.92, s: Math.random() < 0.06 ? 5 + Math.random() * 5 : 0.4 + Math.random() * 0.7, ph: Math.random() * 6, tw: 0.6 + Math.random() * 2 }));
-      B = { rows, clouds, stars, hiP: null, loP: null };
-    };
-    // ── Life on the ocean: one thing at a time, now and then — dolphins leaping (alone or in a pod),
-    //    seabirds gliding over, or a whale far out ──
-    const life = { ev: null, bird: null, next: 2 + Math.random() * 3, nextBird: 3 + Math.random() * 3, splashes: [], caps: [], force: null };
-    this._saverOceanLife = life;
-    const rr = (a, b) => a + Math.random() * (b - a);
-    const startEvent = (W, H, hy) => {
-      const pick = [['dolphins', 0.7], ['whale', 0.3]];
-      let r = Math.random() * pick.reduce((s, p) => s + p[1], 0), kind = 'dolphins';
-      for (const [k, w] of pick) { if ((r -= w) <= 0) { kind = k; break; } }
-      if (life.force) { kind = life.force; life.force = null; }
-      const dir = Math.random() < 0.5 ? 1 : -1;
-      if (kind === 'dolphins') {
-        const n = Math.random() < 0.4 ? 1 : 3 + Math.floor(Math.random() * 4);
-        const d = rr(0.2, 0.4), len = W * 0.05 * (d / 0.35);
-        const yW = hy + (H - hy) * d, speed = len * rr(1.6, 2.2) * dir;
-        const x0 = dir > 0 ? rr(-0.05, 0.3) * W : rr(0.7, 1.05) * W;
-        const pod = Array.from({ length: n }, (_, i) => {
-          const leaps = [];
-          let tt = i * rr(0.15, 0.6);
-          const k = 2 + Math.floor(Math.random() * 3);
-          for (let j = 0; j < k; j++) { const ld = rr(0.85, 1.15); leaps.push([tt, ld]); tt += ld + rr(1.1, 2.2); }
-          return { dx: (i ? (Math.random() - 0.5) * len * 3 : 0) - i * len * 0.4 * dir, dy: (Math.random() - 0.5) * (H - hy) * 0.03, sc: rr(0.85, 1.1), leaps, end: tt };
-        });
-        return { kind, d, len, yW, speed, x0, pod, t: 0, dur: Math.max(...pod.map(p => p.end)) + 1.5, dir };
-      }
-      if (kind === 'birds') {
-        const sc = W / 400 * 1.25;   // bird size, in step with the screen
-        const x0 = dir > 0 ? -70 * sc : W + 70 * sc;
-        if (Math.random() < 0.3) {
-          // a distant flock: lots of tiny birds moving together, the group slowly changing shape
-          const n = 15 + Math.floor(Math.random() * 16), R = W * rr(0.05, 0.08);
-          return { kind, style: 'flock', dir, t: 0, x: x0, y: hy * rr(0.45, 0.8), vx: W * rr(0.035, 0.05) * dir, R,
-            birds: Array.from({ length: n }, () => ({ a: Math.random() * 6.3, r: Math.sqrt(Math.random()), f1: rr(0.15, 0.35), f2: rr(0.1, 0.3), p1: Math.random() * 6.3, p2: Math.random() * 6.3, flapPh: Math.random() * 6, flapSpd: rr(0.13, 0.19), size: rr(1.2, 1.6) * sc })) };
-        }
-        const depth = 0.75 + Math.random() * 0.5, speed = (0.7 + Math.random() * 0.55) * dir * depth * 30 * sc;
-        const startY = hy * (0.42 + Math.random() * 0.42);
-        const count = 1 + Math.floor(Math.random() * 10), formation = Math.floor(Math.random() * 3);
-        const birds = Array.from({ length: count }, (_, i) => {
-          let offX = 0, offY = 0;
-          if (count > 1) {
-            if (formation === 0) { const row = Math.floor((i + 1) / 2), side = i % 2 === 0 ? 1 : -1; offX = -15 * row * dir; offY = 8 * row * side; }
-            else if (formation === 1) { offX = -18 * i * dir; offY = 10 * i * (Math.random() > 0.5 ? 1 : -1); }
-            else { offX = (Math.random() - 0.5) * 60 * dir; offY = (Math.random() - 0.5) * 45; }
-          }
-          return { x: x0 + offX * depth * sc, y: startY + offY * depth * sc, vx: speed, vy: (Math.random() - 0.5) * 0.06 * 30 * sc, flapPh: i + Math.random() * 2, flapSpd: 0.13 + Math.random() * 0.06, size: (2.0 + Math.random() * 0.7) * depth * sc };
-        });
-        return { kind, style: 'v', dir, t: 0, birds };
-      }
-      return { kind: 'whale', x: rr(0.2, 0.8) * W, d: rr(0.08, 0.15), t: 0, dur: 11, dir };
-    };
-    const seaY = (H, hy, d) => hy + (H - hy) * d;
-    // a splash: droplets thrown up and a ring of ripples spreading
-    const splash = (x, y, size) => {
-      const drops = Array.from({ length: 10 }, () => ({ x, y, vx: (Math.random() - 0.5) * size * 3, vy: -rr(1.5, 3.5) * size, r: rr(0.35, 0.7) * Math.max(0.45, size * 0.05) }));
-      life.splashes.push({ x, y, size, t: 0, drops });
-    };
-    const drawSplashes = (ctx, dt, lightC) => {
-      life.splashes = life.splashes.filter(s => {
-        s.t += dt;
-        if (s.t > 2.2) return false;
-        const k = s.t / 2.2;
-        ctx.strokeStyle = rgb(lightC, (0.4 * (1 - k)).toFixed(3)); ctx.lineWidth = 0.6;
-        ctx.beginPath(); ctx.ellipse(s.x, s.y, s.size * (0.4 + k * 2.2), s.size * (0.08 + k * 0.35), 0, 0, Math.PI * 2); ctx.stroke();
-        ctx.fillStyle = rgb(lightC, Math.max(0, 0.85 - k * 2).toFixed(3));
-        for (const p of s.drops) { p.x += p.vx * dt; p.y += p.vy * dt; p.vy += s.size * 9 * dt; if (p.y < s.y) { ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2); ctx.fill(); } }
-        return true;
-      });
-    };
-    // a dolphin, side on, facing +x, nose at +len/2: a short beak and rounded melon, a long
-    // tapering body, a curved-back dorsal fin, a flipper behind the head and flat tail flukes
-    const dolphin = (ctx, len, light) => {
-      const L = len;
-      const P = (x, y) => [x * L, y * L];
-      const top = [Math.round(40 * light + 8), Math.round(52 * light + 10), Math.round(64 * light + 14)];
-      const belly = [Math.round(150 * light + 20), Math.round(160 * light + 22), Math.round(168 * light + 26)];
-      const g = ctx.createLinearGradient(0, -L * 0.115, 0, L * 0.085);
-      g.addColorStop(0, rgb(top)); g.addColorStop(0.5, rgb(top)); g.addColorStop(0.72, rgb(top.map((c, i) => Math.round(c * 0.5 + belly[i] * 0.5)))); g.addColorStop(1, rgb(belly));
-      ctx.fillStyle = g;
-      ctx.beginPath();
-      ctx.moveTo(...P(0.5, 0.004));                                                   // beak tip
-      ctx.bezierCurveTo(...P(0.47, -0.012), ...P(0.43, -0.02), ...P(0.395, -0.03));     // top of the beak
-      ctx.bezierCurveTo(...P(0.385, -0.065), ...P(0.33, -0.09), ...P(0.26, -0.1));      // the melon (forehead)
-      ctx.bezierCurveTo(...P(0.15, -0.112), ...P(0.02, -0.118), ...P(-0.1, -0.1));      // the back
-      ctx.bezierCurveTo(...P(-0.24, -0.075), ...P(-0.36, -0.035), ...P(-0.44, -0.018)); // down to the tail stock
-      // flukes: flat, so side on they're a thin swept blade
-      ctx.bezierCurveTo(...P(-0.49, -0.022), ...P(-0.55, -0.04), ...P(-0.6, -0.052));
-      ctx.quadraticCurveTo(...P(-0.565, -0.012), ...P(-0.585, 0.022));
-      ctx.bezierCurveTo(...P(-0.54, 0.014), ...P(-0.49, 0.008), ...P(-0.44, 0.006));
-      ctx.bezierCurveTo(...P(-0.33, 0.022), ...P(-0.2, 0.07), ...P(-0.02, 0.083));      // the belly
-      ctx.bezierCurveTo(...P(0.14, 0.088), ...P(0.27, 0.068), ...P(0.36, 0.035));       // the throat
-      ctx.bezierCurveTo(...P(0.41, 0.02), ...P(0.46, 0.016), ...P(0.5, 0.004));         // lower jaw
-      ctx.closePath(); ctx.fill();
-      ctx.fillStyle = rgb(top);
-      // dorsal fin: tall and curved back
-      ctx.beginPath(); ctx.moveTo(...P(0.04, -0.113));
-      ctx.bezierCurveTo(...P(0.0, -0.16), ...P(-0.06, -0.215), ...P(-0.15, -0.235));
-      ctx.bezierCurveTo(...P(-0.11, -0.19), ...P(-0.1, -0.14), ...P(-0.13, -0.093));
-      ctx.closePath(); ctx.fill();
-      // flipper, angled back and down
-      ctx.beginPath(); ctx.moveTo(...P(0.25, 0.055));
-      ctx.bezierCurveTo(...P(0.2, 0.1), ...P(0.15, 0.13), ...P(0.1, 0.145));
-      ctx.bezierCurveTo(...P(0.13, 0.11), ...P(0.16, 0.08), ...P(0.17, 0.068));
-      ctx.closePath(); ctx.fill();
-      if (L < 18) return;
-      // a wet highlight along the back
-      ctx.strokeStyle = 'rgba(255,255,255,' + (0.32 * light).toFixed(2) + ')'; ctx.lineWidth = Math.max(0.5, L * 0.01);
-      ctx.beginPath(); ctx.moveTo(...P(0.3, -0.088)); ctx.bezierCurveTo(...P(0.15, -0.105), ...P(-0.05, -0.105), ...P(-0.25, -0.06)); ctx.stroke();
-      // mouth line and eye
-      ctx.strokeStyle = 'rgba(0,0,0,0.35)'; ctx.lineWidth = Math.max(0.4, L * 0.005);
-      ctx.beginPath(); ctx.moveTo(...P(0.5, 0.004)); ctx.quadraticCurveTo(...P(0.43, 0.006), ...P(0.38, -0.002)); ctx.stroke();
-      ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.beginPath(); ctx.arc(...P(0.335, -0.035), Math.max(0.35, L * 0.008), 0, Math.PI * 2); ctx.fill();
-    };
-    const lifeDraw = (ctx, t, dt, W, H, S, hy, day, sunC, hor, bx) => {
-      // the main visitors (dolphins or a whale) one at a time; seabirds come and go on their own
-      life.next -= dt; life.nextBird -= dt;
-      if (!life.ev && life.next <= 0) life.ev = startEvent(W, H, hy);
-      if (!life.bird && life.nextBird <= 0 && pal.dark < 0.6) { life.force = 'birds'; life.bird = startEvent(W, H, hy); }
-      const lightC = day ? [255, 255, 255] : [200, 210, 235];
-      for (const e of [life.ev, life.bird]) {
-        if (!e) continue;
-        e.t += dt;
-        if (e.kind === 'dolphins') {
-          const light = day ? 1 : 0.4;
-          for (const p of e.pod) {
-            const wy = e.yW + p.dy;
-            for (const [st, ld] of p.leaps) {
-              const lt = e.t - st;
-              const x = e.x0 + p.dx + e.speed * (e.t);
-              if (lt >= 0 && lt <= ld) {
-                const q = lt / ld, L = e.len * p.sc;
-                if (!p['s' + st]) { p['s' + st] = 1; splash(x - L * 0.3 * e.dir, wy, L * 0.35); }
-                if (q > 0.88 && !p['e' + st]) { p['e' + st] = 1; splash(x + L * 0.25 * e.dir, wy, L * 0.4); }
-                const hgt = Math.sin(Math.PI * q) * L * 0.75, ang = -Math.cos(Math.PI * q) * 0.75;
-                ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, wy + 0.5); ctx.clip();
-                ctx.translate(x, wy - hgt + L * 0.12); ctx.scale(e.dir, 1); ctx.rotate(ang);
-                dolphin(ctx, L, light);
-                ctx.restore();
-              }
-            }
-          }
-          if (e.t >= e.dur) e.done = true;
-        } else if (e.kind === 'birds') {
-          // the birds: two strokes meeting at the body, wings beating in bursts
-          ctx.strokeStyle = day ? 'rgba(40,45,52,0.80)' : 'rgba(200,210,220,0.65)'; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-          const step = dt * 30;   // the birds move a little each frame, paced for 30 frames a second
-          const drawBird = (x, y, b, dir) => {
-            b.flapPh += b.flapSpd * step;
-            const env = Math.max(0, Math.sin(b.flapPh * 0.38)), wing = Math.sin(b.flapPh) * b.size * env;
-            ctx.lineWidth = Math.max(0.8, b.size * 0.45);
-            ctx.beginPath(); ctx.moveTo(x - b.size * dir, y + wing - b.size / 2.2); ctx.lineTo(x, y); ctx.lineTo(x - b.size * dir, y + wing + b.size / 2.2); ctx.stroke();
-          };
-          if (e.style === 'flock') {
-            e.x += e.vx * dt;
-            for (const b of e.birds) {
-              // each bird wanders around its place in the flock, so the group keeps changing shape
-              const a = b.a + Math.sin(t * b.f1 + b.p1) * 0.8, r = e.R * (0.35 + b.r * 0.65) * (0.8 + 0.3 * Math.sin(t * b.f2 + b.p2));
-              drawBird(e.x + Math.cos(a) * r * 1.6, e.y + Math.sin(a) * r * 0.55, b, e.dir);
-            }
-            if ((e.dir > 0 && e.x - e.R * 2 > W) || (e.dir < 0 && e.x + e.R * 2 < 0)) e.done = true;
-          } else {
-            let gone = true;
-            for (const b of e.birds) {
-              b.x += b.vx * dt; b.y += b.vy * dt;
-              drawBird(b.x, b.y, b, e.dir);
-              if (!((e.dir > 0 && b.x > W + 80) || (e.dir < 0 && b.x < -80))) gone = false;
-            }
-            if (gone) e.done = true;
-          }
-          ctx.lineCap = 'butt'; ctx.lineJoin = 'miter';
-        } else if (e.kind === 'whale') {
-          const y = seaY(H, hy, e.d), sz = W * 0.038 * (e.d / 0.12), light = day ? 1 : 0.45;
-          // first a misty spout, then the back rolling over, then the tail lifting and slipping under
-          if (e.t < 3.2) {
-            const k = e.t / 3.2, h = sz * 1.1 * Math.min(1, k * 3);
-            const g = ctx.createRadialGradient(e.x, y - h * 0.6, 0, e.x, y - h * 0.6, sz * 0.5 * (0.6 + k));
-            g.addColorStop(0, rgb(lightC, (0.55 * (1 - k)).toFixed(3))); g.addColorStop(1, rgb(lightC, 0));
-            ctx.fillStyle = g; ctx.save(); ctx.translate(e.x, y - h * 0.6); ctx.scale(0.7, 1.3); ctx.translate(-e.x, -(y - h * 0.6)); ctx.beginPath(); ctx.arc(e.x, y - h * 0.6, sz * 0.5 * (0.6 + k), 0, Math.PI * 2); ctx.fill(); ctx.restore();
-          }
-          const col = rgb([Math.round(30 * light + 6), Math.round(36 * light + 8), Math.round(44 * light + 10)]);
-          ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, y + 0.3); ctx.clip(); ctx.fillStyle = col;
-          if (e.t > 2 && e.t < 6) {
-            const k = (e.t - 2) / 4, bxw = e.x + (k - 0.5) * sz * 1.2 * e.dir, hgt = Math.sin(Math.PI * k) * sz * 0.22;
-            ctx.beginPath(); ctx.ellipse(bxw, y, sz * 0.8, hgt + 0.3, 0, Math.PI, 0); ctx.fill();
-            if (k > 0.35 && k < 0.8) { ctx.beginPath(); ctx.moveTo(bxw - sz * 0.15 * e.dir, y - hgt); ctx.lineTo(bxw - sz * 0.25 * e.dir, y - hgt - sz * 0.1); ctx.lineTo(bxw - sz * 0.32 * e.dir, y - hgt + 1); ctx.closePath(); ctx.fill(); }
-          }
-          if (e.t > 6 && e.t < 10) {
-            const k = (e.t - 6) / 4, lift = Math.sin(Math.PI * k) * sz * 0.75, fx = e.x + sz * 0.6 * e.dir;
-            ctx.save(); ctx.translate(fx, y - lift); ctx.scale(e.dir, 1);
-            ctx.beginPath(); ctx.moveTo(-sz * 0.05, sz * 0.4); ctx.lineTo(-sz * 0.04, 0); ctx.quadraticCurveTo(-sz * 0.25, -sz * 0.05, -sz * 0.45, -sz * 0.18); ctx.quadraticCurveTo(-sz * 0.2, sz * 0.02, 0, 0.02 * sz); ctx.quadraticCurveTo(sz * 0.2, sz * 0.02, sz * 0.45, -sz * 0.18); ctx.quadraticCurveTo(sz * 0.25, -sz * 0.05, sz * 0.04, 0); ctx.lineTo(sz * 0.05, sz * 0.4); ctx.closePath(); ctx.fill();
-            // water streaming off it
-            ctx.fillStyle = rgb(lightC, (0.5 * Math.sin(Math.PI * k)).toFixed(3));
-            for (let i = 0; i < 6; i++) ctx.fillRect(-sz * 0.4 + i * sz * 0.16, -sz * 0.12 + ((t * 40 + i * 13) % (lift + 1)), 0.6, 1.2);
-            ctx.restore();
-            if (!e.sp1 && k > 0.85) { e.sp1 = 1; splash(fx, y, sz * 0.4); }
-          }
-          ctx.restore();
-          if (e.t >= e.dur) e.done = true;
-        }
-        if (e.done) { if (e === life.bird) { life.bird = null; life.nextBird = rr(4, 12); } else { life.ev = null; life.next = rr(5, 12); } }
-      }
-      drawSplashes(ctx, dt, lightC);
-    };
-    // the state of the sea, from the weather entity's wind (and its storms)
-    const seaState = () => {
-      const st = this._hass?.states?.[(this._config?.screensaver_weather || '').trim()];
-      const a = st?.attributes || {}, cond = st?.state || '';
-      let ws = Number(a.wind_speed);
-      const unit = String(a.wind_speed_unit || this._hass?.config?.unit_system?.wind_speed || 'km/h').toLowerCase();
-      if (!isFinite(ws)) ws = cond === 'windy' || cond === 'windy-variant' ? 30 : 12;
-      const kmh = unit.includes('mph') ? ws * 1.609 : unit.includes('m/s') ? ws * 3.6 : unit.includes('kn') ? ws * 1.852 : ws;
-      let chop = Math.max(0, Math.min(1, (kmh - 5) / 45));
-      if (/lightning|pouring|hail/.test(cond)) chop = Math.max(chop, 0.75);
-      return { chop, rain: /rain|pouring|lightning-rainy|hail/.test(cond), storm: /lightning/.test(cond) };
-    };
-    let sea = seaState();
-    // white caps when it's windy: small bright flecks breaking on the crests and fading
-    const capsDraw = (ctx, dt, W, H, hy, lightC) => {
-      const want = sea.chop > 0.4 ? (sea.chop - 0.4) * 90 : 0;
-      if (life.caps.length < want && Math.random() < dt * want * 0.8) {
-        const d = 0.05 + Math.pow(Math.random(), 0.7) * 0.95;
-        life.caps.push({ x: Math.random() * W, d, t: 0, max: rr(1.2, 2.6), w: rr(4, 12) * (d + 0.05) * (W / 400) * (0.6 + sea.chop), sk: (Math.random() - 0.5) * 0.15 });
-      }
-      life.caps = life.caps.filter(c => {
-        c.t += dt;
-        if (c.t > c.max) return false;
-        const k = c.t / c.max, y = seaY(H, hy, c.d), a = Math.sin(Math.PI * Math.min(1, k * 1.6)) * (1 - k) * 0.55;
-        ctx.fillStyle = rgb(lightC, a.toFixed(3));
-        ctx.beginPath(); ctx.ellipse(c.x, y, c.w * (0.7 + k * 0.8), Math.max(0.3, c.w * 0.06), c.sk, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = rgb(lightC, (a * 0.35).toFixed(3)); ctx.beginPath(); ctx.ellipse(c.x - c.w * 0.3, y + c.w * 0.08, c.w * (0.5 + k), Math.max(0.3, c.w * 0.05), c.sk, 0, Math.PI * 2); ctx.fill();
-        return true;
-      });
-    };
-    // distant weather: a grey shower hanging under a cloud far out, and silent lightning in a storm
-    const wx = { x: 0.15 + Math.random() * 0.7, flash: 0, nextFlash: 6 + Math.random() * 10 };
-    const weatherDraw = (ctx, t, dt, W, H, hy, day) => {
-      if (sea.rain) {
-        const cx = W * wx.x, cw = W * 0.28, top = hy * 0.62;
-        const cc = day ? [96, 102, 116] : [22, 26, 38];
-        ctx.save();
-        // the cloud
-        for (let i = 0; i < 7; i++) {
-          const px = cx + (i - 3) * cw * 0.16, py = top + Math.sin(i * 1.7) * hy * 0.025, r = cw * (0.2 + (i % 3) * 0.05);
-          const g = ctx.createRadialGradient(px, py, 0, px, py, r);
-          g.addColorStop(0, rgb(cc, 0.6)); g.addColorStop(1, rgb(cc, 0));
-          ctx.save(); ctx.translate(px, py); ctx.scale(1, 0.45); ctx.translate(-px, -py); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(px, py, r, 0, Math.PI * 2); ctx.fill(); ctx.restore();
-        }
-        // the rain falling from it to the sea: a soft grey veil, densest where it meets the sea and fading at the sides
-        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, hy); ctx.clip();
-        const vr = cw * 0.4;
-        ctx.translate(cx, hy); ctx.scale(1, (hy - top) / vr); 
-        const veil = ctx.createRadialGradient(0, 0, 0, 0, 0, vr);
-        veil.addColorStop(0, rgb(cc, 0.34)); veil.addColorStop(0.6, rgb(cc, 0.2)); veil.addColorStop(1, rgb(cc, 0));
-        ctx.fillStyle = veil; ctx.beginPath(); ctx.arc(0, 0, vr, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-        for (let i = 0; i < 5; i++) {
-          const sx = cx - cw * 0.25 + i * cw * 0.12 + Math.sin(t * 0.25 + i * 2.1) * cw * 0.03, sw = cw * (0.04 + (i % 2) * 0.03);
-          const g = ctx.createLinearGradient(sx - sw, 0, sx + sw, 0);
-          g.addColorStop(0, rgb(cc, 0)); g.addColorStop(0.5, rgb(cc, 0.12)); g.addColorStop(1, rgb(cc, 0));
-          ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(sx - sw, top + hy * 0.03); ctx.lineTo(sx + sw, top + hy * 0.03); ctx.lineTo(sx + sw - cw * 0.06, hy); ctx.lineTo(sx - sw - cw * 0.06, hy); ctx.closePath(); ctx.fill();
-        }
-        ctx.restore();
-      }
-      if (sea.storm) {
-        wx.nextFlash -= dt;
-        if (wx.nextFlash <= 0) { wx.flash = 1; wx.flash2 = Math.random() < 0.6 ? 0.25 : 0; wx.nextFlash = 8 + Math.random() * 22; wx.fx = sea.rain ? W * wx.x : W * (0.2 + Math.random() * 0.6); }
-        if (wx.flash > 0 || wx.flash2 > 0) {
-          if (wx.flash2 > 0 && wx.flash < 0.3) { wx.flash2 -= dt; if (wx.flash2 <= 0) wx.flash = 0.8; }
-          const a = Math.max(0, wx.flash) * (day ? 0.35 : 0.7);
-          ctx.save(); ctx.globalCompositeOperation = 'lighter';
-          const g = ctx.createRadialGradient(wx.fx, hy * 0.6, 0, wx.fx, hy * 0.6, W * 0.6);
-          g.addColorStop(0, 'rgba(200,210,255,' + a.toFixed(3) + ')'); g.addColorStop(1, 'rgba(200,210,255,0)');
-          ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-          ctx.restore();
-          wx.flash -= dt * 6;
-        }
-      }
-    };
-    const water = (ctx, t, W, H, S, hy, pattern, alphaFn, speed, scale, drift) => {
-      const K = (H - hy) / (0.55 * 1.6 * W / TW);
-      for (const [y, st] of B.rows) {
-        const d = (y + st / 2 - hy) / (H - hy);
-        const a = alphaFn(d);
-        if (a < 0.01) continue;
-        const z = 1 / (d + 0.035);
-        // ripples as deep as they are wide (a little flattened by the angle), so the water doesn't streak
-        const v = (((z * K / scale + t * speed) % TH) + TH) % TH;
-        const sx = (d + 0.035) * scale * W / TW * 1.6;
-        const off = W / 2 - sx * (TW / 2 + t * drift);
-        ctx.globalAlpha = a;
-        ctx.setTransform(S * sx, 0, 0, S * st, S * off, S * (y - v * st));
-        ctx.fillRect((-off) / sx - 1, v, W / sx + 2, 1);
-      }
-      ctx.setTransform(S, 0, 0, S, 0, 0); ctx.globalAlpha = 1;
-    };
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized, S) => {
-      const hy = Math.round(H * 0.55);
-      if (resized || !B) build(W, H, S, hy);
-      if (t - palAt > 30) { pal = palette(); sea = seaState(); palAt = t; }
-      if (!B.hiP) { B.hiP = ctx.createPattern(tex.hi, 'repeat'); B.loP = ctx.createPattern(tex.lo, 'repeat'); }
-      const [top, mid, hor, seaFar, seaNear, sunC, cLit, cShd] = pal.c;
-      // the sky
-      const sky = ctx.createLinearGradient(0, 0, 0, hy);
-      sky.addColorStop(0, rgb(top)); sky.addColorStop(0.55, rgb(mid)); sky.addColorStop(1, rgb(hor));
-      ctx.fillStyle = sky; ctx.fillRect(0, 0, W, hy + 1);
-      if (pal.dark > 0.15) {
-        ctx.globalCompositeOperation = 'lighter';
-        for (const s of B.stars) {
-          const a = (pal.dark - 0.15) * (0.6 + 0.4 * Math.sin(t * s.tw + s.ph)) * (1 - s.y / hy * 0.6);
-          ctx.globalAlpha = a;
-          if (s.s > 2) ctx.drawImage(SPR[0], s.x - s.s / 2, s.y - s.s / 2, s.s, s.s);
-          else { ctx.fillStyle = '#e6ecff'; ctx.fillRect(s.x, s.y, s.s, s.s); }
-        }
-        ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over';
-      }
-      // the sun low over the sea (rising on the left, setting on the right), or the moon at night
-      const day = pal.el > -5;
-      const bx = W * (pal.rising ? 0.3 : 0.7);
-      const br = Math.min(W, H) * (day ? 0.045 : 0.05);
-      const by = day ? hy - Math.max(-br * 1.2, Math.min(hy * 0.75, (pal.el / 35) * hy * 0.75)) : hy * 0.28;
-      if (day) {
-        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, hy); ctx.clip();
-        ctx.globalCompositeOperation = 'lighter';
-        const low = Math.max(0, 1 - Math.max(0, pal.el) / 20);
-        const cor = ctx.createRadialGradient(bx, by, 0, bx, by, br * 9);
-        const warmC = sunC.map((c, i) => Math.round(c * [1, 0.86, 0.62][i]));   // a deeper gold for the glow, so it warms the blue rather than paling it
-        cor.addColorStop(0, rgb(warmC, 0.75)); cor.addColorStop(0.12, rgb(warmC, 0.4)); cor.addColorStop(0.35, rgb(warmC, 0.12 + low * 0.08)); cor.addColorStop(1, rgb(warmC, 0));
-        ctx.fillStyle = cor; ctx.fillRect(0, 0, W, hy);
-        // a wide warm glow along the horizon when the sun is low
-        if (low > 0) {
-          const hg = ctx.createRadialGradient(bx, hy, 0, bx, hy, W * 0.8);
-          hg.addColorStop(0, rgb(sunC, 0.35 * low)); hg.addColorStop(1, rgb(sunC, 0));
-          ctx.save(); ctx.translate(bx, hy); ctx.scale(1, 0.35); ctx.translate(-bx, -hy); ctx.fillStyle = hg; ctx.fillRect(0, hy - hy / 0.35 - 4, W, hy / 0.35 + 8); ctx.restore();
-        }
-        ctx.globalCompositeOperation = 'source-over';
-        const disc = ctx.createRadialGradient(bx - br * 0.2, by - br * 0.2, 0, bx, by, br);
-        disc.addColorStop(0, '#fffdf2'); disc.addColorStop(0.55, rgb(sunC.map(c => Math.round(c + (255 - c) * 0.6)))); disc.addColorStop(1, rgb(sunC));
-        ctx.fillStyle = disc; ctx.beginPath(); ctx.arc(bx, by, br, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      } else {
-        this._saverMoon(ctx, bx, by, br, S, 1.3);
-      }
-      // clouds, lit from the sun's side
-      const nC = Math.round(B.clouds.length * pal.cloud);
-      for (let i = 0; i < nC; i++) {
-        const c = B.clouds[i];
-        c.x += c.sp * dt * (0.6 + c.rank);
-        if (c.x - c.w > W) c.x = -c.w;
-        const persp = 0.35 + 0.65 * (1 - c.y / hy);
-        for (const p of c.puffs) {
-          const x = c.x + p.dx * c.w, y = c.y + p.dy * c.w * 0.3 * persp, r = p.r * c.w * persp;
-          const lx = (bx - x) / W * r * 0.5;
-          const g = ctx.createRadialGradient(x + lx, y - r * 0.25, 0, x, y, r);
-          g.addColorStop(0, rgb(cLit, 0.3 * (0.5 + pal.cloud * 0.5)));
-          g.addColorStop(0.5, rgb(cShd, 0.2 * (0.5 + pal.cloud * 0.5))); g.addColorStop(1, rgb(cShd, 0));
-          ctx.save(); ctx.translate(x, y); ctx.scale(1, 0.38); ctx.translate(-x, -y);
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-          ctx.restore();
-        }
-      }
-      // the sun shining through: a bright glare over any cloud in front of it
-      if (day) {
-        ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, hy); ctx.clip();
-        ctx.globalCompositeOperation = 'lighter';
-        const gc = sunC.map((c, i) => Math.round(c * [1, 0.8, 0.5][i]));
-        const gl = ctx.createRadialGradient(bx, by, br * 0.6, bx, by, br * 2);
-        gl.addColorStop(0, rgb(gc, 0.3)); gl.addColorStop(1, rgb(gc, 0));
-        ctx.fillStyle = gl; ctx.beginPath(); ctx.arc(bx, by, br * 2, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-      }
-      weatherDraw(ctx, t, dt, W, H, hy, day);
-      // the sea: the sky's colour reflected near the horizon, deepening toward you
-      const sg = ctx.createLinearGradient(0, hy, 0, H);
-      sg.addColorStop(0, rgb(hor)); sg.addColorStop(0.06, rgb(seaFar)); sg.addColorStop(0.45, rgb(seaFar.map((c, i) => Math.round(c * 0.6 + seaNear[i] * 0.4)))); sg.addColorStop(1, rgb(seaNear));
-      ctx.fillStyle = sg; ctx.fillRect(0, hy, W, H - hy);
-      // the ripples: two layers of the same water, at different sizes and speeds, so it never looks repeated
-      // calmer and glassier on a still day, choppier and quicker in the wind
-      const chopA = 0.55 + 0.9 * sea.chop, spA = 9 * (0.6 + sea.chop * 1.2), spB = 13 * (0.6 + sea.chop * 1.2);
-      const shadeA = d => Math.min(1, d * 6) * (0.35 + 0.35 * d) * chopA;
-      const lightA = d => Math.min(1, d * 5) * (0.08 + 0.22 * d) * (day ? 1 : 0.55) * chopA;
-      ctx.fillStyle = B.loP; water(ctx, t, W, H, S, hy, B.loP, shadeA, spA, 1, 2.2);
-      ctx.fillStyle = B.hiP; water(ctx, t, W, H, S, hy, B.hiP, lightA, spA, 1, 2.2);
-      ctx.fillStyle = B.loP; water(ctx, t * 0.7 + 40, W, H, S, hy, B.loP, d => shadeA(d) * 0.5, spB, 0.55, -1.4);
-      ctx.fillStyle = B.hiP; water(ctx, t * 0.7 + 40, W, H, S, hy, B.hiP, d => lightA(d) * 0.6, spB, 0.55, -1.4);
-      capsDraw(ctx, dt, W, H, hy, day ? [255, 255, 255] : [190, 200, 225]);
-      // the path of light: crests sparkling under the sun or moon, strongest in the middle and fading out softly to the sides
-      const strength = day ? Math.max(0.3, 1 - Math.max(0, pal.el) / 50) : 0.75;
-      const spread = W * (day ? 0.3 : 0.18);
-      const mkey = [Math.round(bx), Math.round(br), Math.round(spread), W, H].join('|');
-      if (!B.glit || B.glit.key !== mkey) {
-        const [gc, gg] = this._saverOff(W, H, S), [mc, mg] = this._saverOff(W, H, S);
-        for (const [y, st] of B.rows) {
-          const d = (y + st / 2 - hy) / (H - hy), half = br * 0.7 + spread * d;
-          const lg = mg.createLinearGradient(bx - half, 0, bx + half, 0);
-          lg.addColorStop(0, 'rgba(0,0,0,0)'); lg.addColorStop(0.3, 'rgba(0,0,0,0.35)'); lg.addColorStop(0.5, 'rgba(0,0,0,1)'); lg.addColorStop(0.7, 'rgba(0,0,0,0.35)'); lg.addColorStop(1, 'rgba(0,0,0,0)');
-          mg.fillStyle = lg; mg.fillRect(bx - half, y, half * 2, st);
-        }
-        B.glit = { key: mkey, gc, gg, mc };
-      }
-      {
-        const { gc, gg, mc } = B.glit;
-        gg.setTransform(1, 0, 0, 1, 0, 0); gg.globalCompositeOperation = 'source-over'; gg.clearRect(0, 0, gc.width, gc.height);
-        gg.setTransform(S, 0, 0, S, 0, 0);
-        const pc = day ? sunC : [215, 225, 255];
-        gg.fillStyle = rgb(pc, 0.22 * strength); gg.fillRect(0, hy, W, H - hy);
-        gg.fillStyle = B.hiP; water(gg, t, W, H, S, hy, B.hiP, d => Math.min(1, d * 14) * strength, spA, 1, 2.2);
-        gg.fillStyle = B.hiP; water(gg, t * 0.7 + 40, W, H, S, hy, B.hiP, d => Math.min(1, d * 14) * strength * 0.7, spB, 0.55, -1.4);
-        gg.globalCompositeOperation = 'source-in';
-        gg.fillStyle = rgb(day ? pc : pc.map(c => Math.min(255, c + 30))); gg.fillRect(0, hy, W, H - hy);
-        gg.globalCompositeOperation = 'destination-in';
-        gg.setTransform(1, 0, 0, 1, 0, 0); gg.drawImage(mc, 0, 0);
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.drawImage(gc, 0, 0, W, H);
-        ctx.globalCompositeOperation = 'source-over';
-      }
-      // haze along the horizon, so the far water melts into the sky
-      const hz = ctx.createLinearGradient(0, hy - H * 0.04, 0, hy + H * 0.07);
-      hz.addColorStop(0, rgb(hor, 0)); hz.addColorStop(0.4, rgb(hor, 0.55)); hz.addColorStop(1, rgb(hor, 0));
-      ctx.fillStyle = hz; ctx.fillRect(0, hy - H * 0.04, W, H * 0.11);
-      // dolphins, seabirds or a whale, now and then
-      lifeDraw(ctx, t, dt, W, H, S, hy, day, sunC, hor, bx);
-      // a little darker at the bottom corners
-      const vg = ctx.createRadialGradient(W / 2, H * 0.45, Math.min(W, H) * 0.4, W / 2, H * 0.45, Math.max(W, H) * 0.85);
-      vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,0.35)');
-      ctx.fillStyle = vg; ctx.fillRect(0, 0, W, H);
-      this._saverGrain(ctx, W, H, 0.03);
-    });
-  }
-}
 
 // ── Live Wallpaper & Theme pickers (conversation details) ────────────────────
 // Each person picks their own, for one chat or for all their chats. Nobody
@@ -13896,7 +11857,7 @@ Object.assign(CrowMessengerCard.prototype, {
       onShow: (el) => {
         el.querySelectorAll('[data-live]').forEach(box => {
           if (previews.has(box)) return;
-          const w = new CrowLiveWallpaper(box, box.dataset.live, this._hass);
+          const w = this._liveWallpaper(box, box.dataset.live);
           previews.set(box, w); this._lives.add(w);
         });
       },
@@ -13964,7 +11925,7 @@ Object.assign(CrowMessengerCard.prototype, {
     this._set(box, `<div class="cu-card g"><div class="cu-text cu-wait">Reading ${count} messages…</div></div>`);
     try {
       const r = await this._ws('ai', { action: 'summarise', thread_id: tid, count });
-      this._set(box, `<div class="cu-card g"><div class="cu-h">${ICON.bubble}<b>Catch Up</b><button class="cu-x" data-a="catchup-x" aria-label="Close">${ICON.x}</button></div><div class="cu-text sel">${esc(r.result || 'Nothing to summarise.')}</div></div>`);
+      this._set(box, `<div class="cu-card g"><div class="cu-h">${ICON.ai}<b>Catch Up</b><button class="cu-x" data-a="catchup-x" aria-label="Close">${ICON.x}</button></div><div class="cu-text sel">${esc(r.result || 'Nothing to summarise.')}</div></div>`);
     } catch (err) {
       this._toast(this._aiError(err, 'Catch Up isn’t available right now. Try again in a moment.'));
       box.hidden = true;
@@ -14108,39 +12069,7 @@ const PDF_IMG_RUN = /(\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier}|‍\p{E
 Object.assign(CrowMessengerCard.prototype, {
 
   // Polls, Check Ins, stickers, shared devices, replies and tapbacks, written out as text for the PDF
-  _pdfFlat(m) {
-    if (m.type === 'system') return m;
-    let text = m.text || '';
-    if (m.type === 'poll') {
-      const votes = m.poll?.votes || {};
-      text = `Poll: ${m.text}\n` + (m.poll?.options || []).map(o => {
-        const n = Object.values(votes).filter(v => v.includes(o.id)).length;
-        return `• ${o.text} — ${n} vote${n === 1 ? '' : 's'}`;
-      }).join('\n');
-    } else if (m.type === 'checkin') {
-      const ci = m.checkin || {};
-      text = `Check In · ${ci.zone_name || 'Home'} · ${{ active: 'expected by ' + fmtTime(ci.due_ts, this._hass), late: 'not arrived as expected', arrived: 'arrived', ended: 'ended' }[ci.status] || ''}`;
-    } else if (m.type === 'sticker') text = m.sticker?.emoji || 'Sticker';
-    else if (m.type === 'entity') {
-      const st = this._hass?.states?.[m.entity?.entity_id];
-      text = `Shared ${st?.attributes?.friendly_name || m.entity?.entity_id}${m.text ? ' — ' + m.text : ''}`;
-    }
-    else if (m.type === 'call') text = `${{ facetime: 'FaceTime', facetime_audio: 'FaceTime Audio' }[m.call?.kind] || 'Phone call'} · ${m.sender === this._s.me ? 'You called' : this._userName(m.sender, true) + ' called'}`;
-    else if (m.type === 'location') text = `Location: ${m.location?.label ? m.location.label + ' · ' : ''}${(+m.location?.lat).toFixed(5)}, ${(+m.location?.lon).toFixed(5)}`;
-    else if (m.type === 'checklist') text = `Checklist: ${m.text}\n` + (m.checklist?.items || []).map(i => `${i.done ? '☑' : '☐'} ${i.text}`).join('\n');
-    else if (m.type === 'event') text = `Event: ${m.text} · ${new Date(m.event?.start).toLocaleString(locale(this._hass), { dateStyle: 'medium', timeStyle: m.event?.all_day ? undefined : 'short' })}${m.event?.location ? ' · ' + m.event.location : ''}`;
-    else if (m.type === 'contact') text = `Contact: ${[m.contact?.first, m.contact?.last].filter(Boolean).join(' ') || m.contact?.company}${m.contact?.phones?.[0] ? ' · ' + m.contact.phones[0].value : ''}`;
-    if (m.forwarded) text = `(Forwarded) ${text}`;
-    if (m.view_once) text = '(View Once photo)';
-    if (m.effect === 'invisible') text = `(Invisible Ink) ${text}`;
-    if (m.reply_to && m.reply_preview && !m.reply_preview.gone) text = `↩ ${m.reply_preview.text}\n${text}`;
-    if (m.edits?.length) text += ' (edited)';
-    if (m.action_taken) text += `\n✓ ${m.action_taken.title} · ${m.action_taken.user === this._s.me ? 'You' : this._userName(m.action_taken.user, true)}`;
-    const r = Object.entries(m.reactions || {});
-    if (r.length) text += `\n${r.map(([u, e]) => `${e} ${this._userName(u, true)}`).join('  ')}`;
-    if (m.view_once) return { ...m, text, attachments: [] };
-    return text === m.text ? m : { ...m, text };
-  },
+  
 
   _pdfOn(type) {
     if (this._config.pdf_enabled === false) return false;
@@ -14150,741 +12079,47 @@ Object.assign(CrowMessengerCard.prototype, {
 // The PDF library loader, PDF.js loader and page viewer
   // Lazily loads jsPDF from a CDN the first time a PDF is exported. Cached as a promise;
   // a failed load can be retried.
-  _ensureJsPDF(preview = null) {
-    if (window.jspdf?.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
-    preview?.status?.('Loading the PDF tools\u2026');
-    if (this._jsPDFLoadPromise) return this._jsPDFLoadPromise;
-    this._jsPDFLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
-      script.onload = () => {
-        if (window.jspdf?.jsPDF) resolve(window.jspdf.jsPDF);
-        else { this._jsPDFLoadPromise = null; reject(new Error('jsPDF failed to initialise')); }
-      };
-      script.onerror = () => { this._jsPDFLoadPromise = null; reject(new Error('Could not load the PDF library \u2014 check your internet connection')); };
-      document.head.appendChild(script);
-    });
-    return this._jsPDFLoadPromise;
-  },
+  
 
   // PDF.js (Mozilla's PDF viewer), loaded the first time a preview opens.
-  _ensurePdfJs() {
-    if (window.pdfjsLib?.getDocument) return Promise.resolve(window.pdfjsLib);
-    if (this._pdfJsLoadPromise) return this._pdfJsLoadPromise;
-    const BASE = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/';
-    this._pdfJsLoadPromise = new Promise((resolve, reject) => {
-      const script = document.createElement('script');
-      script.src = BASE + 'pdf.min.js';
-      const fail = (msg) => { this._pdfJsLoadPromise = null; reject(new Error(msg)); };
-      const t = setTimeout(() => fail('PDF viewer took too long to load'), 15000);
-      script.onload = () => {
-        clearTimeout(t);
-        const lib = window.pdfjsLib;
-        if (!lib?.getDocument) { fail('PDF viewer failed to initialise'); return; }
-        lib.GlobalWorkerOptions.workerSrc = BASE + 'pdf.worker.min.js';
-        resolve(lib);
-      };
-      script.onerror = () => { clearTimeout(t); fail('Could not load the PDF viewer'); };
-      document.head.appendChild(script);
-    });
-    return this._pdfJsLoadPromise;
-  },
+  
 
   // Draws every page of the PDF into the preview as a scrolling stack, with
   // a "Page 2 of 5" counter. Pages are only drawn as they scroll near, and
   // each one is kept as an image (not a live canvas) so long PDFs don't run
   // the phone out of memory. Pinch to zoom (up to 4x) or double-tap to zoom
   // in and back out; pages are redrawn sharper once a zoom settles.
-  async _renderPDFPages(frameWrap, buf, { isClosed = () => false, onCleanup = () => {} } = {}) {
-    const lib = await this._ensurePdfJs();
-    if (isClosed()) return;
-    const pdf = await lib.getDocument({ data: new Uint8Array(buf) }).promise;
-    onCleanup(() => pdf.destroy());
-    if (isClosed()) return;
-    const total = pdf.numPages;
-    const first = await pdf.getPage(1);
-    const vp1 = first.getViewport({ scale: 1 });
-    if (isClosed()) return;
-
-    frameWrap.innerHTML = '';
-    frameWrap.style.display = 'block';
-    frameWrap.style.position = 'relative';
-    frameWrap.style.background = '#d1d1d6';
-    const scroller = document.createElement('div');
-    scroller.style.cssText = 'position:absolute;inset:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:10px;box-sizing:border-box;touch-action:pan-x pan-y;';
-    frameWrap.appendChild(scroller);
-    // The zoomable sheet holding the pages — zoom is its width
-    const sheet = document.createElement('div');
-    sheet.style.cssText = 'width:100%;transform-origin:0 0;';
-    scroller.appendChild(sheet);
-    const counter = document.createElement('div');
-    counter.style.cssText = 'position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.62);color:#fff;font-size:11px;font-weight:600;padding:4px 11px;border-radius:11px;pointer-events:none;white-space:nowrap;' + (total > 1 ? '' : 'display:none;');
-    frameWrap.appendChild(counter);
-    const GAP = 10;
-
-    const holders = [];
-    for (let i = 1; i <= total; i++) {
-      const h = document.createElement('div');
-      h.dataset.page = String(i);
-      h.style.cssText = 'position:relative;width:100%;aspect-ratio:' + vp1.width + ' / ' + vp1.height + ';background:#fff;border-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,0.18);overflow:hidden;' + (i < total ? 'margin-bottom:' + GAP + 'px;' : '');
-      sheet.appendChild(h);
-      holders.push(h);
-    }
-
-    const urls = new Set();
-    onCleanup(() => urls.forEach(u => URL.revokeObjectURL(u)));
-    const MAX_PX = 2600;            // widest a page is ever drawn (memory)
-    const drawnW = new Map();       // page -> pixel width it was drawn at
-    const busy = new Set();
-    let chain = Promise.resolve();
-    const wantPx = (holder) => {
-      const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
-      return Math.min(MAX_PX, Math.round((holder.clientWidth || scroller.clientWidth - 20 || 320) * dpr));
-    };
-    const renderPage = (n) => {
-      const holder = holders[n - 1];
-      if (!holder || busy.has(n)) return;
-      const target = wantPx(holder);
-      if ((drawnW.get(n) || 0) >= target * 0.9) return;   // already sharp enough
-      busy.add(n);
-      chain = chain.then(async () => {
-        if (isClosed()) return;
-        const page = n === 1 ? first : await pdf.getPage(n);
-        const base = page.getViewport({ scale: 1 });
-        const px = wantPx(holder);
-        const viewport = page.getViewport({ scale: px / base.width });
-        const canvas = document.createElement('canvas');
-        canvas.width = Math.floor(viewport.width);
-        canvas.height = Math.floor(viewport.height);
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-        if (n !== 1) page.cleanup();
-        if (isClosed()) return;
-        const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
-        canvas.width = 0; canvas.height = 0;   // free the canvas memory
-        if (!blob || isClosed()) return;
-        const url = URL.createObjectURL(blob);
-        urls.add(url);
-        const old = holder.querySelector('img');
-        const img = document.createElement('img');
-        img.alt = 'Page ' + n;
-        img.draggable = false;
-        img.style.cssText = 'display:block;width:100%;height:100%;position:absolute;inset:0;';
-        img.onload = () => {
-          if (old) { const ou = old.src; old.remove(); if (urls.has(ou)) { URL.revokeObjectURL(ou); urls.delete(ou); } }
-        };
-        img.src = url;
-        holder.appendChild(img);
-        drawnW.set(n, canvas.width || px);
-      }).catch(() => {}).finally(() => { busy.delete(n); });
-    };
-    const visiblePages = (margin = 0) => {
-      const top = scroller.scrollTop - margin, bottom = scroller.scrollTop + scroller.clientHeight + margin;
-      return holders.filter(h => h.offsetTop + h.offsetHeight >= top && h.offsetTop <= bottom).map(h => Number(h.dataset.page));
-    };
-
-    // Draw pages as they come near the visible area
-    if ('IntersectionObserver' in window) {
-      const io = new IntersectionObserver(entries => {
-        entries.forEach(en => { if (en.isIntersecting) renderPage(Number(en.target.dataset.page)); });
-      }, { root: scroller, rootMargin: '900px 300px' });
-      holders.forEach(h => io.observe(h));
-      onCleanup(() => io.disconnect());
-    } else {
-      for (let i = 1; i <= total; i++) renderPage(i);
-    }
-    renderPage(1);
-
-    const updateCounter = () => {
-      const mid = scroller.scrollTop + scroller.clientHeight / 2;
-      let cur = 1;
-      for (const h of holders) { if (h.offsetTop <= mid) cur = Number(h.dataset.page); else break; }
-      counter.textContent = 'Page ' + cur + ' of ' + total;
-    };
-    scroller.addEventListener('scroll', updateCounter, { passive: true });
-    updateCounter();
-
-    // ── Zoom ──
-    const MIN_Z = 1, MAX_Z = 4;
-    let zoom = 1;
-    let sharpenTimer = null;
-    const sharpen = () => {
-      clearTimeout(sharpenTimer);
-      sharpenTimer = setTimeout(() => { if (!isClosed()) visiblePages(200).forEach(renderPage); }, 250);
-    };
-    // Set the zoom, keeping the content point under (cx, cy) — coordinates
-    // relative to the scroller's visible box — where it is.
-    const setZoom = (z, cx, cy) => {
-      z = Math.max(MIN_Z, Math.min(MAX_Z, z));
-      const pad = 10;
-      const ratio = z / zoom;
-      const contentX = scroller.scrollLeft + cx - pad;
-      const contentY = scroller.scrollTop + cy - pad;
-      // Page gaps don't scale, so vertical position is mapped page by page
-      const pageIdx = Math.max(0, Math.min(total - 1, Math.floor(contentY / (holders[0].offsetHeight + GAP))));
-      const gapsAbove = pageIdx * GAP;
-      zoom = z;
-      sheet.style.width = (z * 100) + '%';
-      scroller.scrollLeft = contentX * ratio - cx + pad;
-      scroller.scrollTop = (contentY - gapsAbove) * ratio + gapsAbove - cy + pad;
-      updateCounter();
-      sharpen();
-    };
-
-    const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
-    const rel = (x, y) => { const r = scroller.getBoundingClientRect(); return [x - r.left, y - r.top]; };
-    let pinch = null;          // { d0, z0, cx, cy, scale }
-    let lastTap = 0;
-    const onStart = (e) => {
-      if (e.touches.length === 2) {
-        const [cx, cy] = rel((e.touches[0].clientX + e.touches[1].clientX) / 2, (e.touches[0].clientY + e.touches[1].clientY) / 2);
-        // Live preview with a transform (smooth), committed on release
-        const ox = scroller.scrollLeft + cx - 10, oy = scroller.scrollTop + cy - 10;
-        sheet.style.transformOrigin = ox + 'px ' + oy + 'px';
-        pinch = { d0: dist(e.touches), z0: zoom, cx, cy, scale: 1 };
-        e.preventDefault();
-      } else if (e.touches.length === 1) {
-        const now = Date.now();
-        if (now - lastTap < 300) {
-          const [cx, cy] = rel(e.touches[0].clientX, e.touches[0].clientY);
-          setZoom(zoom > 1.05 ? 1 : 2.5, cx, cy);
-          lastTap = 0;
-          e.preventDefault();
-        } else lastTap = now;
-      }
-    };
-    const onMove = (e) => {
-      if (!pinch || e.touches.length < 2) return;
-      e.preventDefault();
-      const z = Math.max(MIN_Z, Math.min(MAX_Z, pinch.z0 * dist(e.touches) / pinch.d0));
-      pinch.scale = z / pinch.z0;
-      sheet.style.transform = 'scale(' + pinch.scale + ')';
-    };
-    const onEnd = (e) => {
-      if (!pinch || e.touches.length >= 2) return;
-      const { z0, scale, cx, cy } = pinch;
-      pinch = null;
-      sheet.style.transform = '';
-      sheet.style.transformOrigin = '0 0';
-      if (Math.abs(scale - 1) > 0.01) setZoom(z0 * scale, cx, cy);
-    };
-    scroller.addEventListener('touchstart', onStart, { passive: false });
-    scroller.addEventListener('touchmove', e => { onMove(e); e.stopPropagation(); }, { passive: false });
-    scroller.addEventListener('touchend', onEnd);
-    scroller.addEventListener('touchcancel', onEnd);
-    // Safari's own page-zoom gesture would zoom the whole dashboard instead
-    ['gesturestart', 'gesturechange'].forEach(ev => scroller.addEventListener(ev, e => e.preventDefault(), { passive: false }));
-    // Ctrl/trackpad pinch on a computer
-    scroller.addEventListener('wheel', (e) => {
-      if (!e.ctrlKey) return;
-      e.preventDefault();
-      const [cx, cy] = rel(e.clientX, e.clientY);
-      setZoom(zoom * Math.exp(-e.deltaY / 200), cx, cy);
-    }, { passive: false });
-    scroller.addEventListener('dblclick', (e) => {
-      const [cx, cy] = rel(e.clientX, e.clientY);
-      setZoom(zoom > 1.05 ? 1 : 2.5, cx, cy);
-    });
-  },
+  
 
   // Noto Sans (regular and bold), fetched once and kept for the session
-  async _pdfFonts() {
-    if (this._pdfFontData) return this._pdfFontData;
-    const get = async (path) => {
-      const r = await fetch(PDF_FONT_BASE + path);
-      if (!r.ok) throw new Error(r.status);
-      const bytes = new Uint8Array(await r.arrayBuffer());
-      let bin = '';
-      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-      return btoa(bin);
-    };
-    try {
-      const [reg, bold] = await Promise.all([get('400Regular/NotoSans_400Regular.ttf'), get('700Bold/NotoSans_700Bold.ttf')]);
-      this._pdfFontData = { reg, bold };
-    } catch (e) { this._pdfFontData = null; }
-    return this._pdfFontData;
-  },
+  
 
   // A new A4 document with the drawing helpers every export uses
-  async _pdfDoc(status) {
-    status('Loading the PDF tools…');
-    const JsPDF = await this._ensureJsPDF();
-    const fonts = await this._pdfFonts();
-    const doc = new JsPDF({ unit: 'pt', format: 'a4', compress: true });
-    let face = 'helvetica';
-    if (fonts) {
-      doc.addFileToVFS('NotoSans-Regular.ttf', fonts.reg); doc.addFont('NotoSans-Regular.ttf', 'Noto', 'normal');
-      doc.addFileToVFS('NotoSans-Bold.ttf', fonts.bold); doc.addFont('NotoSans-Bold.ttf', 'Noto', 'bold');
-      face = 'Noto';
-    }
-    const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
-    const M = 42;                      // page margin
-    const k = {
-      doc, W, H, M, y: M, face,
-      // without Noto, keep to what the built-in font can draw
-      clean: (s) => face === 'Noto' ? String(s ?? '') : String(s ?? '')
-        .replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, '-').replace(/…/g, '...').replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g, ''),
-      font(size, bold = false) { doc.setFont(face, bold ? 'bold' : 'normal'); doc.setFontSize(size); },
-      color(c) { doc.setTextColor(c[0], c[1], c[2]); },
-      fill(c) { doc.setFillColor(c[0], c[1], c[2]); },
-      ensure(h) { if (k.y + h > H - M - 18) { doc.addPage(); k.y = M; return true; } return false; },
-    };
-    const emojiCache = new Map();
-    // a run of emoji (or script the font can't draw), drawn by the phone
-    const runImage = (s, size, col) => {
-      const key = `${s}|${size}|${col}`;
-      if (emojiCache.has(key)) return emojiCache.get(key);
-      const scale = 4, px = size * scale;
-      const cv = document.createElement('canvas'), g = cv.getContext('2d');
-      const font = `${px}px -apple-system, "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Segoe UI", Roboto, "Noto Sans", sans-serif`;
-      g.font = font;
-      const w = Math.max(1, Math.ceil(g.measureText(s).width));
-      cv.width = w + 4; cv.height = Math.ceil(px * 1.35);
-      g.font = font; g.textBaseline = 'middle'; g.fillStyle = `rgb(${col.join(',')})`;
-      g.fillText(s, 2, cv.height / 2);
-      const out = { url: cv.toDataURL('image/png'), w: cv.width / scale, h: cv.height / scale };
-      emojiCache.set(key, out);
-      return out;
-    };
-    // split text into lines that fit maxW, as pieces of words and image runs
-    k.wrap = (text, maxW, size, bold = false) => {
-      k.font(size, bold);
-      const lines = [];
-      for (const para of k.clean(text).split('\n')) {
-        const pieces = [];
-        para.split(PDF_IMG_RUN).forEach((part, i) => {
-          if (!part) return;
-          if (i % 2 === 1) { const im = runImage(part, size, [0, 0, 0]); pieces.push({ img: part, w: im.w, word: true }); return; }
-          part.split(/(\s+)/).forEach(w => { if (w) pieces.push({ t: w, w: doc.getTextWidth(w), space: /^\s+$/.test(w) }); });
-        });
-        let line = [], lw = 0;
-        const push = () => { while (line.length && line[line.length - 1].space) { lw -= line.pop().w; } lines.push({ pieces: line, w: lw }); line = []; lw = 0; };
-        for (let p of pieces) {
-          if (p.space && !line.length) continue;
-          if (lw + p.w > maxW && line.length) push();
-          if (p.space && !line.length) continue;
-          // a word longer than the line is broken up
-          while (!p.img && p.w > maxW) {
-            let n = p.t.length;
-            while (n > 1 && doc.getTextWidth(p.t.slice(0, n)) > maxW - lw) n--;
-            line.push({ t: p.t.slice(0, n), w: doc.getTextWidth(p.t.slice(0, n)) }); lw += line[line.length - 1].w; push();
-            p = { t: p.t.slice(n), w: doc.getTextWidth(p.t.slice(n)) };
-          }
-          line.push(p); lw += p.w;
-        }
-        push();
-      }
-      return lines;
-    };
-    // draw wrapped lines; y is the top of the first line
-    k.draw = (lines, x, y, size, col, bold = false, align = 'left', boxW = 0) => {
-      k.font(size, bold); k.color(col);
-      const lh = size * 1.32;
-      lines.forEach((ln, i) => {
-        let cx = align === 'right' ? x + boxW - ln.w : align === 'center' ? x + (boxW - ln.w) / 2 : x;
-        const ty = y + i * lh;
-        for (const p of ln.pieces) {
-          if (p.img) { const im = runImage(p.img, size, col); doc.addImage(im.url, 'PNG', cx, ty + (lh - im.h) / 2 - size * 0.04, im.w, im.h); }
-          else if (!p.space) doc.text(p.t, cx, ty + size * 0.95);
-          cx += p.w;
-        }
-      });
-      return lines.length * lh;
-    };
-    k.text = (text, x, size, col, { bold = false, maxW = W - 2 * M, align = 'left', boxW = maxW } = {}) => {
-      const lines = k.wrap(text, maxW, size, bold);
-      const h = lines.length * size * 1.32;
-      k.ensure(Math.min(h, size * 1.32 * 2));
-      k.draw(lines, x, k.y, size, col, bold, align, boxW);
-      k.y += h;
-      return h;
-    };
-    // a round photo, or initials on grey
-    k.avatar = async (pic, name, cx, cy, r) => {
-      const url = pic ? await this._pdfImage(pic, r * 4, true) : null;
-      if (url) {
-        doc.saveGraphicsState();
-        doc.circle(cx, cy, r, null); doc.clip(); doc.discardPath();
-        doc.addImage(url.data, 'JPEG', cx - r, cy - r, r * 2, r * 2);
-        doc.restoreGraphicsState();
-      } else {
-        k.fill([160, 164, 172]); doc.circle(cx, cy, r, 'F');
-        const ini = initials(name || '') || '?';
-        k.font(r * 0.8, true); k.color([255, 255, 255]);
-        doc.text(k.clean(ini), cx, cy + r * 0.28, { align: 'center' });
-      }
-    };
-    return k;
-  },
+  
 
   // Footer on every page: what it is, and Page n of N
-  _pdfFooter(k, label) {
-    const { doc, W, H, M } = k;
-    const n = doc.getNumberOfPages();
-    for (let i = 1; i <= n; i++) {
-      doc.setPage(i);
-      k.font(8); k.color([142, 142, 147]);
-      doc.text(k.clean(`Crow Messenger · ${label}`), M, H - 22);
-      doc.text(`Page ${i} of ${n}`, W - M, H - 22, { align: 'right' });
-    }
-  },
+  
 
   // A picture as a JPEG data URL (with its size), scaled down to maxPx. Square crops for avatars.
-  async _pdfImage(src, maxPx, square = false) {
-    try {
-      let url = src;
-      if (!/^(data:|blob:)/.test(src)) {
-        const res = /^https?:/.test(src) ? await fetch(src) : await this._hass.fetchWithAuth(src);
-        if (!res.ok) return null;
-        url = URL.createObjectURL(await res.blob());
-      }
-      const img = await new Promise((resolve, reject) => { const i = new Image(); i.onload = () => resolve(i); i.onerror = reject; i.src = url; });
-      let w = img.naturalWidth, h = img.naturalHeight, sx = 0, sy = 0, sw = w, sh = h;
-      if (square) { const s = Math.min(w, h); sx = (w - s) / 2; sy = (h - s) / 2; sw = sh = s; w = h = s; }
-      const sc = Math.min(1, maxPx / Math.max(w, h));
-      const cv = document.createElement('canvas');
-      cv.width = Math.max(1, Math.round(w * sc)); cv.height = Math.max(1, Math.round(h * sc));
-      const g = cv.getContext('2d');
-      g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
-      g.drawImage(img, sx, sy, sw, sh, 0, 0, cv.width, cv.height);
-      if (url !== src) URL.revokeObjectURL(url);
-      return { data: cv.toDataURL('image/jpeg', 0.82), w: cv.width, h: cv.height };
-    } catch (e) { return null; }
-  },
+  
 
   // A colour from the card's theme (custom properties can be anything CSS understands)
-  _pdfColour(cssVar, el, fallback) {
-    try {
-      const probe = document.createElement('span');
-      probe.style.color = `var(${cssVar})`;
-      (el || this._root).appendChild(probe);
-      const m = getComputedStyle(probe).color.match(/\d+(\.\d+)?/g);
-      probe.remove();
-      if (m && m.length >= 3) return m.slice(0, 3).map(Number);
-    } catch (e) { /* not on screen */ }
-    return fallback;
-  },
+  
 
   // ── The preview page: every page drawn, with Share and Download ───────────
-  _pg_pdf({ title, filename, build }) {
-    const el = this._el(`<div class="pdfpage">
-      <div class="pdf-frame"><div class="pdf-inner"><div class="pdf-status"><div class="spin"></div><span>Getting ready…</span><div class="pdf-bar"><i></i></div></div></div></div>
-      <div class="top"><button class="pill g" data-a="close">Done</button><div class="title">${esc(title)}</div><div style="width:64px"></div></div>
-      <div class="pdf-actions"><button class="pill g" data-a="download" disabled>${ICON.download}<span>Download</span></button><button class="pill g accent" data-a="chat" disabled>${ICON.bubble}<span>Send in a Chat</span></button></div>
-    </div>`);
-    const page = { el };
-    // the page viewer makes this its own (position: relative), so it sits inside a fixed frame
-    const frame = el.querySelector('.pdf-inner');
-    const statusText = el.querySelector('.pdf-status span'), bar = el.querySelector('.pdf-bar i');
-    let closed = false, blob = null;
-    const cleanups = [];
-    const status = (msg, frac) => {
-      if (closed || !statusText.isConnected) return;
-      statusText.textContent = msg;
-      bar.parentElement.style.visibility = frac == null ? 'hidden' : 'visible';
-      if (frac != null) bar.style.width = `${Math.round(Math.max(0, Math.min(1, frac)) * 100)}%`;
-    };
-    (async () => {
-      try {
-        const doc = await build(status, () => closed);
-        if (closed) return;
-        status('Making the pages…');
-        const buf = doc.output('arraybuffer');
-        blob = new Blob([buf], { type: 'application/pdf' });
-        el.querySelectorAll('.pdf-actions button').forEach(b => { b.disabled = false; });
-        await this._renderPDFPages(frame, buf.slice(0), { isClosed: () => closed, onCleanup: fn => cleanups.push(fn) });
-      } catch (err) {
-        if (closed) return;
-        console.warn('Crow Messenger: PDF', err);
-        frame.innerHTML = `<div class="pdf-status"><b>Couldn’t make the PDF</b><span>${esc(err?.message || 'Something went wrong.')}</span></div>`;
-      }
-    })();
-    el.addEventListener('click', async (e) => {
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a === 'close') { this._back(); return; }
-      if (!blob) return;
-      if (a === 'download') { downloadBlob(blob, filename); return; }
-      if (a === 'chat') this._sendFileToChats(new File([blob], filename, { type: 'application/pdf' }));
-    });
-    page.pdfBlob = () => blob;
-    page.destroy = () => { closed = true; cleanups.forEach(fn => { try { fn(); } catch (e) { /* gone */ } }); };
-    return page;
-  },
+  
 
   // ── Conversation: choose what to include, then export ─────────────────────
-  _pg_pdfOptions({ tid }) {
-    const t = this._s.threads.get(tid);
-    const today = new Date().toISOString().slice(0, 10);
-    const monthAgo = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
-    const el = this._el(`<div>
-      <div class="scroll"><div class="ce ai-add">
-        <div class="ai-add-h">${ICON.doc}<span>A PDF of this conversation, laid out like the chat. It’s made on this device from your copy of the messages.</span></div>
-        <div class="group-h">Messages</div>
-        <div class="group pdf-range">
-          <label class="fi tgl"><span class="lab2">All Messages</span><input type="radio" name="range" value="all" checked><span class="ck">${ICON.check}</span></label>
-          <label class="fi tgl"><span class="lab2">Last 30 Days</span><input type="radio" name="range" value="30"><span class="ck">${ICON.check}</span></label>
-          <label class="fi tgl"><span class="lab2">Choose Dates</span><input type="radio" name="range" value="dates"><span class="ck">${ICON.check}</span></label>
-          <div class="fi dates"><span class="lab2">From</span><input type="date" data-k="from" value="${monthAgo}" max="${today}"></div>
-          <div class="fi dates"><span class="lab2">To</span><input type="date" data-k="to" value="${today}" max="${today}"></div>
-        </div>
-        <div class="group">
-          <label class="fi tgl"><span class="lab2">Include Photos</span><span class="tsw"><input type="checkbox" data-k="photos" checked><span></span></span></label>
-        </div>
-        <div class="pick-note" style="margin-top:-6px">Videos appear as a still from the video. Audio and files are listed by name.</div>
-      </div></div>
-      <div class="edge top"></div>
-      <div class="top"><button class="pill g" data-a="cancel">Cancel</button><div class="title">Export as PDF</div><button class="pill g accent" data-a="go">Export</button></div>
-    </div>`);
-    const page = { el };
-    const sync = () => {
-      const v = el.querySelector('input[name="range"]:checked').value;
-      el.querySelectorAll('.pdf-range .fi.tgl').forEach(l => l.classList.toggle('on', l.querySelector('input').checked));
-      el.querySelectorAll('.dates').forEach(d => { d.hidden = v !== 'dates'; });
-    };
-    el.addEventListener('change', sync); sync();
-    el.addEventListener('click', (e) => {
-      const a = e.target.closest('[data-a]')?.dataset.a;
-      if (a === 'cancel') { this._back(); return; }
-      if (a !== 'go') return;
-      const v = el.querySelector('input[name="range"]:checked').value;
-      let from = 0, to = Infinity;
-      if (v === '30') from = Date.now() - 30 * 86400000;
-      if (v === 'dates') {
-        const f = el.querySelector('[data-k="from"]').value, tt = el.querySelector('[data-k="to"]').value;
-        if (f) from = new Date(`${f}T00:00:00`).getTime();
-        if (tt) to = new Date(`${tt}T23:59:59`).getTime();
-        if (from > to) { this._toast('The From date is after the To date'); return; }
-      }
-      const photos = el.querySelector('[data-k="photos"]').checked;
-      const name = this._threadTitle(t).replace(/[\\/:*?"<>|]/g, '').trim() || 'Conversation';
-      this._back(false);
-      this._nav('pdf', { title: 'Conversation', filename: `${name}.pdf`, build: (status, closed) => this._pdfConversation(tid, { from, to, photos }, status, closed) });
-    });
-    return page;
-  },
+  
 
-  async _pdfConversation(tid, { from, to, photos }, status, closed) {
-    const s = this._s, t = s.threads.get(tid);
-    if (!t) throw new Error('That conversation isn’t available');
-    // the whole history, page by page
-    status('Collecting messages…', 0);
-    let all = [], before = null, more = true;
-    while (more && all.length < 5000) {
-      const r = await this._ws('messages', { thread_id: tid, limit: 200, ...(before ? { before } : {}) });
-      if (closed()) return null;
-      all = [...r.messages, ...all];
-      more = r.more && r.messages.length > 0;
-      before = r.messages[0]?.ts;
-      if (before && before < from) break;
-      status(`Collecting messages… ${all.length}`, null);
-    }
-    const msgs = all.filter(m => m.ts >= from && m.ts <= to);
-    if (!msgs.filter(m => m.type !== 'system').length) throw new Error('There are no messages in that period.');
-
-    const k = await this._pdfDoc(status);
-    const { doc, W, M } = k;
-    const CW = W - 2 * M;
-    const pageEl = this._stack.find(p => p.type === 'thread' && p.data.tid === tid)?.el || this._root;
-    const sent = this._pdfColour('--cm-sent', pageEl, [0, 122, 255]);
-    const sentText = this._pdfColour('--cm-sent-text', pageEl, [255, 255, 255]);
-    const recv = [233, 233, 235], recvText = [0, 0, 0], grey = [142, 142, 147], ink = [0, 0, 0];
-    const others = t.participants.filter(p => p !== s.me);
-
-    // header
-    status('Laying out the conversation…', 0);
-    const hdrPic = t.photo || (t.is_group ? null : this._userPic(others[0] || s.me));
-    await k.avatar(hdrPic, this._threadTitle(t), M + 26, k.y + 26, 26);
-    const hx = M + 66;
-    k.y += 2;
-    k.text(this._threadTitle(t), hx, 20, ink, { bold: true, maxW: CW - 66 });
-    const people = [...t.participants].map(p => p === s.me ? `${this._userName(p)} (you)` : this._userName(p)).join(', ');
-    k.text(people, hx, 10, grey, { maxW: CW - 66 });
-    const df = (ts) => new Date(ts).toLocaleDateString(locale(this._hass), { day: 'numeric', month: 'long', year: 'numeric' });
-    const realCount = msgs.filter(m => m.type !== 'system').length;
-    k.text(`${df(msgs[0].ts)} – ${df(msgs[msgs.length - 1].ts)} · ${realCount} message${realCount === 1 ? '' : 's'} · Exported ${df(Date.now())}`, hx, 9, grey, { maxW: CW - 66 });
-    k.y = Math.max(k.y, M + 60) + 14;
-    doc.setDrawColor(220, 220, 224); doc.setLineWidth(0.6); doc.line(M, k.y, W - M, k.y); k.y += 16;
-
-    const PAD_X = 10, PAD_Y = 6, MAXW = CW * 0.7, SIZE = 10.5, LH = SIZE * 1.32;
-    let lastDay = '';
-    for (let i = 0; i < msgs.length; i++) {
-      if (closed()) return null;
-      if (i % 20 === 0) status('Laying out the conversation…', i / msgs.length);
-      const m = this._pdfFlat(msgs[i]), prev = msgs[i - 1], next = msgs[i + 1];
-      const day = new Date(m.ts).toLocaleDateString(locale(this._hass), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
-      if (day !== lastDay) {
-        lastDay = day;
-        k.ensure(40); k.y += 6;
-        k.text(day, M, 8.5, grey, { bold: true, align: 'center', maxW: CW, boxW: CW });
-        k.y += 6;
-      }
-      if (m.type === 'system') { k.text(m.text, M, 8.5, grey, { align: 'center', maxW: CW, boxW: CW }); k.y += 6; continue; }
-      const mine = m.sender === s.me;
-      const runStart = !prev || prev.type === 'system' || prev.sender !== m.sender || m.ts - prev.ts > 120000;
-      const runEnd = !next || next.type === 'system' || next.sender !== m.sender || next.ts - m.ts > 120000;
-      if (!mine && t.is_group && runStart) { k.ensure(30); k.text(this._userName(m.sender), M + 4, 8, grey); k.y += 1; }
-      const bx = (w) => mine ? W - M - w : M;
-      // attachments
-      for (const a of m.attachments || []) {
-        const mime = a.mime || '';
-        const gone = a.removed || this._missing.has(a.id);
-        const visual = mime.startsWith('image/') || mime.startsWith('video/');
-        if (visual && photos && !gone) {
-          let img = null;
-          try { img = await this._pdfImage(await this._media(a.id, !!a.has_thumb), 900); } catch (e) { img = null; }
-          if (img) {
-            const sc = Math.min(220 / img.w, 240 / img.h, 1.2);
-            const w = img.w * sc, h = img.h * sc;
-            k.ensure(h + 6);
-            doc.addImage(img.data, 'JPEG', bx(w), k.y, w, h);
-            if (mime.startsWith('video/')) {
-              k.fill([0, 0, 0]);
-              if (doc.GState) doc.setGState(new doc.GState({ opacity: 0.55 }));
-              doc.circle(bx(w) + w / 2, k.y + h / 2, 16, 'F');
-              if (doc.GState) doc.setGState(new doc.GState({ opacity: 1 }));
-              k.fill([255, 255, 255]); doc.triangle(bx(w) + w / 2 - 5, k.y + h / 2 - 8, bx(w) + w / 2 - 5, k.y + h / 2 + 8, bx(w) + w / 2 + 9, k.y + h / 2, 'F');
-            }
-            k.y += h + 4;
-            continue;
-          }
-        }
-        // anything else is a small labelled box
-        const label = gone ? `${mime.startsWith('image/') ? 'Photo' : mime.startsWith('video/') ? 'Video' : 'Attachment'} no longer available`
-          : mime.startsWith('audio/') ? `Audio${a.duration ? ` · ${fmtDur(a.duration)}` : ''}`
-            : visual ? `${mime.startsWith('video/') ? 'Video' : 'Photo'}${a.name ? ` · ${a.name}` : ''}`
-              : `${a.name || 'Attachment'}${a.size ? ` · ${fmtBytes(a.size)}` : ''}`;
-        const lines = k.wrap(label, MAXW - 2 * PAD_X - 18, 9.5);
-        const w = Math.max(...lines.map(l => l.w)) + 2 * PAD_X + 18, h = lines.length * 9.5 * 1.32 + 2 * PAD_Y;
-        k.ensure(h + 4);
-        k.fill([242, 242, 247]); doc.setDrawColor(209, 209, 214); doc.roundedRect(bx(w), k.y, w, h, 9, 9, 'FD');
-        k.font(11, true); k.color(grey); doc.text(gone ? '?' : mime.startsWith('audio/') ? '♪' : '▪', bx(w) + PAD_X + 2, k.y + PAD_Y + 10);
-        k.draw(lines, bx(w) + PAD_X + 16, k.y + PAD_Y, 9.5, gone ? grey : ink);
-        k.y += h + 4;
-      }
-      if (m.text) {
-        const lines = k.wrap(m.text, MAXW - 2 * PAD_X, SIZE);
-        const w = Math.max(28, ...lines.map(l => l.w)) + 2 * PAD_X;
-        // a very long message carries on over the page
-        let start = 0;
-        while (start < lines.length) {
-          const room = Math.max(1, Math.floor((k.H - M - 18 - k.y - 2 * PAD_Y) / LH));
-          if (room < 2 && start === 0 && lines.length > 1) { k.ensure(1e6); continue; }
-          const part = lines.slice(start, start + room);
-          const h = part.length * LH + 2 * PAD_Y;
-          k.ensure(h);
-          k.fill(mine ? sent : recv);
-          doc.roundedRect(bx(w), k.y, w, h, 12, 12, 'F');
-          k.draw(part, bx(w) + PAD_X, k.y + PAD_Y, SIZE, mine ? sentText : recvText);
-          k.y += h + 3;
-          start += part.length;
-          if (start < lines.length) { doc.addPage(); k.y = M; }
-        }
-      }
-      if (runEnd) {
-        k.font(7.5); k.color(grey);
-        const time = fmtTime(m.ts, this._hass);
-        doc.text(k.clean(time), mine ? W - M - 2 : M + 2, k.y + 7, { align: mine ? 'right' : 'left' });
-        k.y += 14;
-      }
-    }
-    this._pdfFooter(k, this._threadTitle(t));
-    return doc;
-  },
+  
 
   // ── Contacts ──────────────────────────────────────────────────────────────
-  _pdfFieldRows(c) {
-    const rows = [];
-    const add = (section, items) => { if (items.length) rows.push({ section, items }); };
-    add('Phone', (c.phones || []).map(p => [p.label || 'phone', p.value]));
-    add('Email', (c.emails || []).map(p => [p.label || 'email', p.value]));
-    add('Address', (c.addresses || []).map(p => [p.label || 'address', formatAddress(p)]));
-    const dates = [];
-    if (c.birthday) dates.push(['birthday', fmtLongDate(c.birthday, this._hass)]);
-    (c.dates || []).forEach(d => dates.push([d.label || 'date', fmtLongDate(d.value, this._hass)]));
-    add('Dates', dates);
-    add('Website', (c.urls || []).map(p => [p.label || 'homepage', p.value]));
-    add('Social', (c.social || []).map(p => [p.label || 'profile', p.value]));
-    add('Related', (c.related || []).map(p => [p.label || 'related', p.value]));
-    return rows;
-  },
+  
 
-  async _pdfContact(c, status) {
-    const k = await this._pdfDoc(status);
-    const { doc, W, M } = k;
-    const CW = W - 2 * M, grey = [142, 142, 147], ink = [0, 0, 0], accent = this._pdfColour('--cm-accent', null, [0, 122, 255]);
-    const name = contactName(c, this._config.contact_display);
-    status('Laying out the card…');
-    await k.avatar(this._contactPic(c), name, W / 2, k.y + 48, 48);
-    k.y += 110;
-    k.text(name, M, 24, ink, { bold: true, align: 'center', maxW: CW, boxW: CW });
-    const sub = [c.nickname && `“${c.nickname}”`, [c.job_title, c.department].filter(Boolean).join(', '), c.company].filter(Boolean).join(' · ');
-    if (sub) k.text(sub, M, 11, grey, { align: 'center', maxW: CW, boxW: CW });
-    if (c.pronouns) k.text(c.pronouns, M, 10, grey, { align: 'center', maxW: CW, boxW: CW });
-    k.y += 18;
-    for (const sec of this._pdfFieldRows(c)) {
-      k.ensure(40);
-      k.text(sec.section.toUpperCase(), M, 8.5, grey, { bold: true });
-      k.y += 4;
-      for (const [label, value] of sec.items) {
-        const lines = k.wrap(value, CW - 120, 11);
-        k.ensure(lines.length * 11 * 1.32 + 10);
-        k.draw(k.wrap(label, 110, 9.5), M, k.y + 1, 9.5, grey);
-        k.draw(lines, M + 120, k.y, 11, sec.section === 'Phone' || sec.section === 'Email' || sec.section === 'Website' ? accent : ink);
-        k.y += lines.length * 11 * 1.32 + 8;
-      }
-      doc.setDrawColor(229, 229, 234); doc.setLineWidth(0.5); doc.line(M, k.y, W - M, k.y); k.y += 12;
-    }
-    if (c.notes) {
-      k.ensure(40);
-      k.text('NOTES', M, 8.5, grey, { bold: true }); k.y += 4;
-      k.text(c.notes, M, 11, ink);
-    }
-    this._pdfFooter(k, name);
-    return doc;
-  },
+  
 
-  async _pdfAddressBook(status, closed) {
-    const { list, order } = this._sortedContacts();
-    if (!list.length) throw new Error('You don’t have any contacts yet.');
-    const k = await this._pdfDoc(status);
-    const { doc, W, M } = k;
-    const CW = W - 2 * M, grey = [142, 142, 147], ink = [0, 0, 0], accent = this._pdfColour('--cm-accent', null, [0, 122, 255]);
-    k.text('Contacts', M, 26, ink, { bold: true });
-    k.text(`${list.length} contact${list.length === 1 ? '' : 's'} · Exported ${new Date().toLocaleDateString(locale(this._hass), { day: 'numeric', month: 'long', year: 'numeric' })}`, M, 10, grey);
-    k.y += 10;
-    let letter = '';
-    for (let i = 0; i < list.length; i++) {
-      if (closed()) return null;
-      if (i % 10 === 0) status('Laying out your contacts…', i / list.length);
-      const c = list[i];
-      const L = contactLetter(c, order);
-      if (L !== letter) {
-        letter = L;
-        k.ensure(60); k.y += 8;
-        k.text(L, M, 14, accent, { bold: true });
-        doc.setDrawColor(229, 229, 234); doc.setLineWidth(0.5); doc.line(M, k.y + 2, W - M, k.y + 2); k.y += 8;
-      }
-      // name, company, then phones, emails and the first address
-      const details = [
-        ...(c.phones || []).map(p => `${p.label || 'phone'}  ${p.value}`),
-        ...(c.emails || []).map(p => `${p.label || 'email'}  ${p.value}`),
-        ...(c.addresses || []).slice(0, 1).map(p => `${p.label || 'address'}  ${formatAddress(p).replace(/\n/g, ', ')}`),
-      ];
-      const nameLines = k.wrap(contactName(c, this._config.contact_display), CW - 46, 11.5, true);
-      const sub = [c.job_title, c.company].filter(Boolean).join(' · ');
-      const subLines = sub ? k.wrap(sub, CW - 46, 9) : [];
-      const detLines = details.flatMap(d => k.wrap(d, CW - 46, 9));
-      const h = Math.max(34, nameLines.length * 11.5 * 1.32 + (subLines.length + detLines.length) * 9 * 1.32 + 6);
-      k.ensure(h + 8);
-      await k.avatar(this._contactPic(c), contactName(c), M + 15, k.y + 16, 15);
-      let y = k.y;
-      y += k.draw(nameLines, M + 42, y, 11.5, ink, true);
-      if (subLines.length) y += k.draw(subLines, M + 42, y, 9, grey);
-      if (detLines.length) y += k.draw(detLines, M + 42, y, 9, [60, 60, 67]);
-      k.y += h + 8;
-    }
-    this._pdfFooter(k, 'Contacts');
-    return doc;
-  },
+  
 });
 
 // ── Visual editor ─
@@ -14899,13 +12134,18 @@ const ED_ICONS = {
   layout: '<path d="M3,3H11V11H3V3M13,3H21V7H13V3M13,9H21V21H13V9M3,13H11V21H3V13Z"/>',
   reset: '<path d="M12 5V1L7 6l5 5V7c3.31 0 6 2.69 6 6s-2.69 6-6 6-6-2.69-6-6H4c0 4.42 3.58 8 8 8s8-3.58 8-8-3.58-8-8-8z"/>',
   pdf: '<path d="M14,2H6A2,2 0 0,0 4,4V20A2,2 0 0,0 6,22H18A2,2 0 0,0 20,20V8L14,2M18,20H6V4H13V9H18V20M12,19L8,15H10.5V12H13.5V15H16L12,19Z"/>',
-  ai: '<path d="M12,2A2,2 0 0,1 14,4C14,4.74 13.6,5.39 13,5.73V7H14A7,7 0 0,1 21,14H22A1,1 0 0,1 23,15V18A1,1 0 0,1 22,19H21V20A2,2 0 0,1 19,22H5A2,2 0 0,1 3,20V19H2A1,1 0 0,1 1,18V15A1,1 0 0,1 2,14H3A7,7 0 0,1 10,7H11V5.73C10.4,5.39 10,4.74 10,4A2,2 0 0,1 12,2M7.5,13A2.5,2.5 0 0,0 5,15.5A2.5,2.5 0 0,0 7.5,18A2.5,2.5 0 0,0 10,15.5A2.5,2.5 0 0,0 7.5,13M16.5,13A2.5,2.5 0 0,0 14,15.5A2.5,2.5 0 0,0 16.5,18A2.5,2.5 0 0,0 19,15.5A2.5,2.5 0 0,0 16.5,13Z"/>',
+  ai: '<path d="M12,11A1,1 0 0,1 13,12A1,1 0 0,1 12,13A1,1 0 0,1 11,12A1,1 0 0,1 12,11M4.22,4.22C5.65,2.79 8.75,3.43 12,5.56C15.25,3.43 18.35,2.79 19.78,4.22C21.21,5.65 20.57,8.75 18.44,12C20.57,15.25 21.21,18.35 19.78,19.78C18.35,21.21 15.25,20.57 12,18.44C8.75,20.57 5.65,21.21 4.22,19.78C2.79,18.35 3.43,15.25 5.56,12C3.43,8.75 2.79,5.65 4.22,4.22M15.54,8.46C16.15,9.08 16.71,9.71 17.23,10.34C18.61,8.21 19.11,6.38 18.36,5.64C17.62,4.89 15.79,5.39 13.66,6.77C14.29,7.29 14.92,7.85 15.54,8.46M8.46,15.54C7.85,14.92 7.29,14.29 6.77,13.66C5.39,15.79 4.89,17.62 5.64,18.36C6.38,19.11 8.21,18.61 10.34,17.23C9.71,16.71 9.08,16.15 8.46,15.54M5.64,5.64C4.89,6.38 5.39,8.21 6.77,10.34C7.29,9.71 7.85,9.08 8.46,8.46C9.08,7.85 9.71,7.29 10.34,6.77C8.21,5.39 6.38,4.89 5.64,5.64M9.88,14.12C10.58,14.82 11.3,15.46 12,16.03C12.7,15.46 13.42,14.82 14.12,14.12C14.82,13.42 15.46,12.7 16.03,12C15.46,11.3 14.82,10.58 14.12,9.88C13.42,9.18 12.7,8.54 12,7.97C11.3,8.54 10.58,9.18 9.88,9.88C9.18,10.58 8.54,11.3 7.97,12C8.54,12.7 9.18,13.42 9.88,14.12M18.36,18.36C19.11,17.62 18.61,15.79 17.23,13.66C16.71,14.29 16.15,14.92 15.54,15.54C14.92,16.15 14.29,16.71 13.66,17.23C15.79,18.61 17.62,19.11 18.36,18.36Z"/>',
   phone: '<path d="M17,19H7V5H17M17,1H7C5.89,1 5,1.89 5,3V21A2,2 0 0,0 7,23H17A2,2 0 0,0 19,21V3C19,1.89 18.1,1 17,1Z"/>',
 };
 
 const RETENTION = [[1, '1 Day'], [7, '1 Week'], [30, '30 Days'], [365, '1 Year'], [0, 'Forever']];
 const UPLOAD_SIZES = [[25, '25 MB'], [100, '100 MB'], [300, '300 MB'], [1000, '1 GB']];
-const AI_FEATURES = ['assistant', 'replies', 'writing', 'catchup', 'translate', 'actions', 'photos', 'ask'];
+const AI_FEATURES = ['assistant', 'replies', 'writing', 'catchup', 'translate', 'actions', 'photos', 'ask',
+  'feed_writing', 'feed_captions', 'feed_comments', 'feed_smart', 'feed_albums', 'feed_catchup', 'feed_threads',
+  'feed_translate', 'feed_photos', 'feed_search', 'feed_memories', 'feed_kindness', 'feed_ask'];
+const AI_OFF_UNTIL_ON = ['feed_search'];
+// Household → Feed: the Facebook extras (each on until switched off)
+const FEED_EXTRAS = ['intro', 'highlights', 'badges', 'waves', 'shares', 'story_replies', 'story_stickers', 'home_cards', 'collections', 'quiet', 'friends', 'story_archive'];
 const STORAGE_AGES = [[30, '30 Days'], [90, '90 Days'], [365, '1 Year'], [0, 'All']];
 const HEIGHTS = [[500, '500 px'], [600, '600 px'], [700, '700 px (default)'], [800, '800 px'], [900, '900 px'], [1000, '1000 px'], ['fill', 'Fill the screen']];
 
@@ -14976,8 +12216,10 @@ class CrowMessengerCardEditor extends HTMLElement {
   }
 
   _section(id, colour, icon, title, sub, body) {
+    const HOUSE = ['featuresGrp', 'msgsGrp', 'houseFeedGrp', 'notifGrp', 'notifBtnGrp', 'notifPeopleGrp', 'usersGrp', 'aiGrp', 'storageGrp', 'eraseGrp'];
+    const tab = HOUSE.includes(id) ? 'house' : 'card';
     return `
-        <div>
+        <div data-sec="${id}" data-tab="${tab}">
           <div class="card-block" style="padding:12px;">
             <div id="${id}Header" data-grp="${id}" style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;-webkit-tap-highlight-color:transparent;padding-bottom:2px;">
               <div style="display:flex;align-items:center;gap:10px;">
@@ -14985,7 +12227,7 @@ class CrowMessengerCardEditor extends HTMLElement {
                   <ha-icon icon="${icon}" style="--mdc-icon-size:22px;color:var(--secondary-text-color, #727272);display:flex;"></ha-icon>
                 </div>
                 <div>
-                  <div style="font-size:14px;font-weight:600;color:var(--primary-text-color, #111);">${title}</div>
+                  <div style="font-size:14px;font-weight:600;color:var(--primary-text-color, #111);">${title}<span class="sec-chip">${tab === 'house' ? 'Household' : 'This Card'}</span></div>
                   <div style="font-size:11px;color:#888;margin-top:1px;">${sub}</div>
                 </div>
               </div>
@@ -15054,19 +12296,35 @@ ${this._toggle('n_show_attachment', 'Show Attachment Preview', 'Photos, videos a
 ${this._toggle('n_sound', 'Sound', 'Play the notification sound. On Android this uses the “Crow Messenger” notification channel.')}
 ${this._toggle('n_reply_action', 'Reply from Notification', 'Adds a Reply button so people can answer without opening Home Assistant.')}
 ${this._toggle('n_badge', 'App Icon Badge', 'A red number on the Home Assistant app’s icon on iPhone and iPad, showing unread messages (muted chats aren’t counted). Off until you turn it on.')}
-<div class="grp-sub">Notification Buttons</div>
+`;
+    const notifBtnBody = `
+<div class="grp-sub" style="margin-top:2px;">Messages</div>
 <div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">Press and hold a message notification to use these. Android shows three at most: Reply, Mark as Read and Thumbs Up.</div>
 ${this._toggle('nb_tapbacks', 'Tapbacks', 'Heart, Thumbs Up and Ha Ha, so you can react without opening the chat.')}
 ${this._toggle('nb_mark_read', 'Mark as Read', 'Marks the conversation as read, and clears the badge.')}
 ${this._toggle('nb_mute', 'Hide Alerts for 1 Hour', 'Silences that conversation for an hour.')}
 ${this._toggle('nb_home', 'I’m Home and On My Way', 'Sends “I’m home 🏠” or “On my way 🚗” with one tap.')}
-<div class="grp-sub">People &amp; Phones</div>
+<div id="fnb-wrap">
+<div class="grp-sub">Feed</div>
+<div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">Press and hold a Feed notification to use these. Each button only does what that person could do in the card. Android shows three at most.</div>
+${this._toggle('fnb_reactions', 'Reactions', 'Love and Like on posts (plus Haha and Wow on iPhone), and Like or Love on comments.')}
+${this._toggle('fnb_comment', 'Comment and Reply', 'Type a comment on a post, or a reply under someone’s comment, right in the notification.')}
+${this._toggle('fnb_save', 'Save', 'Keeps the post in Saved to look at later.')}
+${this._toggle('fnb_events', 'Event Answers', 'Going, Maybe or Can’t Go — and On My Way on a reminder.')}
+${this._toggle('fnb_polls', 'Poll Votes', 'A button for each choice (the first three on Android).')}
+${this._toggle('fnb_claim', 'Claim It', 'Claims something that’s Up for Grabs.')}
+${this._toggle('fnb_birthday', 'Write on the Card', 'Type a birthday message, or 🎂 celebrate, from a birthday notification.')}
+${this._toggle('fnb_leave', 'Leave Group', 'On “added you to a group” notifications.')}
+${this._toggle('fnb_hide', 'Hide for 30 Days', 'Hides that person’s posts for 30 days. Off until you turn it on.')}
+</div>
+`;
+    const notifPeopleBody = `
 <div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">Phones are found automatically from the Home Assistant Companion app each person is signed in to. Turn off a person or a phone to stop notifications going there.</div>
 <div id="notify-people"><div style="font-size:12px;color:#888;padding:10px 0;">Loading…</div></div>`;
 
     const msgsBody = `
 <div class="grp-sub" style="margin-top:2px;">Keep Messages</div>
-${this._segmented('retention-segmented', 'retention', 'Keep Messages', 'Messages and their attachments are deleted automatically once they’re older than this — for everyone in the home. Forever keeps everything. Starts at 30 days.', RETENTION.map(([v, l]) => [v, l]))}
+${this._segmented('retention-segmented', 'retention', 'Keep Messages', 'Messages and their attachments are deleted automatically once they’re older than this — for everyone in the home. Forever keeps everything, and is how it starts. The Feed’s posts follow this too.', RETENTION.map(([v, l]) => [v, l]))}
 <div id="retention-confirm" style="display:none;margin-top:8px;padding:10px 12px;background:rgba(255,69,58,0.1);border:1px solid rgba(255,69,58,0.3);border-radius:10px;">
   <div id="retention-confirm-text" style="font-size:12px;color:#ff453a;margin-bottom:8px;font-weight:500;"></div>
   <div style="display:flex;gap:8px;">
@@ -15076,13 +12334,9 @@ ${this._segmented('retention-segmented', 'retention', 'Keep Messages', 'Messages
 </div>
 <div class="grp-sub">Attachments</div>
 ${this._segmented('upload-segmented', 'upload', 'Largest Attachment', 'Photos are resized before sending, so this mostly matters for videos and documents. Starts at 1 GB.', UPLOAD_SIZES)}
-<div class="grp-sub">Links &amp; Zones</div>
-<div id="feat-wrap">
-${this._toggle('f_link_previews', 'Link Previews', 'Shows a card with the page’s title and picture under a link. Home Assistant fetches the page — never people’s phones — and won’t open addresses on your own network. Household setting.')}
-${this._toggle('f_share_sheet', 'Share to Crow Messenger', 'When someone shares a link to the Home Assistant app from their phone’s share sheet, they get a “Send link to…” notification that opens a list of chats to send it to. Nothing is sent until a chat is chosen. Household setting.')}
-${this._toggle('f_zones', 'Everyone Can Add Zones', 'Lets everyone add Home Assistant zones from the People map, Check In, Send Later and shared locations, not just administrators. The zones are the same as ones made in Settings → Areas, labels & zones. Household setting.')}
-</div>
-<div class="grp-sub">Typing</div>
+`;
+    const cardMsgsBody = `
+<div class="grp-sub" style="margin-top:2px;">Typing</div>
 ${this._toggle('enter_sends', 'Return Key Sends', 'On a computer keyboard, Return sends the message and Shift+Return starts a new line. Phones and tablets always use the send button.')}`;
 
     const storageBody = `
@@ -15100,8 +12354,7 @@ ${this._segmented('storage-segmented', 'storage_age', 'Delete Photos & Files fro
 </div>`;
 
     const aiBody = `
-<div class="grp-sub" style="margin-top:2px;">AI Features</div>
-${this._toggle('ai_enabled', 'AI Features', 'Turns on the AI features below for everyone in the home. They use the AI you’ve already set up in Home Assistant (Settings → Voice assistants, and an AI Task). When this is off, nothing is ever sent to an AI.')}
+<div style="font-size:11px;color:#888;margin:2px 0 6px;line-height:1.45;">Turn AI on or off under Features. These choices are used when it’s on.</div>
 <div id="ai-wrap">
 <div class="grp-sub">Home Assistant AI</div>
 <div class="select-row" style="padding:10px 0;">
@@ -15125,6 +12378,20 @@ ${this._toggle('ai_f_actions', 'Add to Calendar & Reminders', 'Press and hold a 
 ${this._toggle('ai_f_ask', 'Ask This Chat', 'Search in a conversation also answers questions about it, like “When is the plumber coming?”, and shows the messages the answer came from. Type a question, or tap Ask. Press and hold ⋯ in a conversation to go straight there.')}
 ${this._toggle('ai_f_photos', 'Photo Descriptions', 'A button in the photo viewer describes the picture. Needs an AI Task that can read images.')}
 ${this._note('ai-photo-warn', 'The chosen AI Task can’t read images, so Photo Descriptions won’t appear.', '128,128,128')}
+<div class="grp-sub">Feed</div>
+${this._toggle('ai_f_feed_writing', 'Writing Tools', 'A ✨ button in the composer and comment box: Proofread, Make Friendlier, Shorter, More Formal or More Casual.')}
+${this._toggle('ai_f_feed_captions', 'Suggest a Caption', 'After adding photos to a post, ✨ → Suggest a Caption offers a few to choose from. Needs an AI Task that can read images.')}
+${this._toggle('ai_f_feed_comments', 'Suggested Comments', 'In a post, ✨ → Suggest Comments shows a few short comments to tap.')}
+${this._toggle('ai_f_feed_smart', 'Make It an Event or Poll', 'When a post mentions a day and time, or asks “this or that?”, a chip offers to turn it into an event or a poll, filled in for you.')}
+${this._toggle('ai_f_feed_albums', 'Album Names', 'Edit an album → Suggest a Name, from what’s in its photos.')}
+${this._toggle('ai_f_feed_catchup', 'What Did I Miss?', 'When several posts came in while you were away, a card at the top of the Feed sums them up.')}
+${this._toggle('ai_f_feed_threads', 'Catch Up on Comments', 'Posts with lots of comments get a button that sums up the conversation.')}
+${this._toggle('ai_f_feed_translate', 'Translate', 'Translate in the ••• menu of a post and the press-and-hold menu of a comment.')}
+${this._toggle('ai_f_feed_photos', 'Photo Descriptions', 'A Describe button in the Feed’s photo viewer.')}
+${this._toggle('ai_f_feed_search', 'Photo Search', 'Off until you switch it on. New photos are described in the background as they’re posted, so Photos can be searched by what’s in them (“beach”, “cake”). Every new photo goes to the AI.')}
+${this._toggle('ai_f_feed_memories', 'Memory Captions', 'A ✨ on On This Day memories writes a short caption, and posts waiting for review get a suggested caption.')}
+${this._toggle('ai_f_feed_kindness', 'Kindness Check', 'Before a post or comment goes out, a quick check for anything that could come across as harsh — with Edit or Post Anyway. If the AI is slow it posts anyway.')}
+${this._toggle('ai_f_feed_ask', 'Ask the Feed', 'Feed ••• → Ask the Feed answers questions like “When is the BBQ?” from posts shared with you, with links to them.')}
 <div style="font-size:11px;color:#888;margin:10px 0 2px;line-height:1.5;">
   <ha-icon icon="mdi:shield-lock-outline" style="--mdc-icon-size:14px;width:14px;height:14px;display:inline-flex;vertical-align:-3px;margin-right:4px;"></ha-icon>Messages only go to the AI when someone uses a feature (Suggested Replies runs when a chat with a new message is opened). If your AI is a cloud service, those messages — including other people’s in a group chat — are sent to it.
 </div>
@@ -15145,6 +12412,7 @@ ${this._toggle('pdf_contacts', 'Address Book', 'Contacts → ⋯ → Export All 
 ${this._segmented('contact-sort-segmented', 'contact_sort', 'Sort Order', '', [['first', 'First, Last'], ['last', 'Last, First']])}
 ${this._segmented('contact-display-segmented', 'contact_display', 'Display Order', '', [['first', 'First, Last'], ['last', 'Last, First']])}
 ${this._toggle('show_my_card', 'Show My Card', 'Show your own card at the top of Contacts, where you can set the name and photo you share.')}
+${this._toggle('contact_extras', 'Feed and Chats on Contact Cards', 'A household member’s card shows Active now, a Feed button, their profile, latest post and photos (only what’s shared with you, and only with the Feed on), your chats with them, Shared in Chats, Hide Alerts and Ring Phone.')}
 <div class="grp-sub">People Map</div>
 ${this._toggle('show_people_map', 'People Map', 'A map in Contacts showing where everyone is, from their Home Assistant person (usually the Companion app on their phone). Contact cards also show each person’s current place.')}
 <div id="people-details-wrap">
@@ -15174,16 +12442,31 @@ ${this._toggle('people_nearby', 'Find Nearby', 'Look for toilets, cafés, cash m
 </div>`;
 
     const layoutBody = `
+<div class="grp-sub" style="margin-top:2px;">Opening</div>
+<div class="select-row" style="padding:10px 0;">
+  <label for="start_view">Startup Screen</label>
+  <div class="hint">The screen this card opens on. Messages reopens the chat you were last in. A notification or something shared from a phone still opens where it was sent. The Feed choices need the Feed switched on, otherwise it opens on Messages.</div>
+  <select id="start_view">${START_VIEWS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+</div>
+${this._toggle('resume', 'Return to Where You Left Off', 'Leave the dashboard or the app and come back to the same screen — the chat, profile, post or Contacts you had open, scrolled to where you were. After 12 hours away (or with this off) the card opens on the Startup Screen. A notification you tap still opens what it’s about.')}
+${this._toggle('feed_nav', 'Feed Navigation Bar', 'A bar along the bottom of the Feed, like Facebook’s: Home, Videos, Groups, Events, Notifications and Menu. It’s frosted glass when Bars Liquid Glass is on, and a solid bar when it’s off or a skin is chosen.')}
+<div class="grp-sub">App Bar</div>
+<div style="font-size:11px;color:#888;margin:4px 0 6px;line-height:1.45;">The capsule at the top left of Messages, Contacts and the Feed. Turn places on or off and move them up or down. One you turn off still shows on its own screen, so you can see where you are.</div>
+<div id="appbar-items"></div>
+${this._toggle('app_bar_filter', 'Filter Button on Messages', 'Filter chats by Unread, Groups, Pinned and more.')}
+${this._toggle('app_bar_dots', 'Red Dots', 'A red dot on Messages when a chat is unread (muted chats aren’t counted), and on the Feed for new posts or notifications.')}
+<div class="grp-sub">Full Screen</div>
+${this._toggle('fullscreen_button', 'Full Screen Button', 'An icon beside Contacts and Filter at the top of the Messages screen that makes the card fill the whole screen. Tap it again (or press Escape) to put it back. In the old-style window skins it’s the title bar’s Maximise button.')}
+${this._toggle('resize_btn_spin', 'Spin the Button', 'The button gives a quick spin each time it’s tapped.')}
+${this._toggle('start_full', 'Open in Full Screen', 'The card fills the whole screen each time its dashboard opens. Tap the full screen icon (or press Escape) to put it back on the dashboard until the next time. Needs the Full Screen Button.', 'id="start_full_row"')}
+`;
+    const sizeBody = `
 <div class="grp-sub" style="margin-top:2px;">Size</div>
 <div class="select-row" style="padding:10px 0;">
   <label for="card_height">Card Height</label>
   <div class="hint">How tall the card is on the dashboard. Fill the screen suits a Panel view.</div>
   <select id="card_height">${HEIGHTS.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
 </div>
-<div class="grp-sub">Full Screen</div>
-${this._toggle('fullscreen_button', 'Full Screen Button', 'An icon beside Contacts and Filter at the top of the Messages screen that makes the card fill the whole screen. Tap it again (or press Escape) to put it back. In the old-style window skins it’s the title bar’s Maximise button.')}
-${this._toggle('resize_btn_spin', 'Spin the Button', 'The button gives a quick spin each time it’s tapped.')}
-${this._toggle('start_full', 'Open in Full Screen', 'The card fills the whole screen each time its dashboard opens. Tap the full screen icon (or press Escape) to put it back on the dashboard until the next time. Needs the Full Screen Button.', 'id="start_full_row"')}
 <div class="grp-sub">Motion</div>
 ${this._toggle('animations', 'Animations', 'Slide between screens and animate sheets and popups.')}
 ${this._toggle('effect_words', 'Effects From Words', 'Some words send a screen effect by themselves, like iMessage: Happy Birthday (Balloons), Congratulations (Confetti), Happy New Year (Fireworks), Merry Christmas (Snow), Happy Halloween, Pew Pew (Lasers), I Love You, Good Night (Fireflies), Happy Anniversary (Celebration) and Happy Easter (Petals).')}`;
@@ -15203,6 +12486,74 @@ ${this._toggle('effect_words', 'Effects From Words', 'Some words send a screen e
             </div>
           </div>
         </div>`;
+    const eraseBody = `
+<div id="reset-wrap" hidden>
+
+<div style="font-size:11px;color:#888;margin:4px 0 6px;line-height:1.45;">For administrators: delete everything — every chat, message, contact, Feed post, photo, video and file — for everyone, and wipe it from Home Assistant, so Crow Messenger starts again as if just installed. Or choose just some of it. Home Assistant users and the integration are kept.</div>
+<button id="reset-btn" style="width:100%;margin:4px 0;padding:10px;border-radius:10px;border:1px solid rgba(255,69,58,0.55);background:rgba(255,69,58,0.14);color:#ff453a;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;">Erase Everything…</button>
+<div id="reset-done" style="display:none;font-size:11.5px;color:#30d158;margin:4px 0;line-height:1.45;"></div>
+</div>`;
+    const featuresBody = `
+<div class="grp-sub" style="margin-top:2px;">Features</div>
+<div id="feat-wrap">
+${this._toggle('f_link_previews', 'Link Previews', 'Shows a card with the page’s title and picture under a link. Home Assistant fetches the page — never people’s phones — and won’t open addresses on your own network. Household setting.')}
+${this._toggle('f_feed', 'Feed (Social Media)', 'A private, Facebook-style feed for the household: posts, photos, videos, stories, groups, albums, events and more. Each post is only seen by the people it’s shared with, and posts are kept for as long as Keep Messages says. Household setting.')}
+${this._toggle('f_share_sheet', 'Share to Crow Messenger', 'When someone shares a link to the Home Assistant app from their phone’s share sheet, they get a “Send link to…” notification that opens a list of chats to send it to. Nothing is sent until a chat is chosen. Household setting.')}
+${this._toggle('f_zones', 'Everyone Can Add Zones', 'Lets everyone add Home Assistant zones from the People map, Check In, Send Later and shared locations, not just administrators. The zones are the same as ones made in Settings → Areas, labels & zones. Household setting.')}
+</div>
+<div class="grp-sub">Sensors</div>
+<div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">Each person has sensors in Home Assistant (Unread messages, Last seen, Waiting on reply and more). These two change all the time; switch them off to keep Home Assistant’s history smaller. Neither ever says which chat.</div>
+${this._toggle('hs_typing', 'Typing Sensor', 'On while someone is typing in any chat.')}
+${this._toggle('hs_viewing', 'Viewing Sensor', 'Which part of the card someone has open: Messages, a chat, the Feed or Contacts.')}
+<div class="grp-sub">AI</div>
+${this._toggle('ai_enabled', 'AI Features', 'Turns on the AI features (set up under AI) for everyone in the home. They use the AI you’ve already set up in Home Assistant (Settings → Voice assistants, and an AI Task). When this is off, nothing is ever sent to an AI.')}
+`;
+    const cardFeedBody = `
+<div class="grp-sub" style="margin-top:2px;">Feed on This Card</div>
+${this._segmented('feed-start-segmented', 'feed_start_tab', 'Feed Opens On', 'The tab the Feed shows first.', [['feed', 'Home'], ['videos', 'Videos'], ['groups', 'Groups'], ['events', 'Events']])}
+${this._toggle('feed_autoplay', 'Play Videos as You Scroll', 'Videos in posts play silently while they’re on the screen, like Facebook. Off: a video plays when it’s tapped, which is better on a slow connection.')}
+${this._toggle('show_stories', 'Stories Row', 'The row of stories at the top of the Feed.')}
+${this._toggle('show_memories', 'On This Day', 'Posts from this day in past years, at the top of the Feed.')}`;
+    const houseFeedBody = `
+<div id="hfeed-wrap">
+<div class="grp-sub" style="margin-top:2px;">Posting</div>
+${this._toggle('hf_page_posts', 'Post on Someone’s Page', 'People can post on each other’s pages, like Facebook. Off: only on their own.')}
+${this._segmented('hf-ndef-segmented', 'hf_ndef', 'New Post Notifications', 'What people are told about on their phones until they change it in Feed Settings. Everything: every new post shared with them. Important Only: events, polls, Up for Grabs, Chip In, lists and posts from their Favourites. Posts on your page, mentions, tags and groups are always told.', [['everything', 'Everything'], ['important', 'Important Only'], ['nothing', 'Nothing']])}
+${this._segmented('hf-aud-segmented', 'hf_aud', 'Default Audience', 'Who a new post or story is for until it’s changed. People can still choose on each one.', [['everyone', 'Everyone at Home'], ['me', 'Only Me']])}
+<div class="grp-sub">Post Types</div>
+${this._toggle('hf_k_poll', 'Polls', 'Ask a question with choices to vote on.')}
+${this._toggle('hf_k_event', 'Events', 'With Going, Maybe and Can’t Go, reminders and Add to Calendar.')}
+${this._toggle('hf_k_fund', 'Chip In', 'A pot for a shared present or treat.')}
+${this._toggle('hf_k_grabs', 'Up for Grabs', 'Give something away, first come first served.')}
+${this._toggle('hf_k_recs', 'Ask for Recommendations', 'Ask “Anyone know a good plumber?” — people reply with someone from their Contacts, everything recommended is gathered on the post, and anyone can save it to their own Contacts.')}
+${this._toggle('hf_k_list', 'Lists', 'A checklist post, like “Packing for Cornwall”, that people tick off together. It can be kept in step with a Home Assistant to-do list, both ways.')}
+<div class="grp-sub">Extras</div>
+${this._toggle('hf_stories', 'Stories', 'Photos, videos or words that disappear after 24 hours.')}
+${this._toggle('hf_birthdays', 'Birthdays and Milestones', 'A birthday card post on the day for people who share their birthday, and milestones like “Moved into the house”.')}
+${this._toggle('hf_review', 'Year in Review', 'The household’s most-loved photos, posted on 31 December.')}
+${this._toggle('hf_covers', 'Cover Photos', 'A picture across the top of each person’s profile, like Facebook’s, that they choose and move into place. It also shows behind their photo on their contact card.')}
+<div class="grp-sub">Profiles</div>
+${this._toggle('hf_intro', 'Intro and Featured Photos', 'A short bio and details on each profile (where they work, their pets…), each for everyone or only them, and up to nine featured photos.')}
+${this._toggle('hf_highlights', 'Story Highlights', 'Keep stories on your profile after the 24 hours, as named circles like “Holiday 2026”. Each keeps the audience its story had.')}
+${this._toggle('hf_story_archive', 'Story Archive', 'After its 24 hours, each story is kept privately for the person who posted it, so they can add it to a highlight later with the + on their profile. Only they can see it there. It follows Keep Posts; switching this off empties everyone’s archive.')}
+${this._toggle('hf_badges', 'Weekly Badges', 'Light-hearted badges each Sunday evening — Top Photographer, Conversation Starter, Biggest Supporter and more — in a post and on profiles. Only posts shared with everyone count.')}
+${this._toggle('hf_waves', 'Waves', 'Wave at someone from their profile. They get a notification with a Wave Back button.')}
+<div class="grp-sub">Posts and Stories</div>
+${this._toggle('hf_shares', 'Share a Post', 'A Share button on posts: Share Now, Write Post (with your own words) or Send in a Chat. The original only shows to people who can already see it.')}
+${this._toggle('hf_story_replies', 'Story Reactions and Replies', 'React to a story or reply to it. Replies arrive in Messages, quoting the story.')}
+${this._toggle('hf_story_stickers', 'Story Stickers', 'Add a poll, a question, a countdown, a mention, a place, the weather or the time to a story.')}
+${this._toggle('hf_home_cards', 'Share from Home', 'A button in New Post that shares a camera snapshot, a sensor, a chart of the last day or the weather from Home Assistant, as it is right then.')}
+<div class="grp-sub">Comfort</div>
+${this._toggle('hf_collections', 'Saved Collections', 'Sort saved posts into folders like “Recipes” or “Holiday plans”.')}
+${this._toggle('hf_friends', 'Friends on Profiles', 'Each profile shows how many friends someone has under their name, and a Friends box like Facebook’s: photos and names of everyone else at home, with See All to search them. Tap one to open their profile.')}
+${this._toggle('hf_quiet', 'Quiet Mode', 'Each person can pause Feed notifications for a while or every night, in Feed Settings. The bell still counts them; messages aren’t affected.')}
+<div class="grp-sub">Keep Posts</div>
+<div class="select-row" style="padding:10px 0;">
+  <label for="hf_keep">Keep Posts</label>
+  <div class="hint">Posts, with their photos, videos and comments, are deleted once they’re older than this — for everyone. Stories always go after 24 hours.</div>
+  <select id="hf_keep"><option value="">Same as Keep Messages</option>${RETENTION.map(([v, l]) => `<option value="${v}">${l}</option>`).join('')}</select>
+</div>
+</div>`;
 
     const appearanceBody = `
 <div class="grp-sub" style="margin-top:2px;">Theme</div>
@@ -15244,6 +12595,50 @@ ${this._toggle('contact_blur', 'Contact Card Blur', 'Contact cards get a blurred
 
     this.shadowRoot.innerHTML = `
       <style>
+        .ed-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: rgba(128,128,128,0.14); margin: 2px 0 8px; }
+        .ed-tabs button { flex: 1; padding: 8px; border: 0; border-radius: 9px; background: transparent; color: var(--primary-text-color, #111); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
+        .ed-tabs button.on { background: var(--card-background-color, #fff); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
+        .ed-tabnote { font-size: 11.5px; color: var(--secondary-text-color, #888); line-height: 1.45; margin: 0 2px 10px; }
+        .container .tab-off, .ed-tabnote.tab-off { display: none !important; }
+        .container.searching [data-tab].tab-off:not([data-es-hidden]) { display: block !important; }
+        .container.searching .ed-tabnote, .container.searching .ed-tabs { opacity: .45; }
+        .sec-chip { display: none; margin-left: 8px; padding: 1px 7px; border-radius: 8px; background: rgba(128,128,128,0.18); font-size: 10.5px; font-weight: 600; color: var(--secondary-text-color, #888); vertical-align: 1px; }
+        .container.searching .sec-chip { display: inline-block; }
+        .es-hit { animation: es-hit 1.6s ease; border-radius: 8px; }
+        @keyframes es-hit { 0%, 40% { background: rgba(10,132,255,0.18); } 100% { background: transparent; } }
+        .ab-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--divider-color, rgba(128,128,128,0.2)); }
+        .ab-row ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color, #888); display: inline-flex; }
+        .ab-row .ab-n { flex: 1; font-size: 13.5px; }
+        .ab-row button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.25); background: transparent; color: var(--primary-text-color, #111); cursor: pointer; font-size: 14px; line-height: 1; }
+        .ab-row button:disabled { opacity: .3; cursor: default; }
+        .ab-row input { width: 18px; height: 18px; accent-color: var(--primary-color, #0a84ff); }
+        .rs-ov { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; font-family: inherit; }
+        .rs-sh { width: min(520px, 100%); max-height: 88vh; overflow: auto; background: var(--card-background-color, #1c1c1e); color: var(--primary-text-color, #fff); border-radius: 22px 22px 0 0; padding: 16px 16px 22px; box-shadow: 0 -10px 40px rgba(0,0,0,.35); animation: rs-up .28s cubic-bezier(.2,.9,.3,1) both; }
+        @keyframes rs-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+        .rs-sh h3 { margin: 2px 0 4px; font-size: 18px; text-align: center; }
+        .rs-sh .rs-sub { font-size: 12.5px; color: var(--secondary-text-color, #999); text-align: center; margin-bottom: 12px; line-height: 1.45; }
+        .rs-grp { border-radius: 14px; overflow: hidden; background: rgba(128,128,128,.12); margin-bottom: 12px; }
+        .rs-row { display: flex; align-items: center; gap: 12px; padding: 10px 14px; cursor: pointer; }
+        .rs-row + .rs-row { border-top: .5px solid rgba(128,128,128,.25); }
+        .rs-row input { width: 20px; height: 20px; accent-color: #ff453a; flex-shrink: 0; }
+        .rs-row b { display: block; font-size: 14.5px; font-weight: 600; }
+        .rs-row span { font-size: 12px; color: var(--secondary-text-color, #999); }
+        .rs-bt { width: 100%; padding: 12px; border-radius: 14px; border: 0; font: inherit; font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+        .rs-bt.bk { background: rgba(128,128,128,.16); color: var(--primary-color, #0a84ff); }
+        .rs-bt.go { background: #ff453a; color: #fff; }
+        .rs-bt.cn { background: transparent; color: var(--secondary-text-color, #999); }
+        .rs-bt:disabled { opacity: .45; cursor: default; }
+        .rs-note { font-size: 11.5px; color: var(--secondary-text-color, #999); line-height: 1.45; margin: 8px 2px 0; }
+        .rs-al-ov { position: fixed; inset: 0; z-index: 101; background: rgba(0,0,0,.4); display: flex; align-items: center; justify-content: center; padding: 20px; }
+        .rs-al { width: min(300px, 100%); box-sizing: border-box; background: color-mix(in srgb, var(--card-background-color, #2c2c2e) 88%, transparent); backdrop-filter: blur(34px) saturate(1.8); -webkit-backdrop-filter: blur(34px) saturate(1.8); color: var(--primary-text-color, #fff); border-radius: 32px; padding: 21px 14px 14px; border: .5px solid rgba(128,128,128,.25); box-shadow: 0 24px 60px rgba(0,0,0,.45); animation: rs-pop .24s cubic-bezier(.2,.9,.3,1.2) both; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', sans-serif; }
+        @keyframes rs-pop { from { transform: scale(.88); opacity: 0; } to { transform: none; opacity: 1; } }
+        .rs-al h4 { margin: 0 13px; font-size: 17.5px; font-weight: 600; line-height: 1.22; letter-spacing: -0.015em; }
+        .rs-al p { margin: 7px 13px 0; font-size: 15px; color: var(--secondary-text-color, #aaa); line-height: 1.26; }
+        .rs-al input { width: 100%; box-sizing: border-box; height: 44px; padding: 0 14px; border-radius: 14px; border: 0; background: rgba(128,128,128,.18); color: inherit; font: inherit; font-size: 16px; letter-spacing: .08em; margin: 16px 0 0; }
+        .rs-al .rs-btns { display: flex; gap: 8px; margin-top: 20px; }
+        .rs-al .rs-btns button { flex: 1; min-height: 44px; padding: 11px 14px; border-radius: 999px; border: 0; background: rgba(128,128,128,.22); color: inherit; font: inherit; font-size: 17px; font-weight: 500; cursor: pointer; }
+        .rs-al .rs-btns .red { color: #ff453a; }
+        .rs-al .rs-btns button:disabled { opacity: .4; cursor: default; }
         .container { display: flex; flex-direction: column; gap: 20px; padding: 12px; color: var(--primary-text-color); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; position: relative; }
         .section-title { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; color: #888; margin-bottom: 2px; word-break: break-word; }
         .editor-tooltip { position:relative; display:inline-flex; align-items:center; }
@@ -15417,19 +12812,30 @@ ${this._toggle('contact_blur', 'Contact Card Blur', 'Contact cards get a blurred
         </div>
 
         <div id="admin-note" style="display:${isAdmin ? 'none' : 'block'};padding:10px 14px;background:rgba(255,149,0,0.10);border:1px solid rgba(255,149,0,0.25);border-radius:10px;font-size:12px;color:rgba(255,180,50,0.95);line-height:1.5;">
-          <ha-icon icon="mdi:shield-account-outline" style="--mdc-icon-size:15px;width:15px;height:15px;display:inline-flex;vertical-align:-3px;margin-right:4px;"></ha-icon>Dashboards, Notifications, Keep Messages, Largest Attachment, Storage and AI are household settings — only a Home Assistant administrator can change them.
+          <ha-icon icon="mdi:shield-account-outline" style="--mdc-icon-size:15px;width:15px;height:15px;display:inline-flex;vertical-align:-3px;margin-right:4px;"></ha-icon>Only a Home Assistant administrator can change Household settings. You can see them here, and change everything under This Card.
         </div>
         <div id="int-error" style="display:none;padding:10px 14px;background:rgba(255,69,58,0.1);border:1px solid rgba(255,69,58,0.3);border-radius:10px;font-size:12px;color:#ff453a;line-height:1.5;"></div>
-${this._section('usersGrp', '48,209,88', 'mdi:view-dashboard-outline', 'Dashboards', 'Household · Where notifications open · One for everyone or each person', usersBody)}
-${this._section('notifGrp', '255,159,10', 'mdi:bell-outline', 'Notifications', 'Household · iPhone &amp; Android · Previews · Reply · Calls · People &amp; phones', notifBody)}
-${this._section('msgsGrp', '90,200,250', 'mdi:message-text-outline', 'Messages', 'Keep Messages · Largest attachment · Links · Voice · Return key', msgsBody)}
-${this._section('storageGrp', '142,142,147', 'mdi:harddisk', 'Storage', 'Household · Photos &amp; files on the server', storageBody)}
-${this._section('aiGrp', '255,159,10', 'mdi:robot-outline', 'AI', 'Household · Home Assistant chat · Replies · Writing · Catch Up · Translate · Calendar · Photos', aiBody)}
+<div class="ed-tabs" role="tablist"><button type="button" data-etab="card" role="tab">This Card</button><button type="button" data-etab="house" role="tab">Household</button></div>
+<div class="ed-tabnote" data-for="card">Only this card on this dashboard. Anyone who can edit the dashboard can change these.</div>
+<div class="ed-tabnote" data-for="house">Saved in Home Assistant and used by everyone in the house — every card and every phone. Only administrators can change these.</div>
+${this._section('openGrp', '94,92,230', 'mdi:compass-outline', 'Opening &amp; Navigation', 'Startup Screen · App Bar · Feed bar · Full screen', layoutBody)}
+${this._section('colours', '99,179,237', 'mdi:palette-outline', 'Appearance', 'Style · Light &amp; dark · Home Assistant theme · Skin · Glass', appearanceBody)}
+${this._section('sizeGrp', '94,92,230', 'mdi:page-layout-body', 'Size &amp; Motion', 'Card height · Animations · Effects from words', sizeBody)}
+${this._section('cardMsgsGrp', '90,200,250', 'mdi:message-text-outline', 'Messages', 'Return key', cardMsgsBody)}
+${this._section('cardFeedGrp', '24,119,242', 'mdi:newspaper-variant-outline', 'Feed', 'Opening tab · Videos · Stories row · On This Day', cardFeedBody)}
 ${this._section('contactsGrp', '191,90,242', 'mdi:account-box-outline', 'Contacts &amp; People', 'Sort · Display · My Card · People Map · Distances', contactsBody)}
 ${this._section('pdfGrp', '255,69,58', 'mdi:file-pdf-box', 'PDF Exports', 'Conversations · Contact cards · Address book', pdfBody)}
-${this._section('colours', '99,179,237', 'mdi:palette-outline', 'Appearance', 'Style · Light &amp; dark · Home Assistant theme · Glass', appearanceBody)}
-${this._section('layoutGrp', '94,92,230', 'mdi:page-layout-body', 'Layout &amp; Motion', 'Card height · Full screen · Animations', layoutBody)}
-${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card’s settings back to how they started', resetBody)}
+${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset This Card', 'Put this card’s settings back to how they started', resetBody)}
+${this._section('featuresGrp', '48,209,88', 'mdi:toggle-switch-outline', 'Features', 'Feed · Share to Crow Messenger · Link previews · Zones · AI', featuresBody)}
+${this._section('msgsGrp', '90,200,250', 'mdi:message-text-outline', 'Messages', 'Keep Messages · Largest attachment', msgsBody)}
+${this._section('houseFeedGrp', '24,119,242', 'mdi:newspaper-variant-outline', 'Feed', 'Post types · Stories · Cover photos · Profiles · Sharing · Quiet Mode · Keep Posts', houseFeedBody)}
+${this._section('notifGrp', '255,159,10', 'mdi:bell-outline', 'Phone Notifications', 'iPhone &amp; Android · Previews · Sound · Reply · Badge', notifBody)}
+${this._section('notifBtnGrp', '255,159,10', 'mdi:gesture-tap-button', 'Notification Buttons', 'Messages · Feed', notifBtnBody)}
+${this._section('notifPeopleGrp', '255,159,10', 'mdi:cellphone-message', 'People &amp; Phones', 'Who gets notifications, on which phones', notifPeopleBody)}
+${this._section('usersGrp', '48,209,88', 'mdi:view-dashboard-outline', 'Dashboards', 'Where notifications open · One for everyone or each person', usersBody)}
+${this._section('aiGrp', '255,159,10', 'mdi:atom', 'AI', 'Home Assistant chat · Replies · Writing · Catch Up · Translate · Calendar · Photos', aiBody)}
+${this._section('storageGrp', '142,142,147', 'mdi:harddisk', 'Storage', 'Photos &amp; files on the server', storageBody)}
+${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow Messenger', 'Delete everything, or some of it, for everyone', eraseBody)}
       </div>`;
 
     this._setupListeners();
@@ -15448,6 +12854,16 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     chk('use_ha_theme', c.use_ha_theme === true);
     chk('glass_popups', c.glass_popups !== false);
     chk('glass_bars', c.glass_bars !== false);
+    chk('feed_nav', c.feed_nav !== false);
+    chk('resume', c.resume !== false);
+    chk('contact_extras', c.contact_extras !== false);
+    chk('feed_autoplay', c.feed_autoplay === true);
+    chk('show_stories', c.show_stories !== false);
+    chk('show_memories', c.show_memories !== false);
+    chk('app_bar_filter', c.app_bar_filter !== false);
+    chk('app_bar_dots', c.app_bar_dots !== false);
+    ['feed', 'videos', 'groups', 'events'].forEach(v => chk('feed_start_tab_' + v, (c.feed_start_tab || 'feed') === v));
+    this._renderAppBarItems();
     chk('contact_blur', c.contact_blur !== false);
     chk('animations', c.animations !== false);
     chk('fullscreen_button', c.fullscreen_button !== false);
@@ -15466,6 +12882,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     const nk = root.getElementById('people_nearby_keep'); if (nk) nk.value = String([168, 336, 720].includes(+c.people_nearby_keep) ? +c.people_nearby_keep : 168);
     const nw = root.getElementById('nearby-wrap'); if (nw) { nw.style.opacity = c.people_nearby === true ? '1' : '0.4'; nw.style.pointerEvents = c.people_nearby === true ? '' : 'none'; }
     const pdw = root.getElementById('people-details-wrap'); if (pdw) { pdw.style.opacity = c.show_people_map === false ? '0.4' : '1'; pdw.style.pointerEvents = c.show_people_map === false ? 'none' : ''; }
+    { const sv = root.getElementById('start_view'); if (sv) sv.value = START_VIEWS.some(([k]) => k === c.start_view) ? c.start_view : 'messages'; }
     ['first', 'last'].forEach(v => { chk('contact_sort_' + v, (c.contact_sort || 'last') === v); chk('contact_display_' + v, (c.contact_display || 'first') === v); });
     const dsk = root.getElementById('default_skin');
     if (dsk) dsk.value = SKIN_BY[c.default_skin] && c.default_skin !== 'iphone' ? c.default_skin : '';
@@ -15476,7 +12893,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
 
   _updateConfigMulti(patch) {
     const cleanConfig = { ...this._raw, ...patch };
-    Object.keys(CM_DEFAULTS).forEach(k => { if (cleanConfig[k] === CM_DEFAULTS[k]) delete cleanConfig[k]; });
+    Object.keys(CM_DEFAULTS).forEach(k => { if (JSON.stringify(cleanConfig[k]) === JSON.stringify(CM_DEFAULTS[k])) delete cleanConfig[k]; });
     this._raw = cleanConfig;
     this._config = { ...CM_DEFAULTS, ...cleanConfig };
     this.updateUI();
@@ -15486,22 +12903,80 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
   _setupListeners() {
     const root = this.shadowRoot;
     // Collapsible groups: tap the header to open or close
+    // every section starts closed each time the editor is opened; ones you open stay open while you're in it
+    // (only the This Card | Household tab is remembered on this device)
+    const TAB_KEY = 'crowMessengerEditorTab';
+    try { localStorage.removeItem('crowMessengerEditorOpen'); } catch (e) { /* */ }
+    if (!this._openSet) this._openSet = new Set();
+    const openSet = this._openSet;
+    const saveOpen = () => {};
     root.querySelectorAll('[data-grp]').forEach(h => {
       const k = h.dataset.grp, b = root.getElementById(k + 'Body'), c = root.getElementById(k + 'Chevron');
       if (!b) return;
+      const show = (open) => { b.style.display = open ? 'flex' : 'none'; b.style.flexDirection = 'column'; if (c) c.style.transform = open ? 'rotate(90deg)' : ''; };
+      if (openSet.has(k)) show(true);
       h.addEventListener('click', () => {
         const open = b.style.display !== 'none';
-        b.style.display = open ? 'none' : 'flex';
-        b.style.flexDirection = 'column';
-        if (c) c.style.transform = open ? '' : 'rotate(90deg)';
+        show(!open);
+        if (open) openSet.delete(k); else openSet.add(k);
+        saveOpen();
       });
     });
+    // This Card | Household
+    const setTab = (t) => {
+      this._etab = t;
+      root.querySelectorAll('[data-etab]').forEach(b => { b.classList.toggle('on', b.dataset.etab === t); b.setAttribute('aria-selected', b.dataset.etab === t ? 'true' : 'false'); });
+      root.querySelectorAll('.container [data-tab]').forEach(sec => sec.classList.toggle('tab-off', sec.dataset.tab !== t));
+      root.querySelectorAll('.ed-tabnote').forEach(n => n.classList.toggle('tab-off', n.dataset.for !== t));
+      const an = root.getElementById('admin-note');
+      if (an) an.classList.toggle('tab-off', t !== 'house');
+      try { localStorage.setItem(TAB_KEY, t); } catch (e) { /* */ }
+    };
+    root.querySelectorAll('[data-etab]').forEach(b => b.addEventListener('click', () => setTab(b.dataset.etab)));
+    let firstTab = 'card';
+    try { firstTab = localStorage.getItem(TAB_KEY) || 'card'; } catch (e) { /* */ }
+    setTab(firstTab === 'house' ? 'house' : 'card');
+
+    // the app bar's places: on or off, and their order
+    root.getElementById('appbar-items')?.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-abmv]');
+      if (!b) return;
+      const order = this._abOrder();
+      const i = order.findIndex(x => x.id === b.dataset.id), j = i + (+b.dataset.abmv);
+      if (j < 0 || j >= order.length) return;
+      [order[i], order[j]] = [order[j], order[i]];
+      this._abOrderAll = order.map(x => x.id);
+      this._updateConfig('app_bar_items', order.filter(x => x.on).map(x => x.id));
+      this._renderAppBarItems();
+    });
+    root.getElementById('appbar-items')?.addEventListener('change', (e) => {
+      const cb = e.target.closest('[data-abon]');
+      if (!cb) return;
+      const order = this._abOrder();
+      const it = order.find(x => x.id === cb.dataset.abon);
+      if (it) it.on = cb.checked;
+      if (!order.some(x => x.on)) { cb.checked = true; return; }   // keep at least one
+      this._abOrderAll = order.map(x => x.id);
+      this._updateConfig('app_bar_items', order.filter(x => x.on).map(x => x.id));
+      this._renderAppBarItems();
+    });
+    ['feed', 'videos', 'groups', 'events'].forEach(v => root.getElementById('feed_start_tab_' + v)?.addEventListener('change', () => this._updateConfig('feed_start_tab', v)));
+    // Household → Feed
+    const hf = (patch) => this._saveSettings({ feed: patch });
+    root.getElementById('hf_page_posts')?.addEventListener('change', (e) => hf({ page_posts: e.target.checked }));
+    ['everyone', 'me'].forEach(v => root.getElementById('hf_aud_' + v)?.addEventListener('change', () => hf({ default_audience: v })));
+    ['important', 'everything', 'nothing'].forEach(v => root.getElementById('hf_ndef_' + v)?.addEventListener('change', () => hf({ notify_default: v })));
+    ['poll', 'event', 'fund', 'grabs', 'recs', 'list'].forEach(k => root.getElementById('hf_k_' + k)?.addEventListener('change', (e) => hf({ kinds: { [k]: e.target.checked } })));
+    FEED_EXTRAS.forEach(k => root.getElementById('hf_' + k)?.addEventListener('change', (e) => hf({ [k]: e.target.checked })));
+    ['stories', 'birthdays', 'review', 'covers'].forEach(k => root.getElementById('hf_' + k)?.addEventListener('change', (e) => hf({ [k]: e.target.checked })));
+    ['typing', 'viewing'].forEach(k => root.getElementById('hs_' + k)?.addEventListener('change', (e) => this._saveSettings({ sensors: { [k]: e.target.checked } })));
+    root.getElementById('hf_keep')?.addEventListener('change', (e) => hf({ keep_days: e.target.value === '' ? null : +e.target.value }));
 
     // Card settings
     root.getElementById('cs_classic')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', false); this.updateUI(); });
     root.getElementById('cs_glass')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', true); this.updateUI(); });
     ['auto', 'light', 'dark'].forEach(v => root.getElementById('ap_' + v)?.addEventListener('change', () => this._updateConfig('appearance', v)));
-    ['use_ha_theme', 'glass_popups', 'glass_bars', 'contact_blur', 'animations', 'fullscreen_button', 'resize_btn_spin', 'start_full', 'effect_words', 'enter_sends', 'show_my_card', 'show_people_map',
+    ['use_ha_theme', 'contact_extras', 'feed_nav', 'resume', 'feed_autoplay', 'show_stories', 'show_memories', 'app_bar_filter', 'app_bar_dots', 'glass_popups', 'glass_bars', 'contact_blur', 'animations', 'fullscreen_button', 'resize_btn_spin', 'start_full', 'effect_words', 'enter_sends', 'show_my_card', 'show_people_map',
       'pdf_enabled', 'pdf_conversations', 'pdf_contact', 'pdf_contacts', ...['people_here_since', 'people_weather', 'people_activity', 'people_focus', 'people_charging', 'people_wifi', 'people_nearby']].forEach(id => {
       root.getElementById(id)?.addEventListener('change', (e) => { this._updateConfig(id, e.target.checked); if (id === 'pdf_enabled' || id === 'show_people_map' || id === 'fullscreen_button') this.updateUI(); });
     });
@@ -15509,6 +12984,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
       root.getElementById('contact_sort_' + v)?.addEventListener('change', () => this._updateConfig('contact_sort', v));
       root.getElementById('contact_display_' + v)?.addEventListener('change', () => this._updateConfig('contact_display', v));
     });
+    root.getElementById('start_view')?.addEventListener('change', (e) => this._updateConfig('start_view', e.target.value));
     root.getElementById('default_skin')?.addEventListener('change', (e) => this._updateConfig('default_skin', e.target.value));
     root.getElementById('distance_units')?.addEventListener('change', (e) => this._updateConfig('distance_units', e.target.value));
     root.getElementById('people_nearby')?.addEventListener('change', () => this.updateUI());
@@ -15530,14 +13006,18 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     ['tapbacks', 'mark_read', 'mute', 'home'].forEach(k => {
       root.getElementById('nb_' + k)?.addEventListener('change', (e) => this._saveSettings({ notifications: { buttons: { [k]: e.target.checked } } }));
     });
+    ['reactions', 'comment', 'save', 'events', 'polls', 'claim', 'birthday', 'leave', 'hide'].forEach(k => {
+      root.getElementById('fnb_' + k)?.addEventListener('change', (e) => this._saveSettings({ notifications: { feed_buttons: { [k]: e.target.checked } } }));
+    });
     RETENTION.forEach(([v]) => root.getElementById('retention_' + v)?.addEventListener('change', () => this._onRetention(v)));
     UPLOAD_SIZES.forEach(([v]) => root.getElementById('upload_' + v)?.addEventListener('change', () => this._saveSettings({ max_upload_mb: v })));
     STORAGE_AGES.forEach(([v]) => root.getElementById('storage_age_' + v)?.addEventListener('change', () => { this._storageAge = v; root.getElementById('storage-confirm').style.display = 'none'; }));
-    ['link_previews', 'zones', 'share_sheet'].forEach(k => root.getElementById('f_' + k)?.addEventListener('change', (e) => this._saveSettings({ features: { [k]: e.target.checked } })));
+    ['link_previews', 'zones', 'share_sheet', 'feed'].forEach(k => root.getElementById('f_' + k)?.addEventListener('change', (e) => this._saveSettings({ features: { [k]: e.target.checked } })));
     root.getElementById('ai_enabled')?.addEventListener('change', (e) => this._saveSettings({ ai: { enabled: e.target.checked } }));
     root.getElementById('ai_agent')?.addEventListener('change', (e) => this._saveSettings({ ai: { agent_id: e.target.value } }));
     root.getElementById('ai_task')?.addEventListener('change', (e) => this._saveSettings({ ai: { task_entity: e.target.value } }));
     AI_FEATURES.forEach(f => root.getElementById('ai_f_' + f)?.addEventListener('change', (e) => this._saveSettings({ ai: { features: { [f]: e.target.checked } } })));
+    root.getElementById('reset-btn')?.addEventListener('click', () => this._openReset());
     root.getElementById('storage-btn')?.addEventListener('click', () => {
       const age = this._storageAge ?? 90;
       const label = STORAGE_AGES.find(x => x[0] === age)[1];
@@ -15606,6 +13086,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
         restore();
         const words = norm(editorSearch.value).trim().split(' ').filter(Boolean);
         empty.style.display = 'none';
+        container.classList.toggle('searching', !!words.length);
         if (!words.length) return;
         const hit = t => { const n = norm(t); return words.every(w => n.includes(w)); };
         const hide = el => { if (el.dataset.esHidden) return; el.dataset.esHidden = '1'; el.dataset.esPrev = el.style.display; el.style.display = 'none'; };
@@ -15628,6 +13109,14 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
           if (!titleHit) [...b.children].forEach(r => { if (!matches.includes(r)) hide(r); });
         });
         if (!any) { empty.textContent = 'No settings match “' + editorSearch.value.trim() + '”.'; empty.style.display = 'block'; }
+        // the first match: scroll to it and light it up for a moment
+        clearTimeout(this._esJump);
+        this._esJump = setTimeout(() => {
+          const first = [...container.querySelectorAll('.grp-body > *')].find(r => !r.dataset.esHidden && !r.classList.contains('grp-sub') && r.offsetParent && hit(r.textContent));
+          if (!first) return;
+          first.scrollIntoView({ block: 'center', behavior: 'smooth' });
+          first.classList.remove('es-hit'); void first.offsetWidth; first.classList.add('es-hit');
+        }, 350);
       };
       editorSearch.addEventListener('input', apply);
       editorSearch.addEventListener('keydown', e => { if (e.key === 'Escape') { editorSearch.value = ''; apply(); } });
@@ -15654,7 +13143,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     if (!this._config) return;
     // Only the original config plus the new key - defaults never get written into YAML.
     const cleanConfig = { ...this._raw, [key]: value };
-    Object.keys(CM_DEFAULTS).forEach(k => { if (cleanConfig[k] === CM_DEFAULTS[k]) delete cleanConfig[k]; });
+    Object.keys(CM_DEFAULTS).forEach(k => { if (JSON.stringify(cleanConfig[k]) === JSON.stringify(CM_DEFAULTS[k])) delete cleanConfig[k]; });
     this._raw = cleanConfig;
     this._config = { ...CM_DEFAULTS, ...cleanConfig };
     if (key === 'use_ha_theme' || key === 'appearance') this.updateUI();
@@ -15807,25 +13296,48 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     if (sw) { sw.style.opacity = admin ? '1' : '0.4'; sw.style.pointerEvents = admin ? '' : 'none'; }
     if (!r.querySelector('input[name="storage_age"]:checked')) { const d = r.getElementById('storage_age_' + (this._storageAge ?? 90)); if (d) d.checked = true; }
     if (!admin) this._renderStorage();
+    { const rw = r.getElementById('reset-wrap'); if (rw) rw.hidden = !admin; }
+    r.querySelectorAll('[data-tab="house"] .grp-body').forEach(b => { if (b.id === 'eraseGrpBody') return; b.style.opacity = admin ? '1' : '0.45'; b.style.pointerEvents = admin ? '' : 'none'; });
+    {
+      const fo = { page_posts: true, default_audience: 'everyone', keep_days: null, stories: true, birthdays: true, review: true, ...(st?.feed || {}) };
+      const kinds = { poll: true, event: true, fund: true, grabs: true, ...(fo.kinds || {}) };
+      const ck = (id, on) => { const el = r.getElementById(id); if (el) el.checked = on; };
+      ck('hf_page_posts', fo.page_posts !== false);
+      ['typing', 'viewing'].forEach(k => ck('hs_' + k, (st?.sensors || {})[k] !== false));
+      ['everyone', 'me'].forEach(v => ck('hf_aud_' + v, (fo.default_audience || 'everyone') === v));
+      ['important', 'everything', 'nothing'].forEach(v => ck('hf_ndef_' + v, (fo.notify_default || 'everything') === v));
+      ['poll', 'event', 'fund', 'grabs', 'recs', 'list'].forEach(k => ck('hf_k_' + k, kinds[k] !== false));
+      FEED_EXTRAS.forEach(k => ck('hf_' + k, fo[k] !== false));
+      ['stories', 'birthdays', 'review', 'covers'].forEach(k => ck('hf_' + k, fo[k] !== false));
+      const keep = r.getElementById('hf_keep');
+      if (keep) keep.value = fo.keep_days === null || fo.keep_days === undefined ? '' : String(fo.keep_days);
+      const hw = r.getElementById('hfeed-wrap');
+      if (hw) hw.style.opacity = (st?.features?.feed === false) ? '0.45' : '';
+    }
     ['retention-segmented', 'upload-segmented'].forEach(id => {
       const s = r.getElementById(id)?.parentElement;
       if (s) { s.style.opacity = admin ? '1' : '0.4'; s.style.pointerEvents = admin ? '' : 'none'; }
     });
     const n = st?.notifications || {};
+    const FNB_IDS = ['reactions', 'comment', 'save', 'events', 'polls', 'claim', 'birthday', 'leave', 'hide'].map(k => 'fnb_' + k);
     const chk = (id, on) => { const el = r.getElementById(id); if (el) el.checked = on; };
     ['enabled', 'show_text', 'show_attachment', 'sound', 'reply_action'].forEach(k => chk('n_' + k, n[k] !== false));
     chk('n_badge', n.badge === true);
     const nb = n.buttons || {};
     ['tapbacks', 'mark_read', 'mute', 'home'].forEach(k => chk('nb_' + k, k === 'tapbacks' || k === 'mark_read' ? nb[k] !== false : nb[k] === true));
+    const fnb = n.feed_buttons || {};
+    ['reactions', 'comment', 'save', 'events', 'polls', 'claim', 'birthday', 'leave', 'hide'].forEach(k => chk('fnb_' + k, k === 'hide' ? fnb[k] === true : fnb[k] !== false));
     const f = st?.features || {};
-    ['link_previews', 'zones', 'share_sheet'].forEach(k => chk('f_' + k, f[k] !== false));
+    ['link_previews', 'zones', 'share_sheet', 'feed'].forEach(k => chk('f_' + k, f[k] !== false));
+    const fnbw = r.getElementById('fnb-wrap');
+    if (fnbw) fnbw.hidden = f.feed === false;
     const fw = r.getElementById('feat-wrap');
     if (fw) { fw.style.opacity = admin ? '1' : '0.4'; fw.style.pointerEvents = admin ? '' : 'none'; }
-    const ret = st?.retention_days ?? this._ints?.retention_days ?? 30;
+    const ret = st?.retention_days ?? this._ints?.retention_days ?? 0;
     RETENTION.forEach(([v]) => chk('retention_' + v, ret === v));
     const up = st?.max_upload_mb ?? 300;
     UPLOAD_SIZES.forEach(([v]) => chk('upload_' + v, up === v));
-    ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action', 'n_badge', 'nb_tapbacks', 'nb_mark_read', 'nb_mute', 'nb_home'].forEach(id => {
+    ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action', 'n_badge', 'nb_tapbacks', 'nb_mark_read', 'nb_mute', 'nb_home', ...FNB_IDS].forEach(id => {
       const row = r.getElementById(id)?.closest('.toggle-item');
       if (row) row.style.opacity = n.enabled === false ? '0.4' : '1';
     });
@@ -15837,7 +13349,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     const caps = this._ints?.ai || {};
     const chk = (id, on) => { const el = r.getElementById(id); if (el) el.checked = on; };
     chk('ai_enabled', ai.enabled === true);
-    AI_FEATURES.forEach(f => chk('ai_f_' + f, (ai.features || {})[f] !== false));
+    AI_FEATURES.forEach(f => chk('ai_f_' + f, AI_OFF_UNTIL_ON.includes(f) ? (ai.features || {})[f] === true : (ai.features || {})[f] !== false));
     const agentSel = r.getElementById('ai_agent'), taskSel = r.getElementById('ai_task');
     if (agentSel) {
       const agents = (this._agents || []).filter(a => a.id !== 'conversation.home_assistant' && a.id !== 'homeassistant');
@@ -15863,6 +13375,136 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
     if (wrap) wrap.style.opacity = ai.enabled === true ? '1' : '0.45';
   }
 
+  // ── Reset Crow Messenger (administrators) ─────────────────────────────────
+  async _openReset() {
+    const root = this.shadowRoot;
+    let sum = null;
+    try { sum = await this._hass.callWS({ type: 'crow_messenger/reset/summary' }); } catch (e) { /* counts are a nice-to-have */ }
+    const n = (v, one, many) => `${(v || 0).toLocaleString()} ${(v || 0) === 1 ? one : many}`;
+    const PARTS = [
+      ['messages', 'Messages and Chats', sum ? `${n(sum.threads, 'chat', 'chats')}, ${n(sum.messages, 'message', 'messages')} — with reactions, polls, games, Send Later and reminders` : 'Every conversation and message'],
+      ['media', 'Photos, Videos and Files', sum ? `${n(sum.media_files, 'file', 'files')} using ${fmtBytes(sum.media_bytes) || '0 B'}, deleted from the server` : 'Deleted from the server'],
+      ['feed', 'Feed', sum ? `${n(sum.posts, 'post', 'posts')}, ${n(sum.stories, 'story', 'stories')}, ${n(sum.groups, 'group', 'groups')}, ${n(sum.albums, 'album', 'albums')} — and Notifications` : 'Posts, stories, groups and albums'],
+      ['contacts', 'Contacts', sum ? `${n(sum.contacts, 'contact', 'contacts')} in everyone’s address books` : 'Everyone’s private address books'],
+      ['personal', 'Personal Settings', 'Each person’s profile, skin, chat backgrounds, themes and saved stickers'],
+      ['settings', 'Household Settings', 'Back to the defaults: Keep Forever, the Feed on, notification buttons…'],
+    ];
+    const ov = document.createElement('div');
+    ov.className = 'rs-ov';
+    ov.innerHTML = `<div class="rs-sh" role="dialog" aria-label="Reset Crow Messenger">
+      <h3>Erase Crow Messenger</h3>
+      <div class="rs-sub">It goes for everyone in the house, and is wiped from Home Assistant.</div>
+      <div class="rs-grp">
+        <label class="rs-row"><input type="radio" name="rs-mode" value="all" checked><div><b>Erase Everything</b><span>Every chat, message, contact, Feed post, story, group, album, photo, video and file, and every setting. Crow Messenger starts again as if it had just been installed.${sum ? ` That’s ${n(sum.messages, 'message', 'messages')}, ${n(sum.contacts, 'contact', 'contacts')}, ${n(sum.posts, 'post', 'posts')} and ${fmtBytes(sum.media_bytes) || '0 B'} of photos, videos and files.` : ''}</span></div></label>
+        <label class="rs-row"><input type="radio" name="rs-mode" value="some"><div><b>Choose What to Delete</b><span>Keep the rest</span></div></label>
+      </div>
+      <div class="rs-grp rs-parts" hidden>${PARTS.map(([k, t, d]) => `<label class="rs-row"><input type="checkbox" data-part="${k}" checked><div><b>${t}</b><span>${d}</span></div></label>`).join('')}</div>
+      <button class="rs-bt bk" data-rs="backup">Download a Backup First</button>
+      <div class="rs-note" data-rs-bk></div>
+      <button class="rs-bt go" data-rs="go">Erase Everything…</button>
+      <button class="rs-bt cn" data-rs="cancel">Cancel</button>
+      <div class="rs-note">Home Assistant users, the sensors and the integration stay. Open cards start again empty straight away; others do the next time they open. A Home Assistant backup made before now still holds Crow Messenger’s data, and restoring it brings it back.${sum?.last_reset ? ` Last reset ${new Date(sum.last_reset.ts).toLocaleString()}.` : ''}</div>
+    </div>`;
+    root.appendChild(ov);
+    const close = () => ov.remove();
+    const mode = () => ov.querySelector('input[name="rs-mode"]:checked')?.value || 'all';
+    const picked = () => mode() === 'all' ? ['everything'] : [...ov.querySelectorAll('[data-part]:checked')].map(x => x.dataset.part);
+    const sync = () => {
+      const all = mode() === 'all';
+      ov.querySelector('.rs-parts').hidden = all;
+      const go = ov.querySelector('[data-rs="go"]');
+      if (!go.dataset.busy) go.textContent = all ? 'Erase Everything…' : 'Delete What’s Ticked…';
+      go.disabled = !picked().length;
+    };
+    ov.addEventListener('change', sync);
+    ov.addEventListener('click', async (e) => {
+      if (e.target === ov) { close(); return; }
+      const a = e.target.closest('[data-rs]')?.dataset.rs;
+      if (a === 'cancel') close();
+      else if (a === 'backup') this._resetBackup(ov);
+      else if (a === 'go') {
+        const parts = picked();
+        if (!parts.length) return;
+        const all = parts[0] === 'everything';
+        const ok = await this._resetConfirm(all);
+        if (!ok) return;
+        const btn = ov.querySelector('[data-rs="go"]');
+        btn.disabled = true; btn.dataset.busy = '1'; btn.textContent = all ? 'Erasing…' : 'Deleting…';
+        try {
+          const r = await this._hass.callWS({ type: 'crow_messenger/reset', parts, confirm: all ? 'ERASE' : 'RESET' });
+          close();
+          const done = root.getElementById('reset-done');
+          if (done) { done.style.display = 'block'; done.textContent = all ? `Everything was erased (${r.files || 0} file(s) deleted from the server). Crow Messenger is starting again, as if just installed.` : `Done. ${r.files || 0} file(s) were deleted from the server, and Crow Messenger is starting again.`; }
+        } catch (err) {
+          btn.disabled = false; delete btn.dataset.busy; sync();
+          ov.querySelector('[data-rs-bk]').textContent = `Couldn’t reset: ${err?.message || err}`;
+        }
+      }
+    });
+    sync();
+  }
+
+  // the iOS-style popup: type RESET to confirm, so a mistap can't do it
+  _resetConfirm(all) {
+    const word = all ? 'ERASE' : 'RESET';
+    return new Promise((resolve) => {
+      const ov = document.createElement('div');
+      ov.className = 'rs-al-ov';
+      ov.innerHTML = `<div class="rs-al" role="alertdialog"><h4>${all ? 'Erase Everything?' : 'Delete What’s Ticked?'}</h4>
+        <p>${all ? 'Every chat, message, contact, post, photo, video and file, and every setting, is deleted for everyone in the house and wiped from Home Assistant.' : 'Everything you ticked is deleted for everyone in the house and removed from Home Assistant.'} It can’t be undone. Type <b>${word}</b> to confirm.</p>
+        <input type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="${word}" aria-label="Type ${word} to confirm">
+        <div class="rs-btns"><button data-v="0">Cancel</button><button data-v="1" class="red" disabled>${all ? 'Erase' : 'Delete'}</button></div></div>`;
+      this.shadowRoot.appendChild(ov);
+      const inp = ov.querySelector('input'), go = ov.querySelector('[data-v="1"]');
+      inp.addEventListener('input', () => { go.disabled = inp.value.trim().toUpperCase() !== word; });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !go.disabled) { ov.remove(); resolve(true); } });
+      ov.addEventListener('click', (e) => {
+        const b = e.target.closest('[data-v]');
+        if (!b || b.disabled) return;
+        ov.remove();
+        resolve(b.dataset.v === '1');
+      });
+      setTimeout(() => inp.focus(), 50);
+    });
+  }
+
+  async _resetBackup(ov) {
+    const note = ov.querySelector('[data-rs-bk]'), btn = ov.querySelector('[data-rs="backup"]');
+    btn.disabled = true; btn.textContent = 'Making the Backup…';
+    note.textContent = 'Everything, photos and videos included, in one .zip. This can take a while if there are a lot of videos.';
+    try {
+      const r = await this._hass.callWS({ type: 'crow_messenger/backup' });
+      const a = document.createElement('a');
+      a.href = this._hass.hassUrl ? this._hass.hassUrl(r.url) : r.url;
+      a.download = r.name; a.rel = 'noopener';
+      document.body.appendChild(a); a.click(); a.remove();
+      btn.textContent = 'Download Again';
+      note.innerHTML = `Downloading <b>${r.name}</b> (${fmtBytes(r.size) || '0 B'}). The link works for an hour. If nothing downloads, <a href="${a.href}" target="_blank" rel="noopener">open it here</a>.`;
+    } catch (err) {
+      btn.textContent = 'Download a Backup First';
+      note.textContent = `Couldn’t make the backup: ${err?.message || err}`;
+    }
+    btn.disabled = false;
+  }
+
+  // the app bar's places, in this card's order, with whether each is shown
+  _abOrder() {
+    const NAMES = { messages: ['Messages', 'mdi:message-outline'], contacts: ['Contacts', 'mdi:account-circle-outline'], feed: ['Feed', 'mdi:newspaper-variant-outline'] };
+    const on = Array.isArray(this._config.app_bar_items) ? this._config.app_bar_items : ['messages', 'contacts', 'feed'];
+    const all = this._abOrderAll || [...on, ...Object.keys(NAMES).filter(k => !on.includes(k))];
+    return all.filter(k => NAMES[k]).map(k => ({ id: k, name: NAMES[k][0], icon: NAMES[k][1], on: on.includes(k) }));
+  }
+
+  _renderAppBarItems() {
+    const el = this.shadowRoot?.getElementById('appbar-items');
+    if (!el) return;
+    const order = this._abOrder();
+    el.innerHTML = order.map((x, i) => `<div class="ab-row"><ha-icon icon="${x.icon}"></ha-icon><span class="ab-n">${x.name}</span>
+      <button type="button" data-abmv="-1" data-id="${x.id}" aria-label="Move ${x.name} up"${i === 0 ? ' disabled' : ''}>▲</button>
+      <button type="button" data-abmv="1" data-id="${x.id}" aria-label="Move ${x.name} down"${i === order.length - 1 ? ' disabled' : ''}>▼</button>
+      <input type="checkbox" data-abon="${x.id}" aria-label="Show ${x.name}"${x.on ? ' checked' : ''}></div>`).join('');
+  }
+
   _renderStorage(done) {
     const el = this.shadowRoot.getElementById('storage-stats');
     if (!el) return;
@@ -15872,7 +13514,7 @@ ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset', 'Put this card�
   }
 
   _onRetention(days) {
-    const cur = this._ints?.settings?.retention_days ?? 30;
+    const cur = this._ints?.settings?.retention_days ?? 0;
     const shorter = days !== 0 && (cur === 0 || days < cur);
     if (shorter) {
       this._pendingRetention = days;
@@ -15910,218 +13552,202 @@ window.__crowMessengerBuild = window.__crowMessengerBuild || CM_BUILD;
 // ── More Live Wallpapers ─────────────────────────────────────────────────────
 // Living Sky follows Home Assistant's sun.sun; the rest are scenes. Each draws on the same canvas loop as the screensavers (30 frames a second,
 // stopped when the chat isn't on screen, one still frame with Reduce Motion).
-const lwMix = (a, b, k) => { const x = fxHex(a), y = fxHex(b); return '#' + x.map((v, i) => Math.round(v + (y[i] - v) * Math.max(0, Math.min(1, k))).toString(16).padStart(2, '0')).join(''); };
-const LW_SKY = {
-  night: ['#020611', '#0a1430', '#1a2a52'], dawn: ['#27306a', '#8a6aa0', '#ffb59a'],
-  day: ['#2a6fd0', '#62a6e8', '#cfe6f7'], dusk: ['#1d1645', '#7d3c6e', '#ff9a5a'],
-};
-const lwSun = (hass) => {
-  const s = hass?.states?.['sun.sun']?.attributes;
-  if (s && typeof s.elevation === 'number') return { el: s.elevation, rising: !!s.rising };
-  const d = new Date(), h = d.getHours() + d.getMinutes() / 60;
-  return { el: 50 * Math.sin((h - 6) / 12 * Math.PI), rising: h < 12 };
-};
+
+
+
 // the sky's colours (top, middle, horizon) for where the sun is, and how much it's night
-const lwSky = (hass) => {
-  const { el, rising } = lwSun(hass), tw = rising ? LW_SKY.dawn : LW_SKY.dusk;
-  if (el <= -8) return { c: LW_SKY.night, el, night: 1 };
-  if (el < 0) { const k = (el + 8) / 8; return { c: LW_SKY.night.map((x, i) => lwMix(x, tw[i], k)), el, night: 1 - k }; }
-  if (el < 12) return { c: tw.map((x, i) => lwMix(x, LW_SKY.day[i], el / 12)), el, night: 0 };
-  return { c: LW_SKY.day, el, night: 0 };
-};
-const lwGrad = (ctx, W, H, stops) => {
-  const g = ctx.createLinearGradient(0, 0, 0, H);
-  stops.forEach(([o, c]) => g.addColorStop(o, c));
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-};
-const lwClouds = (n, W, H, top = 0.05, band = 0.45) => Array.from({ length: n }, () => ({
-  x: fxRnd(-0.3, 1.1) * W, y: fxRnd(top, top + band) * H, w: fxRnd(0.35, 0.7) * Math.min(W, 520), sp: fxRnd(4, 12),
-  puffs: Array.from({ length: 9 }, () => ({ dx: fxRnd(-0.45, 0.45), dy: fxRnd(-0.18, 0.12), r: fxRnd(0.3, 0.55) })),
-}));
-const lwDrawClouds = (ctx, clouds, dt, W, col, a) => {
-  for (const c of clouds) {
-    c.x += c.sp * dt;
-    if (c.x - c.w > W) c.x = -c.w;
-    for (const p of c.puffs) fxDraw(ctx, fxGlow(col), c.x + p.dx * c.w, c.y + p.dy * c.w, p.r * c.w, a);
-  }
-};
+
+
+
+
 // a dandelion seed, for summer
-Object.assign(CrowLiveWallpaper.prototype, {
-  _lwBox(stage, bg) {
-    const box = document.createElement('div');
-    box.className = 'cs-lwbox'; box.style.background = bg || '#000';
-    stage.appendChild(box);
-    return box;
-  },
-  _lwOnTap(fn) {
-    const host = this._saverEl?.parentElement;
-    if (!host) return;
-    const h = (e) => { const r = this._saverEl?.getBoundingClientRect(); if (r) fn(e.clientX - r.left, e.clientY - r.top); };
-    host.addEventListener('pointerdown', h, true);
-    (this._liveOff ||= []).push(() => host.removeEventListener('pointerdown', h, true));
+
+
+
+// ── Features loaded on first use ─────────────────────────────────────────────
+// Export as PDF, Games, Live Wallpapers and the People Map (and the Feed) are files of their own,
+// fetched the first time they're needed, so the card itself opens faster. Until a file arrives, a
+// screen shows "Loading…", a game in a chat shows a placeholder, and a Live Wallpaper starts a
+// moment later. Each file adds its methods to this card class; these stand-ins are what's here before.
+const LAZY_NAMES = { pdf: 'crow-pdf.js', games: 'crow-games.js', live: 'crow-live.js', people: 'crow-people.js', feed: 'crow-feed.js' };
+CrowMessengerCard.lazyReady = CrowMessengerCard.lazyReady || {};
+CrowMessengerCard.lazyCss = CrowMessengerCard.lazyCss || {};
+CrowMessengerCard.instances = CrowMessengerCard.instances || new Set();
+const LAZY_STUBS = {
+  _pdfFlat(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfFlat === LAZY_STUBS._pdfFlat) throw new Error('Not available'); return this._pdfFlat(...a); }); },
+  _ensureJsPDF(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._ensureJsPDF === LAZY_STUBS._ensureJsPDF) throw new Error('Not available'); return this._ensureJsPDF(...a); }); },
+  _ensurePdfJs(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._ensurePdfJs === LAZY_STUBS._ensurePdfJs) throw new Error('Not available'); return this._ensurePdfJs(...a); }); },
+  _renderPDFPages(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._renderPDFPages === LAZY_STUBS._renderPDFPages) throw new Error('Not available'); return this._renderPDFPages(...a); }); },
+  _pdfFonts(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfFonts === LAZY_STUBS._pdfFonts) throw new Error('Not available'); return this._pdfFonts(...a); }); },
+  _pdfDoc(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfDoc === LAZY_STUBS._pdfDoc) throw new Error('Not available'); return this._pdfDoc(...a); }); },
+  _pdfFooter(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfFooter === LAZY_STUBS._pdfFooter) throw new Error('Not available'); return this._pdfFooter(...a); }); },
+  _pdfImage(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfImage === LAZY_STUBS._pdfImage) throw new Error('Not available'); return this._pdfImage(...a); }); },
+  _pdfColour(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfColour === LAZY_STUBS._pdfColour) throw new Error('Not available'); return this._pdfColour(...a); }); },
+  _pg_pdf(data) { return this._lazyPage('pdf', 'pdf', data); },
+  _pg_pdfOptions(data) { return this._lazyPage('pdf', 'pdfOptions', data); },
+  _pdfConversation(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfConversation === LAZY_STUBS._pdfConversation) throw new Error('Not available'); return this._pdfConversation(...a); }); },
+  _pdfFieldRows(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfFieldRows === LAZY_STUBS._pdfFieldRows) throw new Error('Not available'); return this._pdfFieldRows(...a); }); },
+  _pdfContact(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfContact === LAZY_STUBS._pdfContact) throw new Error('Not available'); return this._pdfContact(...a); }); },
+  _pdfAddressBook(...a) { return this._lazy('pdf').then(() => { if (CrowMessengerCard.prototype._pdfAddressBook === LAZY_STUBS._pdfAddressBook) throw new Error('Not available'); return this._pdfAddressBook(...a); }); },
+  _openGames(...a) { return this._lazy('games').then(() => { if (CrowMessengerCard.prototype._openGames === LAZY_STUBS._openGames) throw new Error('Not available'); return this._openGames(...a); }); },
+  _gameHtml() { this._lazy('games').then(() => this._refresh('messages')).catch(() => {}); return '<div class="xcard lazy-ph">Loading…</div>'; },
+  _playClick(...a) { return this._lazy('games').then(() => { if (CrowMessengerCard.prototype._playClick === LAZY_STUBS._playClick) throw new Error('Not available'); return this._playClick(...a); }); },
+  _bigGameHtml(...a) { return this._lazy('games').then(() => { if (CrowMessengerCard.prototype._bigGameHtml === LAZY_STUBS._bigGameHtml) throw new Error('Not available'); return this._bigGameHtml(...a); }); },
+  _draughtsTap(...a) { return this._lazy('games').then(() => { if (CrowMessengerCard.prototype._draughtsTap === LAZY_STUBS._draughtsTap) throw new Error('Not available'); return this._draughtsTap(...a); }); },
+  _devState(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._devState === LAZY_STUBS._devState) throw new Error('Not available'); return this._devState(...a); }); },
+  _charging(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._charging === LAZY_STUBS._charging) throw new Error('Not available'); return this._charging(...a); }); },
+  _activity(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._activity === LAZY_STUBS._activity) throw new Error('Not available'); return this._activity(...a); }); },
+  _focusOn(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._focusOn === LAZY_STUBS._focusOn) throw new Error('Not available'); return this._focusOn(...a); }); },
+  _wifi(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._wifi === LAZY_STUBS._wifi) throw new Error('Not available'); return this._wifi(...a); }); },
+  _hereSince(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._hereSince === LAZY_STUBS._hereSince) throw new Error('Not available'); return this._hereSince(...a); }); },
+  _battery(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._battery === LAZY_STUBS._battery) throw new Error('Not available'); return this._battery(...a); }); },
+  _wxKey(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._wxKey === LAZY_STUBS._wxKey) throw new Error('Not available'); return this._wxKey(...a); }); },
+  _weatherAt(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._weatherAt === LAZY_STUBS._weatherAt) throw new Error('Not available'); return this._weatherAt(...a); }); },
+  _nearby(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._nearby === LAZY_STUBS._nearby) throw new Error('Not available'); return this._nearby(...a); }); },
+  _forgetPlace(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._forgetPlace === LAZY_STUBS._forgetPlace) throw new Error('Not available'); return this._forgetPlace(...a); }); },
+  _mapsUrl(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._mapsUrl === LAZY_STUBS._mapsUrl) throw new Error('Not available'); return this._mapsUrl(...a); }); },
+  _pg_people(data) { return this._lazyPage('people', 'people', data); },
+  _mapLib(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._mapLib === LAZY_STUBS._mapLib) throw new Error('Not available'); return this._mapLib(...a); }); },
+  _zoneIntro(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._zoneIntro === LAZY_STUBS._zoneIntro) throw new Error('Not available'); return this._zoneIntro(...a); }); },
+  _zoneFormHtml(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._zoneFormHtml === LAZY_STUBS._zoneFormHtml) throw new Error('Not available'); return this._zoneFormHtml(...a); }); },
+  _fillZoneForm(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._fillZoneForm === LAZY_STUBS._fillZoneForm) throw new Error('Not available'); return this._fillZoneForm(...a); }); },
+  _zoneEditor(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._zoneEditor === LAZY_STUBS._zoneEditor) throw new Error('Not available'); return this._zoneEditor(...a); }); },
+  _wireZoneForm(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._wireZoneForm === LAZY_STUBS._wireZoneForm) throw new Error('Not available'); return this._wireZoneForm(...a); }); },
+  _createZone(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._createZone === LAZY_STUBS._createZone) throw new Error('Not available'); return this._createZone(...a); }); },
+  _zoneStart(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._zoneStart === LAZY_STUBS._zoneStart) throw new Error('Not available'); return this._zoneStart(...a); }); },
+  _newZone(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._newZone === LAZY_STUBS._newZone) throw new Error('Not available'); return this._newZone(...a); }); },
+  _confirmMapsTo(...a) { return this._lazy('people').then(() => { if (CrowMessengerCard.prototype._confirmMapsTo === LAZY_STUBS._confirmMapsTo) throw new Error('Not available'); return this._confirmMapsTo(...a); }); },
+};
+Object.assign(CrowMessengerCard.prototype, LAZY_STUBS, {
+  _lazyUrl(mod) {
+    const fromServer = this._s?.modules?.[mod];
+    const url = fromServer || `/crow_messenger/${LAZY_NAMES[mod]}?v=${encodeURIComponent(CM_VERSION + '-' + CM_BUILD)}`;
+    return this._hass?.hassUrl ? this._hass.hassUrl(url) : url;
   },
 
-  // ── Living Sky: clouds drifting across a sky that follows the sun ──
-  _saverSky(stage) {
-    const box = this._lwBox(stage, '#0a1430');
-    let B = null;
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized) => {
-      if (resized || !B) B = { clouds: lwClouds(8, W, H, 0.05, 0.75), stars: Array.from({ length: Math.round(W * H / 2500) }, () => ({ x: fxRnd(0, W), y: fxRnd(0, H * 0.8), s: fxRnd(1.5, 4), ph: fxRnd(0, 6.3) })) };
-      const sky = lwSky(this._hass);
-      lwGrad(ctx, W, H, [[0, sky.c[0]], [0.6, sky.c[1]], [1, sky.c[2]]]);
-      ctx.globalCompositeOperation = 'lighter';
-      if (sky.night > 0.1) B.stars.forEach(s => fxDraw(ctx, fxGlow('#e6ecff', 0.2), s.x, s.y, s.s, (0.45 + 0.45 * Math.sin(t * 1.7 + s.ph)) * sky.night));
-      if (sky.night < 0.7) { const sy = H * (0.86 - Math.min(45, Math.max(-4, sky.el)) / 45 * 0.62); fxDraw(ctx, fxGlow(sky.el < 10 ? '#ffc58a' : '#fff6d8', 0.12), W * 0.3, sy, Math.min(W, H) * 0.9, 0.85 * (1 - sky.night)); }
-      else fxDraw(ctx, fxGlow('#dfe8ff', 0.25), W * 0.72, H * 0.18, Math.min(W, H) * 0.3, 0.75);
-      ctx.globalCompositeOperation = 'source-over';
-      const col = sky.night > 0.6 ? '#2a3550' : sky.el < 10 ? lwMix('#ffd2b8', '#c99ac2', sky.night) : '#ffffff';
-      lwDrawClouds(ctx, B.clouds, dt, W, col, sky.night > 0.6 ? 0.22 : 0.3);
-    });
+  // load one of the files (once for the whole page, whichever card asks first)
+  _lazy(mod) {
+    if (CrowMessengerCard.lazyReady[mod]) return Promise.resolve();
+    const all = CrowMessengerCard._lazyLoading = CrowMessengerCard._lazyLoading || {};
+    if (!all[mod]) {
+      window.__crowMessengerCard = CrowMessengerCard;
+      all[mod] = new Promise((resolve, reject) => {
+        const sc = document.createElement('script');
+        sc.src = this._lazyUrl(mod);
+        sc.async = true;
+        sc.onload = () => {
+          if (!CrowMessengerCard.lazyReady[mod]) { reject(new Error('Not available')); return; }
+          // its styles, for every card on the page
+          CrowMessengerCard.instances.forEach(c => c._lazyStyles?.());
+          resolve();
+        };
+        sc.onerror = () => reject(new Error('Couldn’t load that. Check your connection and try again.'));
+        document.head.appendChild(sc);
+      }).catch((err) => { delete all[mod]; throw err; });
+    }
+    return all[mod];
   },
 
-  // ── Snowfall ──
-  _saverSnowfall(stage) {
-    const box = this._lwBox(stage, '#0b1730');
-    let fl = null;
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized) => {
-      if (resized || !fl) fl = Array.from({ length: Math.round(W * H / 1500) }, () => { const z = Math.random(); return { x: fxRnd(0, W), y: fxRnd(0, H), z, layer: z < 0.5 ? 0 : z < 0.88 ? 1 : 2, ph: fxRnd(0, 6.3), rot: fxRnd(0, 6.3) }; });
-      lwGrad(ctx, W, H, [[0, '#08142b'], [0.6, '#16294b'], [1, '#2b4470']]);
-      for (const f of fl) {
-        const sp = [22, 48, 95][f.layer];
-        f.y += sp * dt; f.x += Math.sin(t * 0.6 + f.ph) * [8, 16, 26][f.layer] * dt; f.rot += dt * 0.4;
-        if (f.y > H + 30) { f.y = -30; f.x = fxRnd(0, W); }
-        if (f.layer === 0) fxDraw(ctx, fxGlow('#ffffff'), f.x, f.y, 5, 0.7);
-        else if (f.layer === 1) { ctx.save(); ctx.translate(f.x, f.y); ctx.rotate(f.rot); ctx.globalAlpha = 0.9; ctx.drawImage(fxFlake(), -7, -7, 14, 14); ctx.restore(); }
-        else fxDraw(ctx, fxGlow('#ffffff'), f.x, f.y, 34, 0.22);
-        if (f.layer === 1 && Math.sin(t * 3 + f.ph * 7) > 0.995) fxDraw(ctx, fxGlint('#dff0ff'), f.x, f.y, 26, 0.9);
-      }
-    });
+  _lazyStyles() {
+    if (!this.shadowRoot) return;
+    for (const [mod, css] of Object.entries(CrowMessengerCard.lazyCss)) {
+      if (!css || this.shadowRoot.querySelector(`style[data-lazy="${mod}"]`)) continue;
+      if (this.shadowRoot.querySelector('style')?.textContent.includes(css.slice(0, 200))) continue;
+      const st = document.createElement('style');
+      st.dataset.lazy = mod; st.textContent = css;
+      this.shadowRoot.appendChild(st);
+    }
   },
 
-  // ── Fireflies: a meadow at dusk ──
-  _saverFireflies(stage) {
-    const box = this._lwBox(stage, '#0b1430');
-    let B = null;
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized) => {
-      if (resized || !B) B = {
-        ff: Array.from({ length: Math.round(W * H / 9000) + 18 }, () => ({ x: fxRnd(0, W), y: fxRnd(0.25, 0.95) * H, z: fxRnd(0.4, 1.3), ax: fxRnd(0.15, 0.5), ay: fxRnd(0.15, 0.4), p1: fxRnd(0, 6.3), p2: fxRnd(0, 6.3), per: fxRnd(1.8, 3.6), off: fxRnd(0, 3), sp: fxRnd(10, 22) })),
-        blades: Array.from({ length: Math.round(W / 4) }, () => ({ x: fxRnd(0, W), h: fxRnd(0.06, 0.2) * H, ph: fxRnd(0, 6.3), w: fxRnd(1.5, 3.5) })),
-        stars: Array.from({ length: 40 }, () => ({ x: fxRnd(0, W), y: fxRnd(0, H * 0.45), s: fxRnd(1.5, 3), ph: fxRnd(0, 6.3) })),
-      };
-      lwGrad(ctx, W, H, [[0, '#0a1230'], [0.55, '#1a2448'], [0.8, '#13302a'], [1, '#081a12']]);
-      ctx.globalCompositeOperation = 'lighter';
-      B.stars.forEach(s => fxDraw(ctx, fxGlow('#e6ecff', 0.2), s.x, s.y, s.s, 0.35 + 0.35 * Math.sin(t * 1.5 + s.ph)));
-      fxDraw(ctx, fxGlow('#ffe9c0', 0.2), W * 0.78, H * 0.14, Math.min(W, H) * 0.25, 0.55);
-      ctx.globalCompositeOperation = 'source-over';
-      // long grass, swaying
-      ctx.strokeStyle = '#04140c'; ctx.lineCap = 'round';
-      B.blades.forEach(b => { ctx.lineWidth = b.w; ctx.beginPath(); ctx.moveTo(b.x, H + 2); ctx.quadraticCurveTo(b.x + Math.sin(t * 0.8 + b.ph) * 6, H - b.h * 0.5, b.x + Math.sin(t * 0.8 + b.ph) * 14, H - b.h); ctx.stroke(); });
-      ctx.globalCompositeOperation = 'lighter';
-      B.ff.forEach(f => {
-        f.x += (Math.cos(t * f.ax + f.p1) * f.sp + Math.sin(t * 1.3 + f.p2) * 5) * dt;
-        f.y += (Math.sin(t * f.ay + f.p2) * f.sp * 0.6 + Math.cos(t * 1.1 + f.p1) * 4) * dt;
-        if (f.x < -20) f.x = W + 20; if (f.x > W + 20) f.x = -20;
-        const ph = ((t + f.off) % f.per) / f.per, a = 0.1 + 0.9 * Math.pow(Math.max(0, Math.sin(ph * Math.PI)), 3);
-        fxDraw(ctx, fxGlow('#C8FF5A'), f.x, f.y, 42 * f.z, a * 0.5);
-        fxDraw(ctx, fxGlow('#F4FFB8', 0.2), f.x, f.y, 8 * f.z, a);
-      });
-      ctx.globalCompositeOperation = 'source-over';
-    });
+  // a screen from one of the files: "Loading…" first, then the real screen in its place
+  _lazyPage(mod, type, data) {
+    const el = this._el(`<div><div class="scroll"><div class="empty lazy-msg" style="padding-top:140px">Loading…</div></div><div class="top"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><div></div></div></div>`);
+    const page = { el };
+    el.addEventListener('click', (e) => { if (!page.real && e.target.closest('[data-a="back"]')) this._back(); });
+    this._lazy(mod).then(() => {
+      if (!this._stack.includes(page)) return;
+      const real = this[`_pg_${type}`](data);
+      real.el.classList.add('page');
+      real.el.style.display = el.style.display;
+      el.replaceWith(real.el);
+      const keep = { type: page.type, data: page.data };
+      Object.assign(page, real, keep, { real: true });
+      page.refresh?.('all');
+      if (this._stack[this._stack.length - 1] === page) page.onShow?.();
+    }).catch((err) => { const msg = el.querySelector('.lazy-msg'); if (msg) msg.textContent = err.message || 'Couldn’t load that.'; });
+    return page;
   },
 
-  // ── Deep Space: drifting through stars and nebulae ──
-  _saverSpace(stage) {
-    const box = this._lwBox(stage, '#02020a');
-    let B = null;
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized) => {
-      if (resized || !B) B = {
-        stars: Array.from({ length: 320 }, () => ({ x: fxRnd(-1, 1), y: fxRnd(-1, 1), z: fxRnd(0.1, 1), c: fxPick(['#ffffff', '#cfe0ff', '#ffe6c8', '#ffd0f0']) })),
-        neb: [['#7b3fe4', 0.3, 0.3], ['#1fb5c9', 0.75, 0.4], ['#e04fa0', 0.4, 0.75], ['#3050ff', 0.8, 0.8], ['#8a2be2', 0.15, 0.85]].map(([c, x, y]) => ({ c, x, y, ph: fxRnd(0, 6.3) })),
-      };
-      ctx.fillStyle = '#02020a'; ctx.fillRect(0, 0, W, H);
-      ctx.globalCompositeOperation = 'lighter';
-      const R = Math.max(W, H);
-      B.neb.forEach(n => fxDraw(ctx, fxGlow(n.c), (n.x + Math.sin(t * 0.03 + n.ph) * 0.08) * W, (n.y + Math.cos(t * 0.025 + n.ph) * 0.06) * H, R * 0.9, 0.2));
-      const cx = W / 2, cy = H / 2, f = R * 0.45;
-      B.stars.forEach(s => {
-        s.z -= 0.035 * dt;
-        if (s.z <= 0.05) { s.z = 1; s.x = fxRnd(-1, 1); s.y = fxRnd(-1, 1); }
-        const x = cx + s.x / s.z * f * 0.5, y = cy + s.y / s.z * f * 0.5;
-        if (x < -10 || x > W + 10 || y < -10 || y > H + 10) { s.z = 1; return; }
-        fxDraw(ctx, fxGlow(s.c, 0.25), x, y, Math.min(9, 1.6 / s.z), Math.min(1, (1 - s.z) * 1.6));
-      });
-      ctx.globalCompositeOperation = 'source-over';
-    });
+  // a Live Wallpaper now if its file is here, or a stand-in that starts it as soon as it arrives
+  _liveWallpaper(el, kind) {
+    const Live = CrowMessengerCard.CrowLiveWallpaper;
+    if (Live) return new Live(el, kind, this._hass);
+    const proxy = {
+      stopped: false, real: null, _h: this._hass,
+      stop() { this.stopped = true; this.real?.stop(); },
+      set hass(h) { this._h = h; if (this.real) this.real.hass = h; },
+      get hass() { return this._h; },
+      get _saverEl() { return this.real?._saverEl; },
+    };
+    this._lazy('live').then(() => { if (!proxy.stopped) proxy.real = new CrowMessengerCard.CrowLiveWallpaper(el, kind, proxy._h); }).catch(() => {});
+    return proxy;
   },
-
-  // ── Fairy Lights ──
-  _saverFairy(stage) {
-    const box = this._lwBox(stage, '#120b07');
-    let B = null;
-    const WARM = ['#FFD9A0', '#FFE7C2', '#FFCB80', '#FFD9A0', '#FFB870'];
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized) => {
-      if (resized || !B) B = {
-        strings: [0.12, 0.34, 0.58, 0.8].map((y, i) => ({ y: y * H, sag: fxRnd(0.06, 0.1) * H, ph: fxRnd(0, 6.3), bulbs: Array.from({ length: Math.round(W / 30) + 2 }, () => ({ c: Math.random() < 0.15 ? fxPick(['#FF6B6B', '#6BCBFF', '#9BFF8A', '#FF9DE2']) : fxPick(WARM), ph: fxRnd(0, 6.3), sp: fxRnd(0.8, 2.2) })), back: i % 2 })),
-        bokeh: Array.from({ length: 14 }, () => ({ x: fxRnd(0, W), y: fxRnd(0, H), s: fxRnd(40, 120), c: fxPick(['#FFB870', '#FFD9A0', '#FF9466']), ph: fxRnd(0, 6.3) })),
-      };
-      lwGrad(ctx, W, H, [[0, '#0d0806'], [1, '#22150d']]);
-      ctx.globalCompositeOperation = 'lighter';
-      B.bokeh.forEach(b => fxDraw(ctx, fxBokeh(b.c), b.x + Math.sin(t * 0.2 + b.ph) * 10, b.y, b.s * 0.8, 0.12 + 0.07 * Math.sin(t * 0.6 + b.ph)));
-      ctx.globalCompositeOperation = 'source-over';
-      B.strings.forEach(s => {
-        const n = s.bulbs.length, sag = s.sag * (1 + 0.05 * Math.sin(t * 0.6 + s.ph));
-        const at = (u) => [u * (W + 40) - 20, s.y + sag * (1 - Math.pow(2 * u - 1, 2))];
-        ctx.globalAlpha = 0.8; ctx.strokeStyle = '#2a1d12'; ctx.lineWidth = 1.4; ctx.beginPath();
-        for (let k = 0; k <= 40; k++) { const [x, y] = at(k / 40); if (k) ctx.lineTo(x, y); else ctx.moveTo(x, y); }
-        ctx.stroke();
-        ctx.globalCompositeOperation = 'lighter';
-        s.bulbs.forEach((b, i) => {
-          const [x, y] = at((i + 0.5) / n), tw = 0.55 + 0.45 * Math.sin(t * b.sp + b.ph);
-          fxDraw(ctx, fxGlow(b.c), x, y + 5, 44, 0.5 * tw);
-          fxDraw(ctx, fxGlow(b.c, 0.2), x, y + 5, 9, 0.6 + 0.4 * tw);
-        });
-        ctx.globalCompositeOperation = 'source-over';
-      });
-      ctx.globalAlpha = 1;
-    });
-  },
-
-  // ── Liquid Colour: the conversation's own colours, slowly flowing into each other ──
-  _saverLiquid(stage) {
-    const box = this._lwBox(stage, '#111');
-    let off = null, og = null, cols = null;
-    const blobs = Array.from({ length: 5 }, (_, i) => ({ fx: fxRnd(0.03, 0.07), fy: fxRnd(0.03, 0.07), px: i * 1.26 + fxRnd(0, 0.6), py: i * 2.1 + fxRnd(0, 0.6), r: fxRnd(0.26, 0.4), k: i }));
-    this._saverCanvasLoop(box, (ctx, t, dt, W, H, resized) => {
-      const q = 6;
-      if (resized || !off) { [off, og] = fxCanvas(Math.ceil(W / q), Math.ceil(H / q)); cols = null; }
-      if (!cols || ((t * 10) | 0) % 50 === 0) {
-        const cs = getComputedStyle(this._saverEl || document.body), v = (k, d) => (cs.getPropertyValue(k).trim() || d);
-        const acc = v('--cm-accent', '#0A84FF'), sent = v('--cm-sent', acc), bg = v('--cm-bg', '#000000');
-        const ok = (c) => /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.test(c);
-        const a = ok(acc) ? acc : '#0A84FF', s2 = ok(sent) ? sent : a, base = ok(bg) ? bg : '#000000';
-        const dark = fxHex(base).reduce((x, y) => x + y, 0) < 380;
-        cols = { base: dark ? lwMix(base, a, 0.06) : lwMix(base, a, 0.05), list: [a, lwMix(s2, '#BF5AF2', 0.55), lwMix(a, '#64D2FF', 0.6), lwMix(s2, '#FF375F', 0.5), lwMix(a, '#30D158', 0.45)], dark };
-      }
-      const w = off.width, h = off.height;
-      og.globalCompositeOperation = 'source-over'; og.globalAlpha = 1; og.fillStyle = cols.base; og.fillRect(0, 0, w, h);
-      blobs.forEach(b => {
-        const x = (0.5 + 0.42 * Math.sin(t * b.fx * 6.283 + b.px)) * w, y = (0.5 + 0.42 * Math.cos(t * b.fy * 6.283 + b.py)) * h, r = b.r * Math.max(w, h);
-        const g = og.createRadialGradient(x, y, 0, x, y, r);
-        g.addColorStop(0, fxRgba(cols.list[b.k], cols.dark ? 0.6 : 0.45)); g.addColorStop(0.55, fxRgba(cols.list[b.k], cols.dark ? 0.22 : 0.16)); g.addColorStop(1, fxRgba(cols.list[b.k], 0));
-        og.fillStyle = g; og.fillRect(0, 0, w, h);
-      });
-      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(off, 0, 0, w * q, h * q);
-    }, { fps: 20 });
-  },
-
 });
+
+// What the Feed's own file (crow-feed.js) borrows from the card, so both look and behave the same
+CrowMessengerCard.kit = { esc, clamp, isApple, fmtBytes, fmtDur, hashHue, initials, locale, fmtTime, fmtListDate, loadImage, resizeToBlob, videoInfo, copyImage, linkTarget, openExternal, MISSING_Q, ICON, MICON, FEED_ICON, HA_ID, STICKER_EMOJI, contactName, CM_LIVE, FM_ICON, FM_NEARBY, FM_NEAR_KEY, GAME_NAME, PDF_FONT_BASE, PDF_IMG_RUN, PICON, cmLiveInfo, contactLetter, copyText, downloadBlob, fmtLongDate, formatAddress, fxBokeh, fxCanvas, fxDraw, fxFlake, fxGlint, fxGlow, fxHex, fxPick, fxRgba, fxRnd, haversine, hour12, isAndroid, telValue, timeAgoShort };
+
+// ── The Feed card: the household Feed on its own, or as a photo slideshow for a wall tablet ──
+class CrowFeedCard extends CrowMessengerCard {
+  static getConfigElement() { return document.createElement('crow-feed-card-editor'); }
+  static getStubConfig() { return { mode: 'feed' }; }
+  setConfig(config) { super.setConfig({ fullscreen_button: false, ...(config || {}), feed_only: true }); }
+}
+
+class CrowFeedCardEditor extends HTMLElement {
+  setConfig(config) { this._config = { ...(config || {}) }; this._render(); }
+  set hass(h) { this._hass = h; }
+  _render() {
+    const c = this._config || {};
+    const sel = (v, cur) => v === cur ? ' selected' : '';
+    this.innerHTML = `<div style="display:grid;gap:14px;padding:4px 0">
+      <label style="display:grid;gap:6px">Show
+        <select data-k="mode" style="padding:8px;border-radius:8px">
+          <option value="feed"${sel('feed', c.mode || 'feed')}>The Feed</option>
+          <option value="slideshow"${sel('slideshow', c.mode)}>Photo slideshow (for a wall tablet)</option>
+        </select></label>
+      <label style="display:grid;gap:6px">Seconds per photo (slideshow)
+        <input data-k="interval" type="number" min="3" max="600" value="${Number(c.interval) || 8}" style="padding:8px;border-radius:8px"></label>
+      <label style="display:grid;gap:6px">Slideshow photos from the last
+        <select data-k="slideshow_days" style="padding:8px;border-radius:8px">
+          ${[[7, 'Week'], [30, 'Month'], [365, 'Year'], [0, 'Everything kept']].map(([v, n]) => `<option value="${v}"${sel(v, c.slideshow_days ?? 30)}>${n}</option>`).join('')}
+        </select></label>
+      <label style="display:flex;gap:10px;align-items:center"><input data-k="feed_nav" type="checkbox"${c.feed_nav === false ? '' : ' checked'}> Navigation bar at the bottom (Home, Videos, Groups, Events, Notifications, Menu)</label>
+      <label style="display:grid;gap:6px">Card height (pixels, or fill)
+        <input data-k="card_height" type="text" value="${c.card_height ?? 700}" style="padding:8px;border-radius:8px"></label>
+      <label style="display:grid;gap:6px">Appearance
+        <select data-k="appearance" style="padding:8px;border-radius:8px">
+          ${['auto', 'light', 'dark'].map(v => `<option value="${v}"${sel(v, c.appearance || 'auto')}>${v[0].toUpperCase() + v.slice(1)}</option>`).join('')}
+        </select></label>
+      <div style="font-size:12px;opacity:.7">The Feed shows what's shared with whoever is signed in on this device. On a shared wall tablet, sign it in as a user that only sees posts shared with everyone.</div>
+    </div>`;
+    this.querySelectorAll('[data-k]').forEach(inp => inp.addEventListener('change', () => {
+      const k = inp.dataset.k;
+      let v = inp.type === 'checkbox' ? inp.checked : inp.value;
+      if (k === 'interval' || k === 'slideshow_days') v = Number(v);
+      if (k === 'card_height' && /^\d+$/.test(v)) v = Number(v);
+      this._config = { ...this._config, [k]: v };
+      this.dispatchEvent(new CustomEvent('config-changed', { detail: { config: this._config }, bubbles: true, composed: true }));
+    }));
+  }
+}
 
 // Home Assistant can swap in a new custom element registry while it starts up, and a card
 // defined before that happens isn't found (the card picker then spins forever). So the card
 // checks again over the first few seconds, and defines itself in whichever registry is current.
 const defineCrowMessenger = () => {
-  [['crow-messenger-card', CrowMessengerCard], ['crow-messenger-card-editor', CrowMessengerCardEditor]].forEach(([name, cls]) => {
+  [['crow-messenger-card', CrowMessengerCard], ['crow-messenger-card-editor', CrowMessengerCardEditor],
+   ['crow-feed-card', CrowFeedCard], ['crow-feed-card-editor', CrowFeedCardEditor]].forEach(([name, cls]) => {
     const reg = window.customElements;
     if (reg.get(name)) return;
     try { reg.define(name, cls); } catch (e) {
@@ -16138,6 +13764,15 @@ if (!window.customCards.some(c => c.type === 'crow-messenger-card')) {
     type: 'crow-messenger-card',
     name: 'Crow Messenger',
     description: 'Private messages, group chats, attachments and contacts between the people in your home.',
+    preview: false,
+    documentationURL: 'https://github.com/jamesmcginnis/crow-messenger',
+  });
+}
+if (!window.customCards.some(c => c.type === 'crow-feed-card')) {
+  window.customCards.push({
+    type: 'crow-feed-card',
+    name: 'Crow Feed',
+    description: 'The household Feed from Crow Messenger on its own, or as a photo slideshow for a wall tablet.',
     preview: false,
     documentationURL: 'https://github.com/jamesmcginnis/crow-messenger',
   });
