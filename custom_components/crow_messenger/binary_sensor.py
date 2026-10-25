@@ -11,7 +11,8 @@ from .entity import CrowMessengerEntity, EntityHub, setup_platform
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     setup_platform(hass, entry, add, lambda hub, uid: [NewMessagesSensor(hub, uid), ActiveSensor(hub, uid),
-                                                       RingingSensor(hub, uid)])
+                                                       RingingSensor(hub, uid), TypingSensor(hub, uid),
+                                                       LiveLocationSensor(hub, uid), BirthdaySensor(hub, uid)])
 
 
 class NewMessagesSensor(CrowMessengerEntity, BinarySensorEntity):
@@ -54,3 +55,44 @@ class RingingSensor(CrowMessengerEntity, BinarySensorEntity):
     def extra_state_attributes(self):
         by = self.stats["ringing_by"]
         return {"rung_by": [self.hub.name(u) for u in by] or None}
+
+
+class TypingSensor(CrowMessengerEntity, BinarySensorEntity):
+    """On while they're typing in any chat (never which). Unknown for anyone who hides their activity,
+    and unavailable when switched off in the editor."""
+    _attr_icon = "mdi:keyboard-outline"
+
+    def __init__(self, hub: EntityHub, uid: str) -> None:
+        super().__init__(hub, uid, "typing")
+
+    @property
+    def available(self) -> bool:
+        return super().available and (self.hub.messenger.settings.get("sensors") or {}).get("typing") is not False
+
+    @property
+    def is_on(self) -> bool | None:
+        return self.stats.get("typing")
+
+
+class LiveLocationSensor(CrowMessengerEntity, BinarySensorEntity):
+    """On while they're sharing a Live Location in a chat."""
+    _attr_icon = "mdi:map-marker-radius"
+
+    def __init__(self, hub: EntityHub, uid: str) -> None:
+        super().__init__(hub, uid, "live_location")
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.stats.get("live_location"))
+
+
+class BirthdaySensor(CrowMessengerEntity, BinarySensorEntity):
+    """On all day on their birthday, if they share it in the Feed."""
+    _attr_icon = "mdi:cake-variant"
+
+    def __init__(self, hub: EntityHub, uid: str) -> None:
+        super().__init__(hub, uid, "birthday")
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.stats.get("birthday"))

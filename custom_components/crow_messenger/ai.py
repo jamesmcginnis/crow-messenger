@@ -31,7 +31,14 @@ from .manager import Messenger, MessengerError
 _LOGGER = logging.getLogger(__name__)
 
 AI_TIMEOUT = 90
-FEATURES = ("assistant", "replies", "writing", "catchup", "translate", "actions", "photos", "ask")
+FEATURES = ("assistant", "replies", "writing", "catchup", "translate", "actions", "photos", "ask",
+            # the Feed (feedai.py)
+            "feed_writing", "feed_captions", "feed_comments", "feed_smart", "feed_albums", "feed_catchup",
+            "feed_threads", "feed_translate", "feed_photos", "feed_search", "feed_memories", "feed_kindness", "feed_ask")
+# features that start off (everything else starts on once AI Features are on)
+OFF_UNTIL_ON = ("feed_search",)
+# features that need an AI that can look at photos
+NEEDS_PHOTOS = ("photos", "feed_captions", "feed_albums", "feed_photos", "feed_search")
 
 REWRITE_STYLES = {
     "proofread": "Correct the spelling, grammar and punctuation. Keep the wording, meaning and tone the same.",
@@ -48,7 +55,10 @@ def ai_settings(messenger: Messenger) -> dict:
 
 def feature_on(messenger: Messenger, feature: str) -> bool:
     ai = ai_settings(messenger)
-    return bool(ai.get("enabled")) and (ai.get("features", {}) or {}).get(feature, True) is not False
+    want = (ai.get("features", {}) or {}).get(feature)
+    if want is None:
+        want = feature not in OFF_UNTIL_ON
+    return bool(ai.get("enabled")) and want is not False
 
 
 def task_entity(hass: HomeAssistant, messenger: Messenger) -> str | None:
@@ -83,7 +93,7 @@ def capabilities(hass: HomeAssistant, messenger: Messenger) -> dict:
         on = feature_on(messenger, f)
         if f == "assistant":
             out[f] = on
-        elif f == "photos":
+        elif f in NEEDS_PHOTOS:
             out[f] = on and task_supports_photos(hass, entity)
         else:
             out[f] = on and bool(entity)

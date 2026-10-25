@@ -183,6 +183,28 @@ class PushMediaView(HomeAssistantView):
         return await _file_response(self.hass, messenger.attachment_path(att, thumb), att, thumb)
 
 
+class BackupView(HomeAssistantView):
+    """GET a backup made by an administrator (Reset → Download a Backup First), from a signed link
+    that works for an hour."""
+
+    url = "/api/crow_messenger/backup/{token}/{exp}/{sig}"
+    name = "api:crow_messenger:backup"
+    requires_auth = False
+
+    def __init__(self, hass: HomeAssistant) -> None:
+        self.hass = hass
+
+    async def get(self, request: web.Request, token: str, exp: str, sig: str) -> web.StreamResponse:
+        from .reset import BACKUP_PREFIX, backup_path
+        path = backup_path(self.hass, _messenger(self.hass), token, exp, sig)
+        if not path:
+            return web.Response(status=404, text="This backup link has expired. Make a new one from the card editor.")
+        name = token[token.find(BACKUP_PREFIX):] if BACKUP_PREFIX in token else "crow-messenger-backup.zip"
+        return web.FileResponse(path, headers={"Content-Type": "application/zip",
+                                               "Content-Disposition": f'attachment; filename="{name}"',
+                                               "Cache-Control": "no-store"})
+
+
 class PushImageView(HomeAssistantView):
     """GET a notification picture from a signed, expiring link: a sender's photo, a sticker,
     a link's preview image or a map of a shared place."""

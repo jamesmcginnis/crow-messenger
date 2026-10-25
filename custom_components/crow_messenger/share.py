@@ -2,9 +2,11 @@
 
 Tap Share in any app and choose Home Assistant: the Companion app fires
 `mobile_app.share` with the link (or text) and the person signed in on that
-phone. Crow Messenger keeps it for a while, sends that phone a "Send link to…"
-notification, and tapping it opens the card on a Send To sheet where the chat
-is chosen. Nothing is posted until then, so things shared to Home Assistant
+phone. Crow Messenger keeps it for a while and sends that phone a notification
+with Send in a Chat and Post on a Page (when the Feed is on): the first opens the
+card on a Send To sheet where the chat is chosen, the second opens the Feed on New
+Post with the link filled in. Tapping the notification itself opens whichever the
+card's Open in setting says (Messages or Feed). Nothing is posted until then, so things shared to Home Assistant
 for other reasons never end up in a chat.
 
 iPhone / iPad: `url` or `text`, plus `entered` (typed in the share box) and
@@ -132,6 +134,7 @@ async def async_on_share(hass: HomeAssistant, messenger: Messenger, event: Event
                 preview = await messenger._async_fetch_preview(item["url"])
             if preview:
                 item["preview"] = preview
+            messenger.feed.link_put(item["url"], preview)
         except Exception as err:  # noqa: BLE001 - a preview is a nice-to-have
             _LOGGER.debug("Crow Messenger share preview for %s: %s", item["url"], err)
 
@@ -166,27 +169,36 @@ async def _async_notify(hass: HomeAssistant, messenger: Messenger, item: dict, d
         _LOGGER.info("Crow Messenger: something was shared but that person has no phone to ask who it's for")
         return
     preview = item.get("preview") or {}
+    # with the Feed on, it can go to a chat or on someone's page; without it, only to a chat
+    feed_on = messenger._feature("feed")
+    what = "link" if item["url"] else ""
+    if feed_on:
+        title = f"Send or post this {what}".replace("  ", " ").strip()
+    else:
+        title = "Send link to…" if item["url"] else "Send to…"
     if item["url"]:
-        title = "Send link to…"
         body = preview.get("title") or item["title"] or item["url"]
         site = preview.get("site") or ""
         if site and site not in body:
             body = f"{body} · {site}"
     else:
-        title = "Send to…"
         body = item["text"] if len(item["text"]) <= 160 else item["text"][:159] + "…"
-    link = f"{dashboard_path(messenger, item['uid'])}?crow_share={item['id']}"
+    base = f"{dashboard_path(messenger, item['uid'])}?crow_share={item['id']}"
+    link = base                       # tapping it: the card's Open in setting decides
+    to_chat = f"{base}&crow_to=chat"  # Send in a Chat
+    to_page = f"{base}&crow_to=feed"  # Post on a Page
     tag = f"{TAG_PREFIX}{item['id']}"
     sound = (messenger.settings.get("notifications", {}) or {}).get("sound", True)
+    discard = {"action": f"{DISCARD_PREFIX}{item['id']}", "title": "Discard"}
     for device in devices:
         payload: dict[str, Any] = {"tag": tag, "group": "crow_share"}
         if device["platform"] == "ios":
             payload["url"] = link
             payload["push"] = {"thread-id": "crow_share", "sound": "default" if sound else "none"}
             payload["actions"] = [
-                {"action": "URI", "title": "Choose Chat", "uri": link, "icon": "sfsymbols:paperplane"},
-                {"action": f"{DISCARD_PREFIX}{item['id']}", "title": "Discard", "destructive": True,
-                 "activationMode": "background", "icon": "sfsymbols:trash"},
+                {"action": "URI", "title": "Send in a Chat", "uri": to_chat, "icon": "sfsymbols:bubble.left.and.bubble.right"},
+                *([{"action": "URI", "title": "Post on a Page", "uri": to_page, "icon": "sfsymbols:newspaper"}] if feed_on else []),
+                {**discard, "destructive": True, "activationMode": "background", "icon": "sfsymbols:trash"},
             ]
         else:
             payload["clickAction"] = link
@@ -195,9 +207,11 @@ async def _async_notify(hass: HomeAssistant, messenger: Messenger, item: dict, d
             payload["priority"] = "high"
             payload["ttl"] = 0
             payload["notification_icon"] = "mdi:share-variant"
+            # Android shows three buttons at most
             payload["actions"] = [
-                {"action": "URI", "title": "Choose Chat", "uri": link},
-                {"action": f"{DISCARD_PREFIX}{item['id']}", "title": "Discard"},
+                {"action": "URI", "title": "Send in a Chat", "uri": to_chat},
+                *([{"action": "URI", "title": "Post on a Page", "uri": to_page}] if feed_on else []),
+                discard,
             ]
         try:
             await hass.services.async_call("notify", device["service"],

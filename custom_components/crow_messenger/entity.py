@@ -29,12 +29,19 @@ from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dis
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.event import async_call_later, async_track_time_interval
 
+from homeassistant.util import dt as dt_util
+
 from .const import DOMAIN, HA_SENDER_ID, HA_SENDER_NAME
 
 if TYPE_CHECKING:  # pragma: no cover
     from .manager import Messenger
 
 SIGNAL_PERSON_UPDATED = f"{DOMAIN}_person_updated"   # + _<user id>
+SIGNAL_HOUSEHOLD_UPDATED = f"{DOMAIN}_household_updated"
+HOUSEHOLD_DEBOUNCE = 5.0
+# Waiting on reply: someone messaged you and you haven't answered for this long
+WAIT_MINUTES = 60
+DAY_MS = 86_400_000
 SIGNAL_PEOPLE_CHANGED = f"{DOMAIN}_people_changed"   # someone added to or removed from Home Assistant
 DEBOUNCE = 1.0
 REFRESH_EVERY = timedelta(minutes=5)
@@ -93,6 +100,49 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
             if x.get("type") == "ring" and ((x.get("ring") or {}).get("state") or {}).get(uid) == "ringing":
                 ringing_by.append(x["sender"])
     hidden_activity = m.profile_for(uid).get("activity") is False
+    now = int(dt_util.utcnow().timestamp() * 1000)
+    sensors = (m.settings.get("sensors") or {})
+    # Waiting on reply: chats (not muted) where the last word is someone else's and it's been a while
+    waiting, oldest = 0, None
+    for t in m.data.get("threads", {}).values():
+        if uid not in t["participants"] or len(t["participants"]) < 2 or m.is_muted(t, uid):
+            continue
+        msgs = [x for x in m._visible_messages(t, uid) if x.get("type") != "system" and x.get("note") != "deleted"]
+        if not msgs or msgs[-1]["sender"] in (uid, HA_SENDER_ID):
+            continue
+        last_theirs = msgs[-1]["ts"]
+        if now - last_theirs >= WAIT_MINUTES * 60_000:
+            waiting += 1
+            oldest = min(oldest or last_theirs, last_theirs)
+    # what's waiting to happen for them: Remind Me Later and Send Later
+    reminders = sum(1 for r in m.data.get("reminders", []) if r.get("uid") == uid)
+    send_later = sum(1 for x in m.data.get("scheduled", []) if x.get("uid") == uid)
+    # sharing a Live Location in a chat right now
+    live = False
+    for t in m.data.get("threads", {}).values():
+        if uid not in t["participants"]:
+            continue
+        for x in m.data["messages"].get(t["id"], [])[-200:]:
+            loc = x.get("location") or {}
+            if x["sender"] == uid and loc.get("live_until", 0) > now and not loc.get("stopped"):
+                live = True
+                break
+        if live:
+            break
+    feed = getattr(m, "feed", None)
+    last_post = posts_week = None
+    birthday = False
+    feed_notif = 0
+    if feed and feed.enabled():
+        mine = [p["ts"] for p in feed.data.get("posts", {}).values()
+                if p["author"] == uid and not p.get("scheduled_at") and p.get("kind", "post") not in ("birthday", "milestone", "review")]
+        last_post = max(mine) if mine else None
+        posts_week = sum(1 for ts in mine if ts > now - 7 * DAY_MS)
+        person = feed.data.get("people", {}).get(uid) or {}
+        b = person.get("birthday") or ""
+        birthday = bool(person.get("share_birthday")) and b.endswith(dt_util.now().strftime("%m-%d")) and feed.opt("birthdays")
+        feed_notif = feed.notif_unread(uid)
+    presence = None if hidden_activity else m.presence_for(uid)
     return {
         "unread": unread,
         "unread_muted": unread_muted,
@@ -100,6 +150,62 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
         "latest": latest,
         "ringing_by": list(dict.fromkeys(ringing_by)),
         "online": None if hidden_activity else m.is_online(uid),
+        # posts in the Feed shared with them that they haven't seen yet (never what they say)
+        "new_posts": m.feed.unseen(uid) if getattr(m, "feed", None) else 0,
+        "feed_notif": feed_notif,
+        # when they last had the card open (now, while they do) - unknown for anyone hiding their activity
+        "last_seen": None if presence is None else (now if presence.get("online") else presence.get("last")),
+        "typing": None if hidden_activity or sensors.get("typing") is False else m.is_typing(uid),
+        "viewing": None if hidden_activity or sensors.get("viewing") is False else m.viewing(uid),
+        "waiting": waiting, "waiting_since": oldest,
+        "reminders": reminders + send_later, "remind_me_later": reminders, "send_later": send_later,
+        "live_location": live,
+        "last_post": last_post, "posts_week": posts_week or 0,
+        "birthday": birthday,
+    }
+
+
+def household_stats(m: "Messenger") -> dict[str, Any]:
+    """The household's numbers: how many messages, how much storage, the next event, who's online."""
+    now_dt = dt_util.now()
+    now = int(now_dt.timestamp() * 1000)
+    day0 = int(now_dt.replace(hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+    week0 = day0 - now_dt.weekday() * DAY_MS
+    month0 = int(now_dt.replace(day=1, hour=0, minute=0, second=0, microsecond=0).timestamp() * 1000)
+    today = week = month = 0
+    active = 0
+    for tid, msgs in m.data.get("messages", {}).items():
+        last = 0
+        for x in msgs:
+            if x.get("type") == "system":
+                continue
+            ts = x.get("ts", 0)
+            last = max(last, ts)
+            if ts >= month0:
+                month += 1
+                if ts >= week0:
+                    week += 1
+                if ts >= day0:
+                    today += 1
+        if last > now - DAY_MS:
+            active += 1
+    store = m.storage_stats()
+    # the next event in the Feed - only ones shared with everyone, as anyone can see a sensor
+    nxt = None
+    feed = getattr(m, "feed", None)
+    if feed and feed.enabled():
+        for p in feed.data.get("posts", {}).values():
+            ev = p.get("event") if p.get("kind") == "event" else None
+            if not ev or p["audience"].get("type") != "everyone" or p.get("scheduled_at"):
+                continue
+            start = ev.get("start") or 0
+            if start > now - 3600_000 and (nxt is None or start < nxt[1]["start"]):
+                nxt = (p, ev)
+    online = [u for u in {s.uid for s in m._subs.values()} if m.profile_for(u).get("activity") is not False and m.is_online(u)]
+    return {
+        "today": today, "week": week, "month": month, "active_chats": active,
+        "storage_bytes": store["bytes"], "storage_count": store["count"], "storage_oldest": store.get("oldest"),
+        "next_event": nxt, "online": online,
     }
 
 
@@ -112,6 +218,7 @@ class EntityHub:
         # user id -> {"name": shared name, "ha_name": their Home Assistant name}
         self.people: dict[str, dict] = {}
         self._stats: dict[str, dict] = {}
+        self._house: dict | None = None
         self._timers: dict[str, Callable[[], None]] = {}
         self._started = False
 
@@ -177,12 +284,34 @@ class EntityHub:
             async_dispatcher_send(self.hass, f"{SIGNAL_PERSON_UPDATED}_{uid}")
 
         self._timers[uid] = async_call_later(self.hass, DEBOUNCE, _go)
+        self.household_changed()
 
     @callback
     def everyone_changed(self) -> None:
         for uid in self.people:
             self._stats[uid] = person_stats(self.messenger, uid)
             async_dispatcher_send(self.hass, f"{SIGNAL_PERSON_UPDATED}_{uid}")
+        self._house = household_stats(self.messenger)
+        async_dispatcher_send(self.hass, SIGNAL_HOUSEHOLD_UPDATED)
+
+    def household(self) -> dict:
+        if self._house is None:
+            self._house = household_stats(self.messenger)
+        return self._house
+
+    @callback
+    def household_changed(self) -> None:
+        """Something changed: the household's numbers in a few seconds (they're counted over every chat)."""
+        if not self._started or "__house" in self._timers:
+            return
+
+        @callback
+        def _go(_now=None) -> None:
+            self._timers.pop("__house", None)
+            self._house = household_stats(self.messenger)
+            async_dispatcher_send(self.hass, SIGNAL_HOUSEHOLD_UPDATED)
+
+        self._timers["__house"] = async_call_later(self.hass, HOUSEHOLD_DEBOUNCE, _go)
 
 
 class CrowMessengerEntity(Entity):
@@ -215,6 +344,28 @@ class CrowMessengerEntity(Entity):
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(async_dispatcher_connect(
             self.hass, f"{SIGNAL_PERSON_UPDATED}_{self.uid}", self.async_write_ha_state))
+
+
+class CrowHouseholdEntity(Entity):
+    """The household's own entities, on one device: Crow Messenger (Household)."""
+    _attr_has_entity_name = True
+    _attr_should_poll = False
+
+    def __init__(self, hub: EntityHub, key: str) -> None:
+        self.hub = hub
+        self.key = key
+        self._attr_unique_id = f"household_{key}"
+        self._attr_translation_key = key
+        self._attr_device_info = DeviceInfo(identifiers={(DOMAIN, "household")}, name="Crow Messenger (Household)",
+                                            manufacturer="Crow Messenger", model="Household",
+                                            entry_type=DeviceEntryType.SERVICE)
+
+    @property
+    def house(self) -> dict:
+        return self.hub.household()
+
+    async def async_added_to_hass(self) -> None:
+        self.async_on_remove(async_dispatcher_connect(self.hass, SIGNAL_HOUSEHOLD_UPDATED, self.async_write_ha_state))
 
 
 def setup_platform(hass: HomeAssistant, entry: ConfigEntry, add: Callable,

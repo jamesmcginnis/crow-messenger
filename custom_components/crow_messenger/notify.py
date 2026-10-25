@@ -366,3 +366,70 @@ async def async_clear_android(hass: HomeAssistant, messenger: Messenger, uid: st
                                            {"message": "clear_notification", "data": {"tag": tag}}, blocking=False)
         except Exception:  # noqa: BLE001
             pass
+
+
+async def async_feed_push(hass: HomeAssistant, messenger: Messenger, uids: list[str], post: dict | None,
+                          title: str, body: str, comment_id: str | None = None, group_id: str | None = None,
+                          why: str | None = None, *, query: str | None = None, tag: str | None = None,
+                          ref: str = "") -> None:
+    """A Feed notification: a comment, a reaction, an @mention, a tag, a birthday, an event reminder,
+    or someone posting. Only ever sent to people who can see the post (checked by the Feed first)."""
+    settings = messenger.settings.get("notifications", {})
+    if not settings.get("enabled", True):
+        return
+    if post is not None:
+        query = query or (f"crow_post={post['id']}" + (f"&crow_comment={comment_id}" if comment_id else ""))
+        tag = tag or (f"crow_feed_{post['id']}" + (f"_{comment_id}" if comment_id else ""))
+    elif not query:
+        query = f"crow_group={group_id}"
+        tag = f"crow_feed_group_{group_id}"
+    if not settings.get("show_text", True):
+        body = "New activity in the Feed"
+    # the post's first photo (or a video's still), when pictures are allowed on notifications
+    image = None
+    if post is not None and settings.get("show_attachment", True) and settings.get("show_text", True):
+        for aid in post.get("media", []) + post.get("refs", []):
+            att = messenger.data["attachments"].get(aid) or {}
+            if att.get("removed"):
+                continue
+            mime = att.get("mime") or ""
+            if mime.startswith("image/"):
+                image = messenger.push_media_path(aid, thumb=bool(att.get("thumb")))
+                break
+            if mime.startswith("video/") and att.get("thumb"):
+                image = messenger.push_media_path(aid, thumb=True)
+                break
+    for uid in uids:
+        if uid == HA_SENDER_ID:
+            continue
+        ucfg = messenger.settings.get("users", {}).get(uid, {}) or {}
+        if ucfg.get("notify") is False:
+            continue
+        link = f"{dashboard_path(messenger, uid)}?{query}"
+        for device in devices_for_user(hass, messenger, uid):
+            data: dict[str, Any] = {"tag": tag, "group": "crow_feed"}
+            if device["platform"] == "ios":
+                data["url"] = link
+                data["push"] = {"thread-id": "crow_feed", "sound": "default" if settings.get("sound", True) else "none"}
+                data["subtitle"] = "Feed"
+            else:
+                data["clickAction"] = link
+                data["channel"] = ANDROID_CHANNEL if settings.get("sound", True) else ANDROID_CHANNEL_SILENT
+                data["notification_icon"] = "mdi:newspaper-variant-outline"
+            if image:
+                data["image"] = image
+            # buttons: react, comment, reply, save, answer, vote, claim, write on the card, leave
+            from .feedpush import actions_for
+            try:
+                actions = actions_for(messenger, uid, post, why or "", device["platform"], comment_id, group_id, ref,
+                                      dash=dashboard_path(messenger, uid))
+            except Exception as err:  # noqa: BLE001 - a notification without buttons is still a notification
+                _LOGGER.debug("Crow Messenger Feed notification buttons: %s", err)
+                actions = []
+            if actions:
+                data["actions"] = actions
+            try:
+                await hass.services.async_call("notify", device["service"],
+                                               {"title": title, "message": body, "data": data}, blocking=False)
+            except Exception as err:  # noqa: BLE001
+                _LOGGER.warning("Crow Messenger could not notify %s: %s", device["service"], err)

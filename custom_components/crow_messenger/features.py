@@ -64,7 +64,7 @@ if TYPE_CHECKING:  # pragma: no cover
 _LOGGER = logging.getLogger(__name__)
 
 URL_RE = re.compile(r"https?://[^\s<>\"']+", re.I)
-EXTRA_TYPES = ("text", "poll", "checkin", "sticker", "entity", "location", "checklist", "event", "contact", "call",
+EXTRA_TYPES = ("text", "post", "poll", "checkin", "sticker", "entity", "location", "checklist", "event", "contact", "call",
                "timer", "game", "status", "locreq", "ring")
 CALL_KINDS = {"facetime": "📹 FaceTime", "facetime_audio": "📞 FaceTime Audio", "phone": "📞 Phone Call"}
 # Apple's names for the standard tapbacks, used in the quiet notification
@@ -127,7 +127,19 @@ def _is_public_ip(value: str) -> bool:
         ip = ipaddress.ip_address(value.split("%")[0])
     except ValueError:
         return False
+    # an IPv4 address reached through IPv6 (NAT64 or IPv4-mapped) is judged by the IPv4 address
+    if isinstance(ip, ipaddress.IPv6Address):
+        if ip.ipv4_mapped:
+            ip = ip.ipv4_mapped
+        elif ip in ipaddress.ip_network("64:ff9b::/96"):
+            ip = ipaddress.IPv4Address(int(ip) & 0xFFFFFFFF)
     return ip.is_global and not ip.is_multicast
+
+
+# how link previews ask for a page: as a browser, then as a link-preview robot
+BROWSER_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) "
+              "Version/18.0 Safari/605.1.15")
+BOT_UA = "Mozilla/5.0 (compatible; CrowMessenger link preview; facebookexternalhit/1.1)"
 
 
 class _MetaParser:
@@ -198,7 +210,7 @@ class FeaturesMixin:
             if msg["id"] in hidden:
                 continue
             self._send_to(pid, {"type": "message_update", "thread_id": thread["id"],
-                                "message": self.message_view(msg, hidden)})
+                                "message": self.message_view(msg, hidden, viewer=pid)})
 
     def _feature(self: Messenger, name: str) -> bool:
         return (self.settings.get("features", {}) or {}).get(name, True) is not False
@@ -239,6 +251,8 @@ class FeaturesMixin:
             return f"☑️ {msg.get('text') or 'Checklist'}"
         if kind == "event":
             return f"📅 {msg.get('text') or 'Event'}"
+        if kind == "post":
+            return "📰 Shared a post"
         if kind == "contact":
             c = msg.get("contact") or {}
             return f"👤 {' '.join(x for x in (c.get('first'), c.get('last')) if x) or c.get('company') or 'Contact'}"
@@ -329,7 +343,8 @@ class FeaturesMixin:
             if not text or len(options) < 2:
                 raise _err("invalid_format", "A poll needs a question and at least two choices")
             out["poll"] = {"options": [{"id": _id()[:6], "text": o, "by": uid} for o in options],
-                           "votes": {}, "multi": bool(poll.get("multi", True))}
+                           "votes": {}, "multi": bool(poll.get("multi", True)),
+                           **({"anonymous": True} if poll.get("anonymous") else {})}
         elif kind == "sticker":
             st = extra.get("sticker") or {}
             out["sticker"] = self._check_sticker(uid, st)
@@ -409,6 +424,10 @@ class FeaturesMixin:
         self._push_update(thread, msg)
         # the sender is told - and in a chat with yourself you're told too, so tapbacks can be tried out
         self_chat = thread["participants"] == [uid]
+        if emoji:
+            from .const import EVENT_REACTION
+            self.hass.bus.async_fire(EVENT_REACTION, {"user_id": uid, "on": "message", "thread_id": thread_id,
+                                                      "message_id": message_id, "reaction": emoji, "to_user_id": msg["sender"]})
         if emoji and msg["sender"] != HA_SENDER_ID and (msg["sender"] != uid or self_chat):
             users = await self.async_user_map()
             name = users.get(uid, {}).get("name", "Someone")
@@ -554,7 +573,7 @@ class FeaturesMixin:
             poll["votes"].pop(uid, None)
         self._save()
         self._push_update(thread, msg)
-        return self.message_view(msg, self._hidden(thread, uid))
+        return self.message_view(msg, self._hidden(thread, uid), viewer=uid)
 
     async def async_poll_add(self: Messenger, uid: str, thread_id: str, message_id: str, text: str) -> dict:
         thread, msg = self._msg(uid, thread_id, message_id)
@@ -618,6 +637,12 @@ class FeaturesMixin:
                 if (m.get("sticker") or {}).get("image"):
                     used.add(m["sticker"]["image"])
                 used.update(p["image"] for p in m.get("stickers", []) if p.get("image"))
+        feed = getattr(self, "feed", None)
+        if feed is not None:
+            for post in feed.data.get("posts", {}).values():
+                for c in post.get("comments", []):
+                    if (c.get("sticker") or {}).get("image"):
+                        used.add(c["sticker"]["image"])
         unused = [s for s in st["images"] if s not in used]
         for sid in unused:
             st["images"].pop(sid)
@@ -1110,7 +1135,7 @@ class FeaturesMixin:
         self.__dict__["_timers"] = {}
 
     # ── Link previews ───────────────────────────────────────────────────────
-    async def _async_safe_get(self: Messenger, url: str, limit: int) -> tuple[str, str, bytes] | None:
+    async def _async_safe_get(self: Messenger, url: str, limit: int, ua: str | None = None) -> tuple[str, str, bytes] | None:
         """GET a public web address. Private and local addresses are refused, so a
         message can't be used to make Home Assistant reach things on your network."""
         from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -1129,7 +1154,7 @@ class FeaturesMixin:
                 return None
             async with asyncio.timeout(LINK_TIMEOUT):
                 async with session.get(url, allow_redirects=False, headers={
-                    "User-Agent": "Mozilla/5.0 (compatible; CrowMessenger link preview; facebookexternalhit/1.1)",
+                    "User-Agent": ua or BOT_UA,
                     "Accept": "text/html,image/*;q=0.9,*/*;q=0.5",
                     "Accept-Language": self.hass.config.language or "en",
                 }) as resp:
@@ -1137,6 +1162,7 @@ class FeaturesMixin:
                         url = urljoin(url, resp.headers["Location"])
                         continue
                     if resp.status != 200:
+                        _LOGGER.debug("Link preview for %s: the site answered %s", url, resp.status)
                         return None
                     if int(resp.headers.get("Content-Length") or 0) > limit:
                         return None
@@ -1166,7 +1192,25 @@ class FeaturesMixin:
         self._push_update(thread, current)
 
     async def _async_fetch_preview(self: Messenger, url: str) -> dict | None:
-        got = await self._async_safe_get(url, LINK_MAX_HTML)
+        """A link's title, site, description and picture. Asks as a browser first and, if the site
+        refuses or gives nothing useful, again as a link-preview robot (the way Facebook asks)."""
+        best = None
+        for ua in (BROWSER_UA, BOT_UA):
+            try:
+                got = await self._async_preview_once(url, ua)
+            except Exception as err:  # noqa: BLE001 - try the other way of asking
+                _LOGGER.debug("Link preview for %s failed: %s", url, err)
+                got = None
+            if got and (got.get("image") or got.get("desc")):
+                return got
+            best = best or got
+        if not best:
+            _LOGGER.info("Crow Messenger couldn't make a link preview for %s (the site didn't answer, or "
+                         "refused). Turn on debug logging for crow_messenger to see why.", url)
+        return best
+
+    async def _async_preview_once(self: Messenger, url: str, ua: str) -> dict | None:
+        got = await self._async_safe_get(url, LINK_MAX_HTML, ua)
         if not got:
             return None
         final, ctype, body = got
@@ -1203,7 +1247,7 @@ class FeaturesMixin:
         if image_url:
             image_url = urljoin(final, image_url)
             try:
-                got = await self._async_safe_get(image_url, LINK_MAX_IMAGE)
+                got = await self._async_safe_get(image_url, LINK_MAX_IMAGE, ua)
                 if got and got[1].startswith("image/"):
                     preview["image"] = await self.hass.async_add_executor_job(self._thumb_data_url, got[2])
             except Exception as err:  # noqa: BLE001

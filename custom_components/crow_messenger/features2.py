@@ -38,7 +38,7 @@ MAX_CHECKLIST_ITEMS = 100
 LIVE_CHOICES = (0, 15, 60, 480)  # minutes; 0 = a single pin
 MUTE_CHOICES = (60, 480, 10080, 0)  # minutes; 0 = always
 RSVP = ("going", "maybe", "no")
-NOT_FORWARDABLE = ("poll", "checkin", "checklist", "event", "call")
+NOT_FORWARDABLE = ("poll", "checkin", "checklist", "event", "call", "post")
 READ_LOG_KEEP = 200
 
 
@@ -74,6 +74,12 @@ class MoreFeaturesMixin:
         for key in ("location", "checklist", "event", "contact", "forwarded"):
             if msg.get(key):
                 out[key] = msg[key]
+        if msg.get("post"):
+            # a Feed post sent into the chat: what it was, with its first photo (if it's still there)
+            ref = dict(msg["post"])
+            ref["thumb_att"] = self.feed._att_view(ref["thumb"]) if ref.get("thumb") else None
+            ref["available"] = ref["id"] in self.feed.data["posts"]
+            out["post"] = ref
         if msg.get("view_once"):
             out["view_once"] = {"opened": list((msg["view_once"].get("opened") or {}).keys())}
         if msg.get("reply_static"):
@@ -388,12 +394,24 @@ class MoreFeaturesMixin:
                     raise _err("invalid_format", "You can only reply privately to the person who sent it")
                 out["reply_static"] = {"sender": omsg["sender"], "text": _short(self._preview_of(omsg), 140),
                                        "ts": omsg["ts"], "from": othread.get("name") or "a group"}
+        if extra.get("story_reply"):
+            # a reply to a story: quotes the story, for the person whose story it is
+            story = self.feed.story_reply_ok(uid, str((extra["story_reply"] or {}).get("story_id") or ""))
+            if story["author"] not in thread["participants"]:
+                raise _err("invalid_format", "A story reply goes to the person whose story it is")
+            snippet = story.get("text") or ("📷 Photo" if story.get("media") else "Story")
+            out["reply_static"] = {"sender": story["author"], "text": _short(snippet, 140), "ts": story["ts"], "from": "Story"}
+            out["story_reply"] = {"story_id": story["id"]}
         if extra.get("view_once"):
             atts = [self.data["attachments"].get(a) or {} for a in attachment_ids]
             if not atts or not all((a.get("mime") or "").startswith(("image/", "video/")) for a in atts):
                 raise _err("invalid_format", "View Once is for photos and videos")
             out["view_once"] = {"opened": {}}
-        if kind == "location":
+        if kind == "post":
+            # a Feed post sent into a chat: only if everyone in the chat can already see it
+            ref = extra.get("post") or {}
+            out["post"] = self.feed.post_ref(uid, thread["participants"], str(ref.get("post_id") or ""))
+        elif kind == "location":
             out["location"] = self._check_location(uid, extra)
         elif kind == "checklist":
             items = [_str(i, 200) for i in (extra.get("checklist") or {}).get("items", [])]

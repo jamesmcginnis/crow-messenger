@@ -26,3 +26,32 @@ send_message:
       example: '["Unlock", "Ignore"]'
       selector:
         object:
+post:
+  fields:
+    message:
+      required: true
+      example: "The washing's done"
+      selector:
+        text:
+          multiline: true
+    attachment:
+      required: false
+      example: "/local/snapshots/doorbell.jpg"
+      selector:
+        object:
+    to:
+      required: false
+      example: '["person1", "person2"]'
+      selector:
+        object:
+    group:
+      required: false
+      example: "Parents"
+      selector:
+        text:
+    background:
+      required: false
+      example: "sunset"
+      selector:
+        select:
+          options: ["accent", "sunset", "ocean", "forest", "berry", "night", "rose", "gold"]

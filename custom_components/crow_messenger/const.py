@@ -57,6 +57,11 @@ SCREEN_EFFECTS = ("confetti", "balloons", "fireworks", "hearts", "lasers", "cele
 TEXT_STYLES = ("bold", "italic", "underline", "strike", "big", "small", "shake", "nod", "ripple", "bloom", "jitter")
 # Fired when someone taps a button on a message sent by an automation
 EVENT_ACTION = f"{DOMAIN}_action"
+# for automations: a tapback or Feed reaction, a Feed comment, a chat read, a Ring Phone answered
+EVENT_REACTION = f"{DOMAIN}_reaction"
+EVENT_COMMENT = f"{DOMAIN}_post_comment"
+EVENT_READ = f"{DOMAIN}_read"
+EVENT_RING_ANSWERED = f"{DOMAIN}_ring_answered"
 ACTION_PREFIX = "CROW_ACT_"
 # Link previews are fetched by Home Assistant (never by the phone), within these limits
 LINK_TIMEOUT = 8
@@ -74,7 +79,8 @@ ANDROID_CHANNEL = "Crow Messenger"
 ANDROID_CHANNEL_SILENT = "Crow Messenger (silent)"
 
 DEFAULT_SETTINGS = {
-    "retention_days": 30,
+    # Keep Messages (and the Feed): forever unless an administrator chooses a time
+    "retention_days": 0,
     "max_upload_mb": 300,
     "notifications": {
         "enabled": True,
@@ -86,10 +92,39 @@ DEFAULT_SETTINGS = {
         "badge": False,
         # the buttons on a message notification (press and hold it)
         "buttons": {"tapbacks": True, "mark_read": True, "mute": False, "home": False},
+        # the buttons on a Feed notification
+        "feed_buttons": {"reactions": True, "comment": True, "save": True, "events": True, "polls": True,
+                         "claim": True, "birthday": True, "leave": True, "hide": False},
     },
     # Messages extras: link previews (fetched by Home Assistant)
     # Share to Home Assistant: links shared from a phone's share sheet can be sent to a chat
-    "features": {"link_previews": True, "share_sheet": True},
+    # the Feed: a private social feed for the household (posts follow Keep Messages)
+    "features": {"link_previews": True, "share_sheet": True, "feed": True},
+    # sensors that change often (each can be switched off so the recorder doesn't fill up)
+    "sensors": {"typing": True, "viewing": True},
+    # the Feed, for the whole household
+    "feed": {
+        "page_posts": True,            # posting on someone's page
+        "default_audience": "everyone",  # who a new post is for until changed: everyone | me
+        "keep_days": None,             # None = the same as Keep Messages; 0 = forever
+        "stories": True, "birthdays": True, "review": True,
+        "kinds": {"poll": True, "event": True, "fund": True, "grabs": True, "recs": True, "list": True},
+        "covers": True,
+        # more like Facebook (each can be switched off in the editor)
+        "intro": True,                 # a bio, details and featured photos on profiles
+        "highlights": True,
+        "story_archive": True,         # stories are kept privately after 24 hours, to make highlights from            # Story Highlights kept on profiles
+        "shares": True,                # Share a post (with your own words)
+        "story_replies": True,         # react to and reply to stories (replies arrive in Messages)
+        "story_stickers": True,        # poll, question, countdown, mention, place, weather and time stickers
+        "home_cards": True,            # Share from Home: a sensor, a chart, the weather or a camera snapshot
+        "waves": True,                 # wave at someone
+        "badges": True,                # weekly badges, posted on Sunday evenings
+        "collections": True,           # Saved collections
+        "friends": True,               # a Friends section on each profile, like Facebook
+        "quiet": True,                 # Quiet Mode in each person's Feed Settings
+        "notify_default": "everything",  # new posts on phones until someone changes it: everything | important | nothing                # cover photos at the top of profiles (and contact cards)
+    },
     # one dashboard for everyone's notifications (when on and a dashboard is chosen, the
     # per-person choices are ignored; with no dashboard chosen yet, each person's choice is used)
     "dashboard": {"everyone": True, "path": ""},
@@ -101,6 +136,10 @@ DEFAULT_SETTINGS = {
         "agent_id": "",      # conversation agent for the Home Assistant chat ("" = Home Assistant's own)
         "task_entity": "",   # AI Task entity for everything else ("" = Home Assistant's preferred one)
         "features": {"assistant": True, "replies": True, "writing": True, "catchup": True,
-                     "translate": True, "actions": True, "photos": True, "ask": True},
+                     "translate": True, "actions": True, "photos": True, "ask": True,
+                     "feed_writing": True, "feed_captions": True, "feed_comments": True, "feed_smart": True,
+                     "feed_albums": True, "feed_catchup": True, "feed_threads": True, "feed_translate": True,
+                     "feed_photos": True, "feed_search": False, "feed_memories": True, "feed_kindness": True,
+                     "feed_ask": True},
     },
 }

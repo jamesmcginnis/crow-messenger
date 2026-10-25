@@ -28,12 +28,17 @@ from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.loader import async_get_integration
 
 from .const import CLEANUP_INTERVAL_MINUTES, DOMAIN, HA_SENDER_ID, SERVICE_SEND_MESSAGE
-from .http import MediaView, PushMediaView, UploadView, PushImageView
+
+SERVICE_POST = "post"
+# parts of the card in files of their own, fetched by the card the first time each is used
+LAZY_FILES = {"feed": "crow-feed.js", "pdf": "crow-pdf.js", "games": "crow-games.js",
+              "live": "crow-live.js", "people": "crow-people.js"}
+from .http import BackupView, MediaView, PushMediaView, UploadView, PushImageView
 from .manager import Messenger, MessengerError, new_id, now_ms
 from .const import ACTION_PREFIX
-from . import pushplus
+from . import feedpush, pushplus
 from . import share
-from .notify import REPLY_ACTION_PREFIX, TAG_PREFIX, async_alert, async_clear_android, async_push, async_ring, async_ring_clear
+from .notify import REPLY_ACTION_PREFIX, TAG_PREFIX, async_alert, async_clear_android, async_feed_push, async_push, async_ring, async_ring_clear
 from . import websocket
 
 _LOGGER = logging.getLogger(__name__)
@@ -42,6 +47,15 @@ CARD_FILENAME = "crow-messenger-card.js"
 CARD_URL = f"/{DOMAIN}/{CARD_FILENAME}"
 # each person's Unread, Latest message, New messages, Active now and Phone ringing
 PLATFORMS = [Platform.SENSOR, Platform.BINARY_SENSOR]
+
+POST_SCHEMA = vol.Schema({
+    vol.Required("message"): cv.string,
+    vol.Optional("attachment"): vol.Any(cv.string, [cv.string]),
+    # "everyone" (the default), a list of people (names, user IDs or person. entities), or a group's name
+    vol.Optional("to"): vol.Any(cv.string, [cv.string]),
+    vol.Optional("group"): cv.string,
+    vol.Optional("background"): cv.string,
+})
 
 SEND_SCHEMA = vol.Schema({
     vol.Required("to"): vol.Any(cv.string, [cv.string]),
@@ -57,8 +71,11 @@ SEND_SCHEMA = vol.Schema({
 async def _async_register_card(hass: HomeAssistant) -> None:
     if hass.data.get(f"{DOMAIN}_card_registered"):
         return
-    card_path = Path(__file__).parent / "www" / CARD_FILENAME
-    await hass.http.async_register_static_paths([StaticPathConfig(CARD_URL, str(card_path), True)])
+    www = Path(__file__).parent / "www"
+    card_path = www / CARD_FILENAME
+    await hass.http.async_register_static_paths(
+        [StaticPathConfig(CARD_URL, str(card_path), True)]
+        + [StaticPathConfig(f"/{DOMAIN}/{name}", str(www / name), True) for name in LAZY_FILES.values()])
     integration = await async_get_integration(hass, DOMAIN)
     # The cache-buster includes a fingerprint of the card file itself, so any
     # change to the card reaches phones after a restart, even without a version bump.
@@ -70,6 +87,14 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     # Also in the legacy build, which Home Assistant serves to some older
     # mobile web views - otherwise the card can be missing there.
     add_extra_js_url(hass, url, es5=True)
+    # the files the card fetches when a feature is first used, each with its own fingerprint
+    def _digests() -> dict[str, str]:
+        return {mod: hashlib.sha1((www / name).read_bytes()).hexdigest()[:10] if (www / name).exists() else "0"
+                for mod, name in LAZY_FILES.items()}
+
+    digests = await hass.async_add_executor_job(_digests)
+    hass.data[f"{DOMAIN}_modules"] = {mod: f"/{DOMAIN}/{name}?v={integration.version}-{digests[mod]}"
+                                     for mod, name in LAZY_FILES.items()}
     hass.data[f"{DOMAIN}_card_registered"] = True
 
 
@@ -104,6 +129,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     messenger.async_start_more()
     entry.async_on_unload(messenger.async_stop_features)
 
+    # The Feed: its notifications, scheduled posts, event reminders and daily jobs
+    async def _feed_notify(uids, post, title, body, comment_id=None, group_id=None, why=None, **kw):
+        await async_feed_push(hass, messenger, uids, post, title, body, comment_id, group_id, why, **kw)
+
+    messenger.feed.notify_callback = _feed_notify
+    messenger.feed.start()
+    entry.async_on_unload(messenger.feed.stop)
+
     # Messages to the "Home Assistant" chat are answered by the conversation agent
     from .ai import Assistant
     messenger.message_hook = Assistant(hass, messenger).async_on_message
@@ -113,6 +146,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.http.register_view(MediaView(hass))
         hass.http.register_view(PushMediaView(hass))
         hass.http.register_view(PushImageView(hass))
+        hass.http.register_view(BackupView(hass))
         websocket.async_register(hass)
         hass.data[f"{DOMAIN}_views_registered"] = True
 
@@ -143,6 +177,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Discard on a "Send link to…" notification (Share to Home Assistant)
         if action.startswith(share.DISCARD_PREFIX) and uid:
             await share.async_done(hass, messenger, uid, action[len(share.DISCARD_PREFIX):])
+            return
+        # Buttons on Feed notifications (and Android's Reply box on one) - before the chat Reply below,
+        # whose "crow_" tags would otherwise catch "crow_feed_" ones
+        if uid and (action.startswith(feedpush.PREFIX) or feedpush.is_feed_reply(action, str(data.get("tag") or ""))):
+            await feedpush.async_handle(hass, messenger, uid, action, text, str(data.get("tag") or ""))
             return
         # Tapbacks, Mark as Read, suggested replies, Hide Alerts, I'm Home / On My Way
         if action.startswith(pushplus.PREFIX) and uid:
@@ -198,6 +237,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _async_service_send(hass, messenger, call)
 
     hass.services.async_register(DOMAIN, SERVICE_SEND_MESSAGE, _handle_send, schema=SEND_SCHEMA)
+
+    async def _handle_post(call: ServiceCall) -> None:
+        await _async_service_post(hass, messenger, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_POST, _handle_post, schema=POST_SCHEMA)
     return True
 
 
@@ -236,7 +280,60 @@ async def _async_service_send(hass: HomeAssistant, messenger: Messenger, call: S
         raise HomeAssistantError(f"Crow Messenger: {err}") from err
 
 
-async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: str, thread_id: str, source: str,
+async def _async_resolve_people(hass: HomeAssistant, messenger: Messenger, names: list[str]) -> list[str]:
+    users = await messenger.async_users()
+    persons = {s.entity_id: s.attributes.get("user_id") for s in hass.states.async_all("person")}
+    out = []
+    for value in names:
+        low = value.lower()
+        if value in persons and persons[value]:
+            out.append(persons[value])
+            continue
+        match = next((u["id"] for u in users if value == u["id"] or low in (u["name"].lower(), u["ha_name"].lower())), None)
+        if not match:
+            raise HomeAssistantError(f"Crow Messenger: no Home Assistant user called '{value}'")
+        out.append(match)
+    return list(dict.fromkeys(out))
+
+
+async def _async_service_post(hass: HomeAssistant, messenger: Messenger, call: ServiceCall) -> None:
+    """crow_messenger.post: a post in the Feed from an automation (as Home Assistant, or as the person
+    whose action it was), to everyone, chosen people or a group."""
+    feed = messenger.feed
+    if not feed.enabled():
+        raise HomeAssistantError("Crow Messenger: the Feed is switched off")
+    users = {u["id"] for u in await messenger.async_users()}
+    author = call.context.user_id if call.context.user_id in users else HA_SENDER_ID
+    to = call.data.get("to")
+    if isinstance(to, str):
+        to = [t.strip() for t in to.split(",") if t.strip()]
+    audience: dict = {"type": "everyone"}
+    if call.data.get("group"):
+        name = call.data["group"].strip().lower()
+        group = next((g for g in feed.data["groups"].values() if g["name"].lower() == name), None)
+        if not group:
+            raise HomeAssistantError(f"Crow Messenger: there's no Feed group called '{call.data['group']}'")
+        audience = {"type": "group", "group": group["id"]}
+        if author != HA_SENDER_ID and author not in group["members"]:
+            raise HomeAssistantError("Crow Messenger: you're not in that group")
+    elif to and [t for t in to if t.lower() not in ("everyone", "all")]:
+        people = await _async_resolve_people(hass, messenger, to)
+        audience = {"type": "people", "people": [p for p in people if p != author]}
+    files = call.data.get("attachment") or []
+    if isinstance(files, str):
+        files = [files]
+    media = []
+    try:
+        for src in files[:20]:
+            media.append(await _async_import_file(hass, messenger, author, None, src, caller=call.context.user_id))
+        await feed.async_automation_post(author, call.data["message"], audience, media, call.data.get("background"))
+    except MessengerError as err:
+        for aid in media:
+            await messenger.async_discard_upload(author, aid)
+        raise HomeAssistantError(f"Crow Messenger: {err}") from err
+
+
+async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: str, thread_id: str | None, source: str,
                              caller: str | None = None) -> str:
     """Copy a file named in a service call into Crow Messenger's private folder.
 
@@ -290,10 +387,17 @@ async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: 
     return aid
 
 
+async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Crow Messenger deleted in Settings → Devices & Services: its data and files go too."""
+    from .reset import async_remove_all
+    await async_remove_all(hass)
+
+
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
     hass.services.async_remove(DOMAIN, SERVICE_SEND_MESSAGE)
+    hass.services.async_remove(DOMAIN, SERVICE_POST)
     m = hass.data.pop(DOMAIN, None)
     if m is not None and getattr(m, "badge", None):
         m.badge.unload()

@@ -96,6 +96,9 @@ class RingMixin:
             state[uid] = "found"
             done = [uid]
             self._ring_tell_sender(thread, msg, done, "found")
+            from .const import EVENT_RING_ANSWERED
+            self.hass.bus.async_fire(EVENT_RING_ANSWERED, {"user_id": uid, "rung_by_id": msg["sender"],
+                                                          "thread_id": thread_id, "message_id": message_id})
         else:
             if msg["sender"] != uid:
                 raise _err("invalid_format", "Only the person ringing can stop it")

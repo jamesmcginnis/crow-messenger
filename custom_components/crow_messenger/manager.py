@@ -134,7 +134,7 @@ def sanitize_contact(raw: dict) -> dict:
 
 
 class _Subscriber:
-    __slots__ = ("uid", "send", "conn", "focus", "visible")
+    __slots__ = ("uid", "send", "conn", "focus", "visible", "screen")
 
     def __init__(self, uid: str, send: Callable[[dict], None], conn: int) -> None:
         self.uid = uid
@@ -142,6 +142,7 @@ class _Subscriber:
         self.conn = conn
         self.focus: str | None = None
         self.visible = True
+        self.screen: str | None = None   # messages | chat | feed | contacts | other (the Viewing sensor)
 
 
 from .features import FeaturesMixin  # noqa: E402 - needs the helpers above
@@ -180,6 +181,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self.badge = Badge(self)  # the app icon badge (off until turned on in the editor)
         from .entity import EntityHub
         self.entities = EntityHub(self)  # each person's sensors (started by __init__)
+        from .feed import Feed
+        self.feed = Feed(self)  # the household Feed (its own storage file)
 
     # ── Persistence ─────────────────────────────────────────────────────────
     async def async_load(self) -> None:
@@ -208,6 +211,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self.themes = bstored.get("themes", {})
         self.stickers = bstored.get("stickers", {})
         await self.hass.async_add_executor_job(os.makedirs, self.media_dir, 0o700, True)
+        await self.feed.async_load()
 
     @callback
     def _save(self) -> None:
@@ -223,6 +227,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         await self._store.async_save(self.data)
         await self._cstore.async_save(self.cdata)
         await self._bstore.async_save({"users": self.backgrounds, "themes": self.themes, "stickers": self.stickers})
+        await self.feed.async_flush()
 
     @property
     def settings(self) -> dict:
@@ -232,6 +237,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
     async def async_users(self) -> list[dict]:
         """People who can be messaged, with the name/photo they share."""
         users = await self.hass.auth.async_get_users()
+        covers = self.feed.opt("covers") is not False and (self.settings.get("features") or {}).get("feed", True) is not False
         pictures: dict[str, str] = {}
         for state in self.hass.states.async_all("person"):
             uid = state.attributes.get("user_id")
@@ -247,12 +253,14 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             if profile.get("share"):
                 name = profile.get("name") or name
                 picture = profile.get("photo") or picture
+            cover = profile.get("cover") if covers else None
             out.append({
                 "id": user.id,
                 "name": name,
                 "ha_name": user.name or "",
                 "picture": picture,
                 "is_admin": user.is_admin,
+                "cover": cover if cover and cover.get("id") in self.data["attachments"] else None,
             })
         out.sort(key=lambda u: u["name"].lower())
         return out
@@ -283,13 +291,15 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         return _remove
 
     @callback
-    def set_focus(self, conn: int, thread_id: str | None, visible: bool) -> None:
+    def set_focus(self, conn: int, thread_id: str | None, visible: bool, screen: str | None = None) -> None:
         changed = set()
         for sub in self._subs.values():
             if sub.conn == conn:
                 was = self.is_online(sub.uid)
                 sub.focus = thread_id
                 sub.visible = visible
+                sub.screen = screen or ("chat" if thread_id else sub.screen)
+                self.entities.changed(sub.uid)   # their Viewing sensor
                 if was != self.is_online(sub.uid):
                     changed.add(sub.uid)
         for uid in changed:
@@ -356,7 +366,20 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         hidden = self._hidden(thread, uid)
         return [m for m in self.data["messages"].get(thread["id"], []) if m["ts"] >= start and self._shows(m, hidden)]
 
-    def message_view(self, msg: dict, hidden: set | None = None) -> dict:
+    @staticmethod
+    def anon_poll(poll: dict, viewer: str | None) -> dict:
+        """An anonymous poll: the counts for everyone, and only your own vote (nobody, not even whoever made
+        the poll, is told who chose what)."""
+        votes = poll.get("votes") or {}
+        counts: dict[str, int] = {}
+        for chosen in votes.values():
+            for o in chosen:
+                counts[o] = counts.get(o, 0) + 1
+        return {**{k: v for k, v in poll.items() if k != "votes"},
+                "votes": {viewer: votes[viewer]} if viewer and viewer in votes else {},
+                "counts": counts, "total": len(votes)}
+
+    def message_view(self, msg: dict, hidden: set | None = None, viewer: str | None = None) -> dict:
         hidden = hidden or set()
         atts = []
         for aid in msg.get("attachments", []):
@@ -374,6 +397,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             "attachments": atts,
             **self.extras_view(msg),
             **self.more_view(msg),
+            **({"poll": self.anon_poll(msg["poll"], viewer)} if (msg.get("poll") or {}).get("anonymous") else {}),
         }
 
     def thread_view(self, thread: dict, uid: str) -> dict:
@@ -456,7 +480,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         page = msgs[-limit:]
         return {
             "thread": self.thread_view(thread, uid),
-            "messages": [self.message_view(m, self._hidden(thread, uid)) for m in page],
+            "messages": [self.message_view(m, self._hidden(thread, uid), viewer=uid) for m in page],
             "more": len(msgs) > len(page),
         }
 
@@ -576,10 +600,41 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         for pid in thread["participants"]:
             self._send_to(pid, {"type": "read", "thread_id": thread_id, "user_id": uid, "ts": last,
                                 "unread": 0 if pid == uid else None})
+        # for automations: an alert that repeats until it's read can stop now
+        from .const import EVENT_READ
+        self.hass.bus.async_fire(EVENT_READ, {
+            "user_id": uid, "thread_id": thread_id, "read_up_to": last,
+            "with_home_assistant": HA_SENDER_ID in thread["participants"],
+            "last_sender_id": next((x["sender"] for x in reversed(self.data["messages"].get(thread_id, []))
+                                    if x.get("type") != "system"), None),
+        })
+
+    def viewing(self, uid: str) -> str | None:
+        """What part of the card someone has on screen (never which chat). None when it's closed."""
+        subs = [s for s in self._subs.values() if s.uid == uid and s.visible]
+        if not subs:
+            return None
+        s = subs[-1]
+        return "chat" if s.focus else (s.screen or "messages")
+
+    def is_typing(self, uid: str) -> bool:
+        cutoff = now_ms() - 12_000
+        return any(ts > cutoff for ts in (self.__dict__.get("_typing", {}).get(uid) or {}).values())
 
     @callback
     def typing(self, uid: str, thread_id: str, active: bool) -> None:
         thread = self._thread(uid, thread_id)
+        # the Typing sensor: on while they type anywhere; a stop that never comes runs out by itself
+        box = self.__dict__.setdefault("_typing", {}).setdefault(uid, {})
+        was = self.is_typing(uid)
+        if active:
+            box[thread_id] = now_ms()
+            from homeassistant.helpers.event import async_call_later
+            async_call_later(self.hass, 13, lambda _n: self.entities.changed(uid))
+        else:
+            box.pop(thread_id, None)
+        if was != self.is_typing(uid):
+            self.entities.changed(uid)
         for pid in thread["participants"]:
             if pid != uid:
                 self._send_to(pid, {"type": "typing", "thread_id": thread_id, "user_id": uid, "active": active})
@@ -872,6 +927,13 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         if att.get("status") in ("pending", "scheduled"):
             if att["uploader"] != uid:
                 raise MessengerError("not_found", "Not found")
+        elif att.get("cover_of"):
+            # a cover photo: everyone at home can see it, like the profile photo
+            pass
+        elif att.get("feed"):
+            # a photo or video from the Feed: only for the people the post (or story) is shared with
+            if not self.feed.media_visible(uid, att):
+                raise MessengerError("not_found", "Not found")
         else:
             thread = self.data["threads"].get(att.get("thread_id"))
             if not thread or uid not in thread["participants"]:
@@ -888,6 +950,31 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             return None
         path = os.path.join(self.media_dir, os.path.basename(name))
         return path
+
+    async def async_copy_attachment(self, uid: str, aid: str) -> str:
+        """A copy of an attachment's file (and its preview picture), ready to post as a new upload."""
+        att = self.data["attachments"].get(aid)
+        if not att or att.get("removed") or not att.get("file"):
+            raise MessengerError("not_found", "That photo or video has gone")
+        new = new_id()
+        src, tsrc = self.attachment_path(att), self.attachment_path(att, True)
+        name = f"{new}_{os.path.basename(att['file']).split('_', 1)[-1]}"
+        tname = f"{new}_thumb.jpg" if tsrc else None
+
+        def _copy() -> None:
+            import shutil
+            shutil.copyfile(src, os.path.join(self.media_dir, name))
+            if tsrc and os.path.exists(tsrc):
+                shutil.copyfile(tsrc, os.path.join(self.media_dir, tname))
+
+        try:
+            await self.hass.async_add_executor_job(_copy)
+        except OSError as err:
+            raise MessengerError("unknown_error", f"Couldn’t copy it: {err}") from err
+        self.register_upload(uid, None, {"id": new, "name": att.get("name"), "mime": att.get("mime"), "size": att.get("size"),
+                                         "file": name, "thumb": tname, "width": att.get("width"), "height": att.get("height"),
+                                         "duration": att.get("duration")})
+        return new
 
     async def _async_remove_attachment(self, aid: str) -> None:
         att = self.data["attachments"].pop(aid, None)
@@ -918,6 +1005,13 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         exp = int(time.time()) + NOTIFY_MEDIA_TTL_DAYS * 86400
         sig = self._sign(f"{aid}:{kind}:{exp}")
         return f"/api/crow_messenger/push/{aid}/{kind}/{exp}/{sig}"
+
+    def stream_path(self, aid: str, ttl: int = 6 * 3600) -> str:
+        """A link to stream a video (or open a file) for a few hours, for someone who can already see it.
+        The browser then fetches only the part it's playing, instead of the whole file first."""
+        exp = int(time.time()) + ttl
+        sig = self._sign(f"{aid}:file:{exp}")
+        return f"/api/crow_messenger/push/{aid}/file/{exp}/{sig}"
 
     def verify_push(self, aid: str, kind: str, exp: str, sig: str) -> dict | None:
         try:
@@ -954,6 +1048,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
                 await self._async_remove_attachment(att["id"])
                 changed = True
         await self.async_expire()
+        # the Feed follows Keep Messages too (stories always go after a day)
+        await self.feed.async_cleanup(days)
         self._gc_stickers()
         if changed:
             self._save()
@@ -973,8 +1069,15 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
                     users[uid] = {**users.get(uid, {}), **cfg}
             self.data["settings"]["users"] = users
         self._save()
-        if "retention_days" in patch:
+        if "retention_days" in patch or "keep_days" in (patch.get("feed") or {}):
             await self.async_cleanup()
+        if "feed" in patch or "feed" in (patch.get("features") or {}):
+            # open cards follow the household's Feed settings straight away
+            for sub in list(self._subs.values()):
+                try:
+                    sub.send({"type": "feed_options", "options": self.feed.options(), "enabled": self.feed.enabled()})
+                except Exception:  # noqa: BLE001
+                    pass
         if "badge" in (patch.get("notifications") or {}):
             self.badge.everyone_changed(force=True)
         return self.settings
@@ -1074,8 +1177,26 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self._send_to(uid, {"type": "themes", "themes": self.themes_for(uid)})
         return self.themes_for(uid)
 
+    async def _async_set_cover(self, uid: str, profile: dict, cover: dict | None) -> None:
+        """A new cover photo (an uploaded picture), or none. The old one's file is deleted."""
+        old = (profile.get("cover") or {}).get("id")
+        if cover:
+            if self.feed.opt("covers") is False:
+                raise MessengerError("unauthorized", "Cover photos are switched off")
+            att = self.data["attachments"].get(cover["id"])
+            if not att or att["uploader"] != uid or att.get("status") != "pending" \
+                    or not str(att.get("mime") or "").startswith("image/"):
+                raise MessengerError("invalid_format", "That picture can’t be used as a cover photo")
+            att.update({"status": "cover", "cover_of": uid, "ts": now_ms()})
+            profile["cover"] = {"id": att["id"], "y": round(float(cover.get("y", 50)), 1)}
+        else:
+            profile["cover"] = None
+        if old and old != (profile.get("cover") or {}).get("id"):
+            await self._async_remove_attachment(old)
+        self._save()
+
     def profile_for(self, uid: str) -> dict:
-        return {"share": False, "name": "", "photo": None, "my_card": None, "activity": True, "skin": "", "keep_archived": False,
+        return {"share": False, "name": "", "photo": None, "my_card": None, "activity": True, "skin": "", "keep_archived": False, "cover": None,
                 **self.cdata["profiles"].get(uid, {})}
 
     async def async_set_profile(self, uid: str, patch: dict) -> dict:
@@ -1098,6 +1219,10 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             profile["skin"] = re.sub(r"[^a-z0-9_-]", "", str(patch["skin"] or "").lower())[:24]
         if "keep_archived" in patch:
             profile["keep_archived"] = bool(patch["keep_archived"])
+        if "cover" in patch:
+            await self._async_set_cover(uid, profile, patch["cover"])
+        if "cover_y" in patch and profile.get("cover"):
+            profile["cover"] = {**profile["cover"], "y": round(float(patch["cover_y"]), 1)}
         self.cdata["profiles"][uid] = profile
         self._send_to(uid, {"type": "profile", "profile": profile})
         self._save_contacts()

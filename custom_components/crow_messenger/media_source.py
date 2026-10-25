@@ -35,7 +35,9 @@ class CrowMessengerMediaSource(MediaSource):
     async def async_resolve_media(self, item: MediaSourceItem) -> PlayMedia:
         messenger = self.hass.data.get(DOMAIN)
         att = messenger.data["attachments"].get(item.identifier or "") if messenger else None
-        if not att or att.get("status") != "sent" or att.get("removed"):
+        # a photo being posted can be looked at by the AI while it suggests a caption (and only then)
+        pending = messenger.__dict__.get("_ai_pending", set()) if messenger else set()
+        if not att or att.get("removed") or (att.get("status") != "sent" and att.get("id") not in pending):
             raise Unresolvable("Not found")
         path = messenger.attachment_path(att)
         if not path or not await self.hass.async_add_executor_job(Path(path).is_file):
