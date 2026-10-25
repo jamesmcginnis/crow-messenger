@@ -2,6 +2,8 @@
 
 Crow Messenger is a Home Assistant integration and Lovelace card for private messaging between the people in your home. Designed with an **iPhone Messages** look and feel, the card gives you one-to-one and group chats with photos, videos, files, replies, tapbacks, effects, polls and games — while the integration keeps every conversation on your own Home Assistant server, sends phone notifications through the Companion app and lets your automations send messages too.
 
+It also has a **Feed**: a private, Facebook-style social feed for your household — every post seen only by the people you share it with.
+
 Everything is **private to your household** — nothing is stored in the cloud.
 
 > **One download installs both.** The card is bundled inside the integration and loads into your dashboards automatically — no resource to add.
@@ -41,8 +43,34 @@ Everything is **private to your household** — nothing is stored in the cloud.
 - **Skins** — iPhone, WhatsApp, Messenger, Telegram, Signal, Discord, Material You and old-school MSN, ICQ, AIM, Yahoo!, Windows 98, Windows XP, Mac OS X Aqua, BlackBerry, Nokia SMS and IRC
 - **Chat Backgrounds and Live Wallpapers** — or set any photo someone sent as the background
 - **Full Screen** — one tap on the Messages screen gives the card the whole screen, another puts it back, or have it open in full screen every time
-- **Private Contacts** — each person's own address book, with vCard import
+- **Private Contacts** — each person's own address book, with vCard import; a household member's card also links to their Feed profile, latest post and photos, your chats, Hide Alerts and Ring Phone
 - **People Map** — where everyone is, with Find Me and zones, and for each person how long they've been there, the weather there, what they're doing, Focus, charging and Wi-Fi, plus Find Nearby for places around them, with saved places kept on the map
+
+## Feed (Social Media)
+
+On by default, and can be switched off in the editor.
+
+- **Private Posts** — share with everyone at home, chosen people, only you, or a group
+- **Post on Someone's Page** — shows on their profile, and they can hide or delete it
+- **Photos, Videos, Feelings, Places, @Mentions and Photo Tags**, with link previews and coloured backgrounds
+- **Reactions and Comments** — Love, Like, Haha, Wow, Sad and Angry, with replies, photos and stickers
+- **Stories** that disappear after 24 hours
+- **Photos and Videos** grids, **Profiles**, **Groups** and shared **Albums**
+- **Polls, Events with RSVPs and reminders, Chip In and Up for Grabs**
+- **Pin, Save, Edit, Schedule and Drafts**
+- **Press and hold a photo or video** — save, send, add to an album, see who watched it, select several, or delete it from the server
+- **Birthdays, Milestones, On This Day and Year in Review**
+- **More like Facebook** — Intro and featured photos, Story Highlights, Archive and Manage Posts, Share a post, Ask for Recommendations, Lists, Share from Home, story reactions, replies and stickers, Waves, weekly badges, Saved Collections, Quiet Mode and comment sorting
+- **Cover photos and profile photos like Facebook** — add and reposition a cover photo, and change your profile photo from your profile; it updates everywhere at once
+- **Send a post to a chat**, **Hide someone for 30 days** and an **Activity Log** laid out like a Facebook wall
+- **Buttons on Feed notifications** — react, comment, reply, save, answer an event, vote, claim, write on a birthday card or leave a group, right from the notification
+- **Posts follow Keep Messages**
+- **The Crow Feed card** — the Feed on its own, or a photo slideshow for a wall tablet
+- **An app bar** — the same capsule at the top left of Messages, Contacts and the Feed, for switching between them in one tap
+- **A Facebook-style navigation bar** — Home, Videos, Groups, Events, Notifications and Menu along the bottom, frosted glass or solid to match your Bars Liquid Glass setting
+- **Notifications** — reactions, comments, replies, tags, mentions and posts on your page, with a red count; swipe to mark read or remove, turn off a post, filter, Clear All and Recently Removed
+- **Favourites** — a row at the top of Contacts, first when choosing who to message, and a Favourites filter on Messages
+- **Startup Screen** — open the card on Messages (the default), Contacts, the Feed, or straight to the Feed's Videos, Groups, Events or Notifications
 
 ## AI Features
 
@@ -55,6 +83,7 @@ All optional, and each can be switched off individually:
 - **Add to Calendar and Reminders**
 - **Ask This Chat** — ask a question about a conversation
 - **Photo Descriptions**
+- **In the Feed** — Writing Tools, Suggest a Caption, Suggested Comments, Make It an Event or Poll, Album Names, What Did I Miss?, Catch Up on Comments, Translate, Photo Descriptions, Photo Search (off until switched on), Memory Captions, a Kindness Check before posting and Ask the Feed
 
 ## Integration
 
@@ -62,11 +91,16 @@ All optional, and each can be switched off individually:
 - **App Icon Badge** — optional: a red number on the app's icon showing unread messages
 - **Notification Buttons** — Tapbacks, Mark as Read, Hide Alerts, and I'm Home or On My Way
 - **Richer Notifications** — the sender's photo, stickers, link previews, maps and live camera views
-- **Share to Crow Messenger** — tap Share in any app on your phone, choose Home Assistant, then pick the chat (or chats) it goes to, with a comment if you like
-- **Sensors for each person** — Unread messages, Latest message, New messages, Active now and Phone ringing (who sent what, never what it says)
+- **Share to Crow Messenger** — tap Share in any app on your phone, choose Home Assistant, then **Send in a Chat** or **Post on a Page** in the Feed
+- **Sensors for each person** — Unread messages, Latest message, New messages, New posts, Feed notifications, Last seen, Typing, Viewing, Waiting on reply, Pending reminders, Sharing live location, Last post, Birthday today, Active now and Phone ringing (who sent what, never what it says)
+- **Household sensors** — Messages today, Storage used, Next event, Active chats and People online
+- **More events** — reactions, Feed comments, chats being read and Ring Phone answered
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from automations
 - **`crow_messenger_message_received` event** — for automations around new messages
 - **`crow_messenger_action` event** — when someone taps a button sent by an automation
+- **`crow_messenger.post` action** and **`crow_messenger_post_created` event** — post in the Feed from automations
+- **Opens Quickly** — larger features are fetched the first time they're used
+- **Erase Everything** — administrators can wipe every chat, contact, post, photo, video and file from the server and start again as if just installed (or delete just some of it), with a backup first; removing the integration removes its data too
 
 ## Installation
 
