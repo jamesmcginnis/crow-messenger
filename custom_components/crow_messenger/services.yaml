@@ -55,3 +55,161 @@ post:
       selector:
         select:
           options: ["accent", "sunset", "ocean", "forest", "berry", "night", "rose", "gold"]
+
+# ── Email (while it is switched on) ──
+send_email:
+  fields:
+    account:
+      required: true
+      example: "me@icloud.com"
+      selector:
+        text:
+    to:
+      required: true
+      example: "someone@example.com"
+      selector:
+        text:
+    cc:
+      selector:
+        text:
+    bcc:
+      selector:
+        text:
+    subject:
+      example: "The garage door is open"
+      selector:
+        text:
+    message:
+      example: "It's been open for 30 minutes."
+      selector:
+        text:
+          multiline: true
+    html:
+      selector:
+        text:
+          multiline: true
+    attachments:
+      example: "/media/local/snapshots/door.jpg"
+      selector:
+        text:
+          multiple: true
+    send_at:
+      selector:
+        datetime:
+    buttons:
+      example: '[{"title": "Close the garage", "action": "close_garage"}]'
+      selector:
+        object:
+    poll:
+      example: '["Pizza", "Curry", "Tacos"]'
+      selector:
+        text:
+          multiple: true
+    read_receipt:
+      default: false
+      selector:
+        boolean:
+mark_email_as_read:
+  fields:
+    account:
+      required: true
+      selector:
+        text:
+    folder:
+      default: INBOX
+      selector:
+        text:
+    uid:
+      example: "{{ trigger.event.data.uid }}"
+      selector:
+        text:
+    message_id:
+      selector:
+        text:
+    read:
+      default: true
+      selector:
+        boolean:
+    all:
+      default: false
+      selector:
+        boolean:
+archive_email:
+  fields:
+    account:
+      required: true
+      selector:
+        text:
+    folder:
+      default: INBOX
+      selector:
+        text:
+    uid:
+      example: "{{ trigger.event.data.uid }}"
+      selector:
+        text:
+    message_id:
+      selector:
+        text:
+move_email:
+  fields:
+    account:
+      required: true
+      selector:
+        text:
+    folder:
+      default: INBOX
+      selector:
+        text:
+    uid:
+      example: "{{ trigger.event.data.uid }}"
+      selector:
+        text:
+    message_id:
+      selector:
+        text:
+    to_folder:
+      required: true
+      example: "Receipts"
+      selector:
+        text:
+flag_email:
+  fields:
+    account:
+      required: true
+      selector:
+        text:
+    folder:
+      default: INBOX
+      selector:
+        text:
+    uid:
+      example: "{{ trigger.event.data.uid }}"
+      selector:
+        text:
+    message_id:
+      selector:
+        text:
+    flagged:
+      default: true
+      selector:
+        boolean:
+refresh_email:
+  fields:
+    account:
+      selector:
+        text:
+update_email_badge:
+  fields:
+    account:
+      required: true
+      example: me@icloud.com
+      selector:
+        text:
+    extra:
+      example: 2
+      selector:
+        number:
+          min: 0
+          max: 9999
+          mode: box

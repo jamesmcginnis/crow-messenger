@@ -1,6 +1,6 @@
 """AI in the Feed: the same AI Task as the rest of Crow Messenger, with the same rules.
 
-Each feature is switched on separately (Household → AI → Feed) and only works when AI Features are on.
+Each feature is switched on separately (the editor's AI page) and only works when AI Features are on.
 The AI only ever sees posts, comments and photos the person using the feature can already see, and only
 when they tap something - except Photo Search, which describes each new photo once when it's posted
 (its own switch, off until an administrator turns it on).
@@ -18,6 +18,7 @@ when they tap something - except Photo Search, which describes each new photo on
 * memories  - a caption for On This Day (and the Year in Review post)
 * kindness  - a gentle "this might come across as harsh" before posting
 * ask       - Ask the Feed a question
+* make_album - Make an Album: after a busy few days of photos, offer to gather them into a named album (feedalbum.py)
 """
 from __future__ import annotations
 
@@ -42,11 +43,13 @@ _LOGGER = logging.getLogger(__name__)
 FEED_FEATURES = {"feed_writing": True, "feed_captions": True, "feed_comments": True, "feed_smart": True,
                  "feed_albums": True, "feed_catchup": True, "feed_threads": True, "feed_translate": True,
                  "feed_photos": True, "feed_search": False, "feed_memories": True, "feed_kindness": True,
-                 "feed_ask": True}
+                 "feed_ask": True, "feed_make_album": True}
 ACTION_FEATURE = {"rewrite": "feed_writing", "caption": "feed_captions", "comments": "feed_comments",
                   "detect": "feed_smart", "album_name": "feed_albums", "catchup": "feed_catchup",
                   "thread": "feed_threads", "translate": "feed_translate", "describe": "feed_photos",
-                  "search": "feed_search", "memory": "feed_memories", "kindness": "feed_kindness", "ask": "feed_ask"}
+                  "search": "feed_search", "memory": "feed_memories", "kindness": "feed_kindness", "ask": "feed_ask",
+                  "album_suggest": "feed_make_album", "album_make": "feed_make_album", "album_join": "feed_make_album",
+                  "album_skip": "feed_make_album"}
 MAX_PHOTOS = 4
 
 
@@ -387,6 +390,9 @@ async def review_caption(hass, m: "Messenger", post: dict) -> None:
 
 
 async def run(hass, m: "Messenger", uid: str, action: str, d: dict) -> Any:
+    if action.startswith("album_") and action != "album_name":
+        from . import feedalbum
+        return await feedalbum.run(hass, m, uid, action, d)
     if action == "rewrite":
         return await ai.rewrite(hass, m, d.get("text", ""), d.get("style", ""))
     if action == "caption":

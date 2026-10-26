@@ -34,7 +34,10 @@ AI_TIMEOUT = 90
 FEATURES = ("assistant", "replies", "writing", "catchup", "translate", "actions", "photos", "ask",
             # the Feed (feedai.py)
             "feed_writing", "feed_captions", "feed_comments", "feed_smart", "feed_albums", "feed_catchup",
-            "feed_threads", "feed_translate", "feed_photos", "feed_search", "feed_memories", "feed_kindness", "feed_ask")
+            "feed_threads", "feed_translate", "feed_photos", "feed_search", "feed_memories", "feed_kindness", "feed_ask",
+            "feed_make_album",
+            # Link Safety, in chats and the Feed (linksafety.py)
+            "links")
 # features that start off (everything else starts on once AI Features are on)
 OFF_UNTIL_ON = ("feed_search",)
 # features that need an AI that can look at photos
@@ -455,10 +458,20 @@ class Assistant:
 
         typing = self.hass.async_create_task(_keep_typing())
         try:
+            # asking about email: the person's own recent email, for the agent to answer from
+            from .together import converse_kwargs, email_context
+            try:
+                extra = converse_kwargs(await email_context(self.hass, uid, text))
+            except Exception:  # noqa: BLE001 - Email must never stop Home Assistant answering
+                _LOGGER.debug("Crow Messenger couldn't add email to the Home Assistant chat", exc_info=True)
+                extra = {}
+            ask = text
+            if extra.get("_prepend"):
+                ask = f"{extra.pop('_prepend')}\n\nThe user's message: {text}"
             async with asyncio.timeout(AI_TIMEOUT):
                 result = await conversation.async_converse(
-                    self.hass, text, self._conversations.get(key), Context(user_id=uid),
-                    language=self.hass.config.language, agent_id=agent)
+                    self.hass, ask, self._conversations.get(key), Context(user_id=uid),
+                    language=self.hass.config.language, agent_id=agent, **extra)
             self._conversations[key] = result.conversation_id
             speech = (result.response.speech or {}).get("plain", {}).get("speech", "") or ""
             reply = speech.strip() or "Done."

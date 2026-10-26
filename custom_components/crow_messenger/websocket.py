@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant, callback
 from .const import DOMAIN, RETENTION_CHOICES
 from . import ai
 from . import share
+from . import together
 from .manager import Messenger, MessengerError
 from .notify import mobile_devices
 
@@ -354,6 +355,7 @@ async def ws_bootstrap(hass, connection, msg) -> None:
         "scheduled": messenger.scheduled_for(uid),
         "shares": share.pending(messenger, uid),
         "feed": messenger.feed.bootstrap(uid),
+        "email": messenger.email.status_for(uid),
         "modules": hass.data.get(f"{DOMAIN}_modules", {}),
         "features": {"link_previews": messenger._feature("link_previews"),
                      "checkin": messenger.person_for(uid) is not None,
@@ -617,6 +619,8 @@ async def ws_contacts_delete(hass, connection, msg) -> None:
     vol.Optional("activity"): bool,
     vol.Optional("skin"): vol.All(str, vol.Length(max=24)),
     vol.Optional("keep_archived"): bool,
+    # Recent Emails on contact cards (each person chooses, in a contact card's ⋯ menu)
+    vol.Optional("contact_emails"): bool,
     # a cover photo: an uploaded picture and how far down it is shown (0 top … 100 bottom); null takes it away
     vol.Optional("cover"): vol.Any(None, {vol.Required("id"): str, vol.Optional("y"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100))}),
     vol.Optional("cover_y"): vol.All(vol.Coerce(float), vol.Range(min=0, max=100)),
@@ -624,7 +628,7 @@ async def ws_contacts_delete(hass, connection, msg) -> None:
 @websocket_api.async_response
 @_errors
 async def ws_profile_set(hass, connection, msg) -> None:
-    patch = {k: msg[k] for k in ("share", "name", "photo", "my_card", "activity", "skin", "keep_archived", "cover", "cover_y") if k in msg}
+    patch = {k: msg[k] for k in ("share", "name", "photo", "my_card", "activity", "skin", "keep_archived", "contact_emails", "cover", "cover_y") if k in msg}
     profile = await _m(hass).async_set_profile(connection.user.id, patch)
     connection.send_result(msg["id"], {"profile": profile})
 
@@ -698,7 +702,8 @@ async def ws_ai(hass, connection, msg) -> None:
 @websocket_api.websocket_command({
     vol.Required("type"): "crow_messenger/feed_ai",
     vol.Required("action"): vol.In(("rewrite", "caption", "comments", "detect", "album_name", "catchup", "thread",
-                                    "translate", "describe", "search", "memory", "kindness", "ask")),
+                                    "translate", "describe", "search", "memory", "kindness", "ask",
+                                    "album_suggest", "album_make", "album_join", "album_skip")),
     vol.Optional("text"): vol.All(str, vol.Length(max=10000)),
     vol.Optional("style"): str,
     vol.Optional("language"): str,
@@ -708,6 +713,8 @@ async def ws_ai(hass, connection, msg) -> None:
     vol.Optional("media"): [str],
     vol.Optional("album_id"): str,
     vol.Optional("since"): int,
+    vol.Optional("key"): vol.All(str, vol.Length(max=20)),
+    vol.Optional("add"): bool,
 })
 @websocket_api.async_response
 @_errors
@@ -729,7 +736,8 @@ async def ws_feed_ai(hass, connection, msg) -> None:
 async def ws_settings_get(hass, connection, msg) -> None:
     messenger = _m(hass)
     result: dict[str, Any] = {"is_admin": connection.user.is_admin,
-                              "retention_days": messenger.settings.get("retention_days", 0)}
+                              "retention_days": messenger.settings.get("retention_days", 0),
+                              "email": messenger.email.status()}
     if connection.user.is_admin:
         result.update({
             "settings": messenger.settings,
@@ -770,11 +778,13 @@ SETTINGS_SCHEMA = vol.Schema({
                                           "waves", "badges", "collections", "quiet", "friends", "story_archive")},
         vol.Optional("kinds"): vol.Schema({vol.Optional(k): bool for k in ("poll", "event", "fund", "grabs", "recs", "list")}),
     }),
+    vol.Optional("email_notices"): vol.Schema({vol.Optional(k): bool for k in ("parcels", "groceries", "council")}),
     vol.Optional("features"): vol.Schema({
         vol.Optional("link_previews"): bool,
         vol.Optional("zones"): bool,
         vol.Optional("share_sheet"): bool,
         vol.Optional("feed"): bool,
+        vol.Optional("email"): bool,
     }),
     vol.Optional("dashboard"): vol.Schema({
         vol.Optional("everyone"): bool,
@@ -806,6 +816,17 @@ async def ws_settings_set(hass, connection, msg) -> None:
     if "ai" in msg["settings"]:
         messenger.broadcast_all({"type": "ai", "ai": ai.capabilities(hass, messenger)})
     connection.send_result(msg["id"], {"settings": settings, "ai": ai.capabilities(hass, messenger)})
+
+
+# ── What Did I Miss? (messages, the Feed and email) ─────────────────────────
+@websocket_api.websocket_command({vol.Required("type"): "crow_messenger/catchup_all"})
+@websocket_api.async_response
+@_errors
+async def ws_catchup_all(hass, connection, msg) -> None:
+    messenger = _m(hass)
+    if not ai.capabilities(hass, messenger).get("catchup"):
+        raise MessengerError("ai_unavailable", "Catch Up is switched off. An administrator can turn it on in the card editor's AI settings.")
+    connection.send_result(msg["id"], await together.catch_up_all(hass, messenger, connection.user.id))
 
 
 # ── Feed ─────────────────────────────────────────────────────────────────────
@@ -926,6 +947,9 @@ FEED_COMMANDS = (
     _feed("album/cover", {vol.Required("album_id"): str, vol.Optional("media_id"): vol.Any(str, None)},
           lambda f, u, d: {"album": f.album_cover(u.id, d["album_id"], d.get("media_id"))}),
     _feed("contact", {vol.Required("user_id"): str}, lambda f, u, d: f.contact_extras(u.id, d["user_id"])),
+    # searching everything from Messages: Feed posts by their words
+    _feed("find", {vol.Required("query"): vol.All(str, vol.Length(min=1, max=200))},
+          lambda f, u, d: {"posts": together.find_posts(f.m, u.id, d["query"])}),
     _feed("notifications", {vol.Optional("before"): int, vol.Optional("limit"): vol.All(int, vol.Range(min=1, max=100)),
                             vol.Optional("filter"): vol.In(("all", "unread", "reactions", "comments", "mentions", "page", "more"))},
           lambda f, u, d: f.notifications(u.id, d.get("before"), d.get("limit", 40), d.get("filter"))),
@@ -1076,6 +1100,7 @@ COMMANDS = (
     ws_mute, ws_star, ws_starred, ws_pin_message, ws_nickname, ws_quick, ws_share_hidden, ws_info, ws_media, ws_since, ws_forward,
     ws_live_stop, ws_checklist, ws_rsvp, ws_view_once, ws_notify_anyway, ws_presence,
     ws_search, ws_contacts_save, ws_contacts_delete, ws_profile_set, ws_background_set, ws_theme_set, ws_settings_get, ws_settings_set,
+    ws_catchup_all,
 )
 
 

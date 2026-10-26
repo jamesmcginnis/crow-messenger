@@ -169,24 +169,36 @@ async def _async_notify(hass: HomeAssistant, messenger: Messenger, item: dict, d
         _LOGGER.info("Crow Messenger: something was shared but that person has no phone to ask who it's for")
         return
     preview = item.get("preview") or {}
-    # with the Feed on, it can go to a chat or on someone's page; without it, only to a chat
+    # where it can go: a chat, someone's page in the Feed (with the Feed on) and an email (with Email on
+    # and an account of their own)
     feed_on = messenger._feature("feed")
-    what = "link" if item["url"] else ""
-    if feed_on:
-        title = f"Send or post this {what}".replace("  ", " ").strip()
-    else:
-        title = "Send link to…" if item["url"] else "Send to…"
+    mailer = hass.data.get("crow_messenger_email")
+    email_on = bool(mailer and any(a.acc.get("owner") == item["uid"] for a in mailer.accounts.values()))
+    places = ["a chat"] + (["a page"] if feed_on else []) + (["an email"] if email_on else [])
+    choose = places[0] if len(places) == 1 else ", ".join(places[:-1]) + " or " + places[-1]
+    # the notification: what was shared (the page's title, and its site under it), and where it can go
     if item["url"]:
-        body = preview.get("title") or item["title"] or item["url"]
+        title = preview.get("title") or item["title"] or item["url"]
         site = preview.get("site") or ""
-        if site and site not in body:
-            body = f"{body} · {site}"
+        if not site:
+            try:
+                from urllib.parse import urlparse
+                site = urlparse(item["url"]).hostname or ""
+                site = site[4:] if site.startswith("www.") else site
+            except Exception:  # noqa: BLE001
+                site = ""
     else:
-        body = item["text"] if len(item["text"]) <= 160 else item["text"][:159] + "…"
+        title = "Shared Text"
+        site = ""
+    text = item["text"] if not item["url"] else ""
+    lead = (text if len(text) <= 140 else text[:139] + "…") + "\n" if text else ""
+    body = f"{lead}Send it to {choose}. Tap to choose, or press and hold."
     base = f"{dashboard_path(messenger, item['uid'])}?crow_share={item['id']}"
-    link = base                       # tapping it: the card's Open in setting decides
+    link = f"{base}&crow_to=pick"     # tapping it: choose where it goes
     to_chat = f"{base}&crow_to=chat"  # Send in a Chat
     to_page = f"{base}&crow_to=feed"  # Post on a Page
+    to_mail = f"{base}&crow_to=email"  # Send in an Email
+    image = preview.get("image") or ""
     tag = f"{TAG_PREFIX}{item['id']}"
     sound = (messenger.settings.get("notifications", {}) or {}).get("sound", True)
     discard = {"action": f"{DISCARD_PREFIX}{item['id']}", "title": "Discard"}
@@ -195,9 +207,14 @@ async def _async_notify(hass: HomeAssistant, messenger: Messenger, item: dict, d
         if device["platform"] == "ios":
             payload["url"] = link
             payload["push"] = {"thread-id": "crow_share", "sound": "default" if sound else "none"}
+            if site:
+                payload["subtitle"] = site
+            if image.startswith("https://"):
+                payload["image"] = image   # the page's picture, as the notification's preview
             payload["actions"] = [
                 {"action": "URI", "title": "Send in a Chat", "uri": to_chat, "icon": "sfsymbols:bubble.left.and.bubble.right"},
                 *([{"action": "URI", "title": "Post on a Page", "uri": to_page, "icon": "sfsymbols:newspaper"}] if feed_on else []),
+                *([{"action": "URI", "title": "Send in an Email", "uri": to_mail, "icon": "sfsymbols:envelope"}] if email_on else []),
                 {**discard, "destructive": True, "activationMode": "background", "icon": "sfsymbols:trash"},
             ]
         else:
@@ -207,15 +224,19 @@ async def _async_notify(hass: HomeAssistant, messenger: Messenger, item: dict, d
             payload["priority"] = "high"
             payload["ttl"] = 0
             payload["notification_icon"] = "mdi:share-variant"
-            # Android shows three buttons at most
-            payload["actions"] = [
-                {"action": "URI", "title": "Send in a Chat", "uri": to_chat},
-                *([{"action": "URI", "title": "Post on a Page", "uri": to_page}] if feed_on else []),
-                discard,
-            ]
+            if image.startswith("https://"):
+                payload["image"] = image
+            # Android shows three buttons at most: with three places to send it, Discard is left out
+            # (swiping the notification away leaves the link waiting in the card for a day)
+            acts = [{"action": "URI", "title": "Chat", "uri": to_chat},
+                    *([{"action": "URI", "title": "Page", "uri": to_page}] if feed_on else []),
+                    *([{"action": "URI", "title": "Email", "uri": to_mail}] if email_on else [])]
+            payload["actions"] = acts if len(acts) >= 3 else [*acts, discard]
+        android_body = f"{site}\n{body}" if site else body
         try:
             await hass.services.async_call("notify", device["service"],
-                                           {"title": title, "message": body, "data": payload}, blocking=False)
+                                           {"title": title, "message": body if device["platform"] == "ios" else android_body,
+                                            "data": payload}, blocking=False)
         except Exception as err:  # noqa: BLE001 - one bad phone must not stop the rest
             _LOGGER.warning("Crow Messenger could not notify %s: %s", device["service"], err)
 

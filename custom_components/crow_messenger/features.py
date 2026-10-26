@@ -277,7 +277,7 @@ class FeaturesMixin:
     def extras_view(self: Messenger, msg: dict) -> dict:
         out: dict[str, Any] = {}
         for key in ("call", "reactions", "effect", "spans", "mentions", "poll", "sticker", "stickers", "entity",
-                    "actions", "action_taken", "link", "ttl", "checkin", "scheduled", "note", "at", "timer", "locreq", "ring"):
+                    "actions", "action_taken", "link", "link_safety", "ttl", "checkin", "scheduled", "note", "at", "timer", "locreq", "ring"):
             if msg.get(key):
                 out[key] = msg[key]
         if msg.get("game"):
@@ -401,6 +401,7 @@ class FeaturesMixin:
             found = URL_RE.search(msg["text"])
             if found:
                 self.hass.async_create_task(self._async_link_preview(thread, msg, found.group(0).rstrip(").,!?;:")))
+        self._link_safety(thread, msg)
         if msg.get("type") == "checkin":
             self._arm_checkin(thread, msg)
         if msg.get("type") == "timer":
@@ -470,6 +471,9 @@ class FeaturesMixin:
             msg.pop("link", None)
             if new_url and not msg.get("attachments") and self._feature("link_previews"):
                 self.hass.async_create_task(self._async_link_preview(thread, msg, new_url))
+        if new_url != (msg.get("link_safety") or {}).get("url"):
+            msg.pop("link_safety", None)
+            self._link_safety(thread, msg)
         self._save()
         self._push_update(thread, msg)
         self._broadcast_thread(thread)
@@ -1175,6 +1179,15 @@ class FeaturesMixin:
                             return None
                     return str(resp.url), resp.headers.get("Content-Type", ""), body
         return None
+
+    def _link_safety(self: Messenger, thread: dict, msg: dict) -> None:
+        """Link Safety (an AI feature): check a link someone shared (not Home Assistant's own)."""
+        if msg.get("sender") == HA_SENDER_ID or msg.get("type", "text") != "text":
+            return
+        from . import linksafety
+        url = linksafety.first_url(msg.get("text") or "")
+        if url and linksafety.on(self):
+            self.hass.async_create_task(linksafety.check_message(self.hass, self, thread["id"], msg["id"], url))
 
     async def _async_link_preview(self: Messenger, thread: dict, msg: dict, url: str) -> None:
         try:

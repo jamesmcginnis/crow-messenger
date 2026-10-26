@@ -108,6 +108,7 @@ class FeedMoreMixin:
             self.quiet_summary(uid)
         view = self.quiet_view(uid)
         self.m._send_to(uid, {"type": "feed_quiet", "quiet": view})
+        self.m.entities.changed(uid)   # the Quiet Mode sensor
         return view
 
     def in_quiet(self: "Feed", uid: str) -> bool:
@@ -285,9 +286,15 @@ class FeedMoreMixin:
 
     @callback
     def _quiet_tick(self: "Feed", _now_dt=None) -> None:
+        was = self.__dict__.setdefault("_quiet_was", {})
         for uid, p in list(self.data["people"].items()):
-            if p.get("quiet_held") and not self.in_quiet(uid):
+            now_quiet = self.in_quiet(uid)
+            if p.get("quiet_held") and not now_quiet:
                 self.quiet_summary(uid)
+            # Quiet Mode starting or ending on its own (the nightly hours, or a pause running out): the sensor
+            if was.get(uid) is not None and was[uid] != now_quiet:
+                self.m.entities.changed(uid)
+            was[uid] = now_quiet
 
     def quiet_summary(self: "Feed", uid: str) -> None:
         p = self.person(uid)

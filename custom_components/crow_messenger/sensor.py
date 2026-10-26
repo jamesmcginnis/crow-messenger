@@ -17,9 +17,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEnt
     setup_platform(hass, entry, add, lambda hub, uid: [
         UnreadSensor(hub, uid), LatestSensor(hub, uid), NewPostsSensor(hub, uid), FeedNotifSensor(hub, uid),
         LastSeenSensor(hub, uid), ViewingSensor(hub, uid), WaitingSensor(hub, uid), RemindersSensor(hub, uid),
-        LastPostSensor(hub, uid)])
+        LastPostSensor(hub, uid), AttentionSensor(hub, uid), MentionsSensor(hub, uid)])
     hub = hass.data["crow_messenger"].entities
-    add([MessagesTodaySensor(hub), StorageSensor(hub), NextEventSensor(hub), ActiveChatsSensor(hub), PeopleOnlineSensor(hub)])
+    add([MessagesTodaySensor(hub), StorageSensor(hub), NextEventSensor(hub), ActiveChatsSensor(hub), PeopleOnlineSensor(hub),
+         NextBirthdaySensor(hub)])
+    # each email account's sensors, while Email is on
+    hass.data["crow_messenger"].email.platform_ready("sensor", add)
 
 
 def _ts(ms):
@@ -43,6 +46,45 @@ class UnreadSensor(CrowMessengerEntity, SensorEntity):
     def extra_state_attributes(self):
         s = self.stats
         return {"conversations": s["unread_chats"], "in_muted_conversations": s["unread_muted"]}
+
+
+class AttentionSensor(CrowMessengerEntity, SensorEntity):
+    """Needs My Attention: unread conversations (not muted), polls from the last two weeks they haven't voted in,
+    events they haven't answered, and sent emails that haven't had a reply (Follow-Up Nudges). How many of
+    each, never what they say."""
+    _attr_icon = "mdi:bell-ring-outline"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "items"
+
+    def __init__(self, hub: EntityHub, uid: str) -> None:
+        super().__init__(hub, uid, "attention")
+
+    @property
+    def native_value(self):
+        return self.stats.get("attention", 0)
+
+    @property
+    def extra_state_attributes(self):
+        return dict(self.stats.get("attention_parts") or {})
+
+
+class MentionsSensor(CrowMessengerEntity, SensorEntity):
+    """Unread @mentions: in chats (including ones with Hide Alerts on, as mentions still get through)
+    and in the Feed (posts, comments and stories). Who mentioned them and what was said stay private."""
+    _attr_icon = "mdi:at"
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_native_unit_of_measurement = "mentions"
+
+    def __init__(self, hub: EntityHub, uid: str) -> None:
+        super().__init__(hub, uid, "mentions")
+
+    @property
+    def native_value(self):
+        return self.stats.get("mentions", 0)
+
+    @property
+    def extra_state_attributes(self):
+        return {"in_chats": self.stats.get("mentions_chats", 0), "in_feed": self.stats.get("mentions_feed", 0)}
 
 
 class LatestSensor(CrowMessengerEntity, SensorEntity):
@@ -294,3 +336,25 @@ class PeopleOnlineSensor(CrowHouseholdEntity, SensorEntity):
     @property
     def extra_state_attributes(self):
         return {"names": [self.hub.name(u) for u in self.house["online"]], "user_ids": self.house["online"]}
+
+
+class NextBirthdaySensor(CrowHouseholdEntity, SensorEntity):
+    """Whose birthday is next in the household, with the date and how many days away. Only people who
+    share their birthday in the Feed are included, and never their age."""
+    _attr_icon = "mdi:cake-variant-outline"
+
+    def __init__(self, hub: EntityHub) -> None:
+        super().__init__(hub, "next_birthday")
+
+    @property
+    def native_value(self):
+        b = self.house.get("birthdays") or []
+        return self.hub.name(b[0]["user_id"])[:250] if b else None
+
+    @property
+    def extra_state_attributes(self):
+        b = self.house.get("birthdays") or []
+        first = b[0] if b else None
+        return {"date": first["date"].isoformat() if first else None, "days": first["days"] if first else None,
+                "user_id": first["user_id"] if first else None,
+                "upcoming": [{"name": self.hub.name(x["user_id"]), "date": x["date"].isoformat(), "days": x["days"]} for x in b]}

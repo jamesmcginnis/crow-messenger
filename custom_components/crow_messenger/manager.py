@@ -317,6 +317,10 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             except Exception:  # noqa: BLE001 - a closed connection
                 pass
 
+    def send_to_user(self, uid: str, payload: dict) -> None:
+        """Something for one person's open cards (used by Email)."""
+        self._send_to(uid, payload)
+
     def _send_to(self, uid: str, payload: dict) -> None:
         if payload.get("type") in BADGE_COUNTED:
             self.badge.changed(uid)
@@ -1080,6 +1084,9 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
                     pass
         if "badge" in (patch.get("notifications") or {}):
             self.badge.everyone_changed(force=True)
+        if "email" in (patch.get("features") or {}) and getattr(self, "email", None):
+            # Email starts or stops straight away (no restart)
+            await self.email.async_sync()
         return self.settings
 
     @callback
@@ -1110,6 +1117,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self._save_contacts()
         for contact in saved:
             self._send_to(uid, {"type": "contact", "contact": contact})
+        self._contacts_changed(uid)
         return saved
 
     def delete_contacts(self, uid: str, ids: list[str]) -> None:
@@ -1121,6 +1129,16 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         if profile and profile.get("my_card") in ids:
             profile["my_card"] = None
         self._save_contacts()
+        self._contacts_changed(uid)
+
+    def _contacts_changed(self, uid: str) -> None:
+        """Email (when it's on) shares this contacts book: its open screens follow too."""
+        mailer = self.hass.data.get("crow_messenger_email")
+        if mailer is not None:
+            try:
+                mailer.book.contacts_changed(uid)
+            except Exception:  # noqa: BLE001 - Email must never stop a contact being saved
+                _LOGGER.debug("Crow Messenger couldn't tell Email about a contacts change", exc_info=True)
 
     # ── Chat backgrounds (private to each person) ───────────────────────────
     # key "*" is the background for every conversation; a thread id overrides it.
@@ -1156,6 +1174,11 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             mine.pop(key, None)
         self._save_backgrounds()
         self._send_to(uid, {"type": "backgrounds", "backgrounds": self.backgrounds_for(uid)})
+        if key == "*":
+            # Email shares the background for everything
+            mailer = self.hass.data.get("crow_messenger_email")
+            if mailer is not None:
+                mailer.send_to(uid, {"type": "backgrounds", "backgrounds": mailer.book.backgrounds_for(uid)})
         return self.backgrounds_for(uid)
 
     # ── Chat colour themes (private to each person, like backgrounds) ───────
@@ -1219,6 +1242,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             profile["skin"] = re.sub(r"[^a-z0-9_-]", "", str(patch["skin"] or "").lower())[:24]
         if "keep_archived" in patch:
             profile["keep_archived"] = bool(patch["keep_archived"])
+        if "contact_emails" in patch:
+            profile["contact_emails"] = bool(patch["contact_emails"])
         if "cover" in patch:
             await self._async_set_cover(uid, profile, patch["cover"])
         if "cover_y" in patch and profile.get("cover"):

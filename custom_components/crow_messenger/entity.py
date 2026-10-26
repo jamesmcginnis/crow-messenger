@@ -27,7 +27,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceEntryType, DeviceInfo
 from homeassistant.helpers.dispatcher import async_dispatcher_connect, async_dispatcher_send
 from homeassistant.helpers.entity import Entity
-from homeassistant.helpers.event import async_call_later, async_track_time_interval
+from homeassistant.helpers.event import async_call_later, async_track_state_change_event, async_track_time_interval
 
 from homeassistant.util import dt as dt_util
 
@@ -47,6 +47,8 @@ DEBOUNCE = 1.0
 REFRESH_EVERY = timedelta(minutes=5)
 # what's kept of a ring, when looking for one still ringing
 RING_LOOKBACK = 60
+# Needs My Attention: polls from the last two weeks you haven't voted in
+ATTENTION_DAYS = 14
 # Home Assistant's own events for people being added, changed or removed
 USER_EVENTS = ("user_added", "user_updated", "user_removed")
 
@@ -73,8 +75,11 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
     Unread is counted the same way as the app icon badge (badge.Badge.total): muted chats
     are left out, and a chat marked as unread counts as one."""
     unread = unread_muted = chats = 0
+    mentions_chat = polls_chat = 0
     latest: tuple[dict, dict] | None = None
     ringing_by: list[str] = []
+    now = int(dt_util.utcnow().timestamp() * 1000)
+    recent = now - ATTENTION_DAYS * DAY_MS
     for t in m.data.get("threads", {}).values():
         if uid not in t["participants"]:
             continue
@@ -83,6 +88,10 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
             continue
         read_ts = t["read"].get(uid, 0)
         n = sum(1 for x in msgs if x["sender"] != uid and x.get("type") != "system" and x["ts"] > read_ts)
+        # @mentions get through Hide Alerts, so they're counted in muted chats too
+        mentions_chat += sum(1 for x in msgs if x["sender"] != uid and x["ts"] > read_ts and uid in (x.get("mentions") or []))
+        polls_chat += sum(1 for x in msgs if x.get("type") == "poll" and x["sender"] != uid and x["ts"] > recent
+                          and x.get("note") != "deleted" and uid not in ((x.get("poll") or {}).get("votes") or {}))
         if not n and uid in t.get("marked_unread", []):
             n = 1
         if n:
@@ -100,7 +109,6 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
             if x.get("type") == "ring" and ((x.get("ring") or {}).get("state") or {}).get(uid) == "ringing":
                 ringing_by.append(x["sender"])
     hidden_activity = m.profile_for(uid).get("activity") is False
-    now = int(dt_util.utcnow().timestamp() * 1000)
     sensors = (m.settings.get("sensors") or {})
     # Waiting on reply: chats (not muted) where the last word is someone else's and it's been a while
     waiting, oldest = 0, None
@@ -132,7 +140,8 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
     feed = getattr(m, "feed", None)
     last_post = posts_week = None
     birthday = False
-    feed_notif = 0
+    feed_notif = mentions_feed = polls_feed = events_feed = 0
+    quiet = False
     if feed and feed.enabled():
         mine = [p["ts"] for p in feed.data.get("posts", {}).values()
                 if p["author"] == uid and not p.get("scheduled_at") and p.get("kind", "post") not in ("birthday", "milestone", "review")]
@@ -141,7 +150,36 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
         person = feed.data.get("people", {}).get(uid) or {}
         b = person.get("birthday") or ""
         birthday = bool(person.get("share_birthday")) and b.endswith(dt_util.now().strftime("%m-%d")) and feed.opt("birthdays")
-        feed_notif = feed.notif_unread(uid)
+        feed_notif, mentions_feed = feed.notif_counts(uid)
+        quiet = feed.in_quiet(uid)
+        # polls and events shared with them that they haven't answered
+        for p in feed.data.get("posts", {}).values():
+            kind = p.get("kind")
+            if kind not in ("poll", "event") or p["author"] == uid or p.get("archived") or p.get("scheduled_at"):
+                continue
+            if not feed.can_see(uid, p):
+                continue
+            if kind == "poll" and p["ts"] > recent and uid not in ((p.get("poll") or {}).get("votes") or {}):
+                polls_feed += 1
+            elif kind == "event":
+                ev = p.get("event") or {}
+                if (ev.get("start") or 0) > now and uid not in (ev.get("rsvp") or {}):
+                    events_feed += 1
+    # Email: sent emails that haven't had a reply (Follow-Up Nudges), on their own accounts
+    follow_ups = 0
+    try:
+        mailer = m.email.mailer if getattr(m, "email", None) else None
+        if mailer:
+            from .email import ai as email_ai
+            if email_ai.on(m.hass, mailer, "followup"):
+                follow_ups = len(mailer.smart.nudges_for(uid))
+    except Exception:  # noqa: BLE001 - Email's numbers are a bonus here
+        follow_ups = 0
+    try:
+        focus = m.in_focus(uid)
+    except Exception:  # noqa: BLE001
+        focus = False
+    muted_chats = sum(1 for t in m.data.get("threads", {}).values() if uid in t["participants"] and m.is_muted(t, uid))
     presence = None if hidden_activity else m.presence_for(uid)
     return {
         "unread": unread,
@@ -162,6 +200,11 @@ def person_stats(m: "Messenger", uid: str) -> dict[str, Any]:
         "live_location": live,
         "last_post": last_post, "posts_week": posts_week or 0,
         "birthday": birthday,
+        "mentions": mentions_chat + mentions_feed, "mentions_chats": mentions_chat, "mentions_feed": mentions_feed,
+        "attention": chats + follow_ups + polls_chat + polls_feed + events_feed,
+        "attention_parts": {"unread_conversations": chats, "emails_to_follow_up": follow_ups,
+                            "polls_to_vote_in": polls_chat + polls_feed, "events_to_answer": events_feed},
+        "quiet": quiet or focus, "quiet_feed": quiet, "focus": focus, "muted_chats": muted_chats,
     }
 
 
@@ -203,10 +246,41 @@ def household_stats(m: "Messenger") -> dict[str, Any]:
                 nxt = (p, ev)
     online = [u for u in {s.uid for s in m._subs.values()} if m.profile_for(u).get("activity") is not False and m.is_online(u)]
     return {
+        "birthdays": upcoming_birthdays(m),
         "today": today, "week": week, "month": month, "active_chats": active,
         "storage_bytes": store["bytes"], "storage_count": store["count"], "storage_oldest": store.get("oldest"),
         "next_event": nxt, "online": online,
     }
+
+
+def upcoming_birthdays(m: "Messenger", limit: int = 3) -> list[dict]:
+    """The next few birthdays in the household: only people who share their birthday in the Feed."""
+    feed = getattr(m, "feed", None)
+    if not feed or not feed.enabled() or not feed.opt("birthdays"):
+        return []
+    today = dt_util.now().date()
+    out = []
+    for uid, person in (feed.data.get("people") or {}).items():
+        b = person.get("birthday") or ""
+        if not person.get("share_birthday") or len(b) < 5:
+            continue
+        try:
+            month, day = int(b[-5:-3]), int(b[-2:])
+        except ValueError:
+            continue
+        nxt = None
+        for year in (today.year, today.year + 1):
+            try:
+                d = today.replace(year=year, month=month, day=day)
+            except ValueError:   # 29 February, in a year that hasn't got one
+                d = today.replace(year=year, month=2, day=28) if month == 2 and day == 29 else None
+            if d and d >= today:
+                nxt = d
+                break
+        if nxt:
+            out.append({"user_id": uid, "date": nxt, "days": (nxt - today).days})
+    out.sort(key=lambda x: (x["days"], x["user_id"]))
+    return out[:limit]
 
 
 class EntityHub:
@@ -234,6 +308,33 @@ class EntityHub:
             self.everyone_changed()
 
         stops.append(async_track_time_interval(self.hass, _every, REFRESH_EVERY))
+
+        # Quiet Mode follows each phone's Focus / Do Not Disturb sensor, so watch those
+        self._focus_stop: Callable[[], None] | None = None
+
+        @callback
+        def _watch_focus() -> None:
+            if self._focus_stop:
+                self._focus_stop()
+                self._focus_stop = None
+            try:
+                owners = {eid: uid for uid, eids in self.messenger.focus_entities().items() for eid in eids}
+            except Exception:  # noqa: BLE001 - no Companion app sensors
+                owners = {}
+            if not owners:
+                return
+
+            @callback
+            def _focus_changed(event: Event) -> None:
+                uid = owners.get(event.data.get("entity_id"))
+                if uid:
+                    self.changed(uid)
+
+            self._focus_stop = async_track_state_change_event(self.hass, list(owners), _focus_changed)
+
+        _watch_focus()
+        stops.append(async_track_time_interval(self.hass, lambda _now: _watch_focus(), REFRESH_EVERY))
+        stops.append(lambda: self._focus_stop and self._focus_stop())
 
         async def _on_user(event: Event) -> None:
             before = set(self.people)

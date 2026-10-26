@@ -99,7 +99,10 @@ DEFAULT_SETTINGS = {
     # Messages extras: link previews (fetched by Home Assistant)
     # Share to Home Assistant: links shared from a phone's share sheet can be sent to a chat
     # the Feed: a private social feed for the household (posts follow Keep Messages)
-    "features": {"link_previews": True, "share_sheet": True, "feed": True},
+    # Email: each person's own email accounts in the card (off until an administrator switches it on)
+    "features": {"link_previews": True, "share_sheet": True, "feed": True, "email": False},
+    # Household notices from Email, posted in the Feed for everyone (each off until switched on)
+    "email_notices": {"parcels": False, "groceries": False, "council": False},
     # sensors that change often (each can be switched off so the recorder doesn't fill up)
     "sensors": {"typing": True, "viewing": True},
     # the Feed, for the whole household

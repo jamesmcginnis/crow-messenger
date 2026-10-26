@@ -298,7 +298,7 @@ class Feed(FeedMoreMixin):
         out: dict[str, Any] = {
             "id": post["id"], "author": post["author"], "ts": post["ts"], "kind": post.get("kind", "post"),
             "text": post.get("text", ""), "bg": post.get("bg"), "feeling": post.get("feeling"),
-            "place": post.get("place"), "link": post.get("link"), "mentions": post.get("mentions", []),
+            "place": post.get("place"), "link": post.get("link"), "link_safety": post.get("link_safety"), "mentions": post.get("mentions", []),
             "media": [v for v in (self._att_view(a) for a in post.get("media", [])) if v],
             "refs": [v for v in (self._att_view(a) for a in post.get("refs", [])) if v and not v.get("removed")],
             "tags": post.get("tags", {}),
@@ -428,7 +428,7 @@ class Feed(FeedMoreMixin):
         seen_ids = set(person.get("seen_ids") or [])
         hidden = self._snoozed(uid)
         return sum(1 for p in self.data["posts"].values()
-                   if p["ts"] > seen and p["id"] not in seen_ids and p["author"] != uid
+                   if p["ts"] > seen and p["id"] not in seen_ids and p["author"] != uid and not p.get("album_only")
                    and p["author"] not in hidden and self.can_see(uid, p))
 
     def _snoozed(self, uid: str) -> set[str]:
@@ -451,7 +451,8 @@ class Feed(FeedMoreMixin):
             posts = [p for p in posts if p["id"] in ids]
         elif author:
             # someone's profile: their posts, and posts on their page they haven't hidden
-            posts = [p for p in posts if p["author"] == author or (p.get("page") == author and not p.get("page_hidden"))]
+            posts = [p for p in posts if not p.get("album_only")
+                     and (p["author"] == author or (p.get("page") == author and not p.get("page_hidden")))]
         elif group:
             posts = [p for p in posts if p["audience"].get("group") == group]
         elif album:
@@ -462,7 +463,7 @@ class Feed(FeedMoreMixin):
         else:
             # the main feed leaves out snoozed people, and group posts show in their group too
             hidden = self._snoozed(uid)
-            posts = [p for p in posts if p["author"] not in hidden]
+            posts = [p for p in posts if p["author"] not in hidden and not p.get("album_only")]
         if kind == "events":
             posts = [p for p in posts if p.get("kind") == "event"]
         posts.sort(key=lambda p: p.get("archived") or p["ts"] if kind == "archive" else p["ts"], reverse=True)
@@ -503,7 +504,8 @@ class Feed(FeedMoreMixin):
         for p in self.data["posts"].values():
             when = dt_util.as_local(dt_util.utc_from_timestamp(p["ts"] / 1000))
             if when.year < today.year and when.month == today.month and when.day == today.day \
-                    and p.get("kind") not in AUTO_KINDS and not p.get("archived") and self.can_see(uid, p):
+                    and p.get("kind") not in AUTO_KINDS and not p.get("archived") and not p.get("album_only") \
+                    and self.can_see(uid, p):
                 out.append(p)
         out.sort(key=lambda p: p["ts"], reverse=True)
         return [self.post_view(p, uid) for p in out[:5]]
@@ -514,7 +516,7 @@ class Feed(FeedMoreMixin):
         want = "video/" if kind == "videos" else "image/"
         items = []
         for p in self.data["posts"].values():
-            if p.get("kind") == "review" or p.get("archived") or not self.can_see(uid, p):
+            if p.get("kind") == "review" or p.get("archived") or p.get("album_only") or not self.can_see(uid, p):
                 continue
             for aid in p.get("media", []):
                 tagged = [t["uid"] for t in (p.get("tags") or {}).get(aid, [])]
@@ -751,6 +753,24 @@ class Feed(FeedMoreMixin):
         return sum(1 for x in self._notif_all(uid)
                    if self._n_visible(uid, st, x) and self._n_unread(st, x)
                    and (x["ts"] > seen or st["unread_at"].get(x["key"], 0) >= seen))
+
+    MENTION_KINDS = {"mention", "comment_mention", "story_mention"}
+
+    def notif_counts(self, uid: str) -> tuple[int, int]:
+        """The bell's red number, and the unread @mentions among everything not yet read (for the sensors)."""
+        if not self.enabled():
+            return 0, 0
+        st = self._nstate(uid)
+        seen = self.person(uid)["notif_seen"]
+        bell = mentions = 0
+        for x in self._notif_all(uid):
+            if not (self._n_visible(uid, st, x) and self._n_unread(st, x)):
+                continue
+            if x["ts"] > seen or st["unread_at"].get(x["key"], 0) >= seen:
+                bell += 1
+            if x["kind"] in self.MENTION_KINDS:
+                mentions += 1
+        return bell, mentions
 
     def notif_seen(self, uid: str) -> None:
         self.person(uid)["notif_seen"] = _now()
@@ -1057,7 +1077,7 @@ class Feed(FeedMoreMixin):
         return {"GBP": "£", "USD": "$", "EUR": "€", "AUD": "$", "CAD": "$", "NZD": "$", "JPY": "¥",
                 "INR": "₹", "CHF": "CHF", "SEK": "kr", "NOK": "kr", "DKK": "kr"}.get(code, code or "£")
 
-    async def async_create(self, uid: str, raw: dict, *, automation: bool = False) -> dict:
+    async def async_create(self, uid: str, raw: dict, *, automation: bool = False, album_only: bool = False) -> dict:
         if not self.enabled():
             raise _err("unavailable", "The Feed is switched off")
         kind = raw.get("kind") or "post"
@@ -1106,6 +1126,8 @@ class Feed(FeedMoreMixin):
             **({"scheduled_at": sched} if sched else {}),
             **({"album": album["id"]} if album else {}),
             **({"page": page} if page else {}),
+            # Make an Album's copies: shown in the album only, never as new posts in the Feed
+            **({"album_only": True} if album_only and album else {}),
         }
         post.update(self._check_kind(uid, kind, raw, text))
         shared = self.check_share(uid, raw["shared"]) if raw.get("shared") else None
@@ -1145,6 +1167,8 @@ class Feed(FeedMoreMixin):
         if sched:
             self._arm_schedule(post)
             self.m._send_to(uid, {"type": "feed", "post": self.post_view(post, uid)})
+        elif post.get("album_only"):
+            self.push(post)   # quietly: no notifications, nothing new in the Feed
         else:
             await self._async_published(post)
         return self.post_view(post, uid)
@@ -1230,6 +1254,14 @@ class Feed(FeedMoreMixin):
                     self.hass.async_create_task(self._async_link(post["id"], url))
             elif not url:
                 post.pop("link", None)
+        # Link Safety (an AI feature): check the post's link
+        url = self._link_url(post)
+        if url != (post.get("link_safety") or {}).get("url"):
+            post.pop("link_safety", None)
+            if url and post["author"] != HA_SENDER_ID:
+                from . import linksafety
+                if linksafety.on(self.m):
+                    self.hass.async_create_task(linksafety.check_post(self.hass, self.m, post["id"], url))
         if post.get("kind") == "event":
             self._arm_event(post)
 

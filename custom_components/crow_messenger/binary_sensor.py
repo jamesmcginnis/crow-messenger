@@ -12,7 +12,10 @@ from .entity import CrowMessengerEntity, EntityHub, setup_platform
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry, add: AddEntitiesCallback) -> None:
     setup_platform(hass, entry, add, lambda hub, uid: [NewMessagesSensor(hub, uid), ActiveSensor(hub, uid),
                                                        RingingSensor(hub, uid), TypingSensor(hub, uid),
-                                                       LiveLocationSensor(hub, uid), BirthdaySensor(hub, uid)])
+                                                       LiveLocationSensor(hub, uid), BirthdaySensor(hub, uid),
+                                                       QuietModeSensor(hub, uid)])
+    # each email account's sensors, while Email is on
+    hass.data["crow_messenger"].email.platform_ready("binary_sensor", add)
 
 
 class NewMessagesSensor(CrowMessengerEntity, BinarySensorEntity):
@@ -96,3 +99,31 @@ class BirthdaySensor(CrowMessengerEntity, BinarySensorEntity):
     @property
     def is_on(self) -> bool:
         return bool(self.stats.get("birthday"))
+
+
+class QuietModeSensor(CrowMessengerEntity, BinarySensorEntity):
+    """On while they don't want to be disturbed: the Feed's Quiet Mode (paused, or its nightly hours), or
+    Focus (iPhone) / Do Not Disturb (Android) on their phone. So other automations can stay quiet too."""
+    _attr_icon = "mdi:weather-night"
+
+    def __init__(self, hub: EntityHub, uid: str) -> None:
+        super().__init__(hub, uid, "quiet_mode")
+
+    @property
+    def is_on(self) -> bool:
+        return bool(self.stats.get("quiet"))
+
+    @property
+    def extra_state_attributes(self):
+        s = self.stats
+        out = {"feed_quiet_mode": bool(s.get("quiet_feed")), "phone_focus": bool(s.get("focus")),
+               "conversations_with_hide_alerts": s.get("muted_chats", 0), "quiet_until": None, "nightly": None}
+        feed = getattr(self.hub.messenger, "feed", None)
+        if feed and feed.enabled():
+            q = feed.quiet_view(self.uid)
+            if q.get("until"):
+                from homeassistant.util import dt as dt_util
+                out["quiet_until"] = dt_util.utc_from_timestamp(q["until"] / 1000).isoformat()
+            if q.get("schedule"):
+                out["nightly"] = f"{q['from']}–{q['to']}"
+        return out

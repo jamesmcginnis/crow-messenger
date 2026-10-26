@@ -1,4 +1,5 @@
-"""The red number on the Home Assistant app's icon: how many unread messages you have.
+"""The red number on the Home Assistant app's icon: how many unread messages you have, plus
+unread email when Email is switched on (each person chooses which email counts, in Email).
 
 Off until an administrator turns on App Icon Badge in the card editor.
 
@@ -46,12 +47,22 @@ class Badge:
         return bool((self.messenger.settings.get("notifications") or {}).get("badge"))
 
     # ── the number ─────────────────────────────────────────────────────────
+    def _email_part(self, uid: str) -> int:
+        mailer = self.hass.data.get("crow_messenger_email")
+        if mailer is None:
+            return 0
+        try:
+            return int(mailer.badge.part(uid) or 0)
+        except Exception:  # noqa: BLE001 - Email must never stop the messages badge
+            _LOGGER.debug("Crow Messenger couldn't count email for the badge", exc_info=True)
+            return 0
+
     def total(self, uid: str) -> int | None:
-        """Unread messages in chats that aren't muted, or None when the badge is off."""
+        """Unread messages in chats that aren't muted (and email, when Email is on), or None when the badge is off."""
         if not self.enabled or not uid:
             return None
         m = self.messenger
-        n = 0
+        n = self._email_part(uid)
         for t in m.data.get("threads", {}).values():
             if uid not in t["participants"] or m.is_muted(t, uid):
                 continue
@@ -60,11 +71,16 @@ class Badge:
                 n += int(v.get("unread") or 0) or (1 if v.get("marked_unread") else 0)
         return n
 
-    def for_notification(self, uid: str) -> int | None:
+    def for_notification(self, uid: str, extra: int = 0) -> int | None:
+        """The number a notification carries (extra: email about to be counted that isn't yet)."""
         n = self.total(uid)
         if n is not None:
+            n += max(0, int(extra or 0))
             self._sent[uid] = n
         return n
+
+    def note_sent(self, uid: str, n: int) -> None:
+        self._sent[uid] = n
 
     def note_notified(self, uid: str, thread_id: str, tag: str, ts: int) -> None:
         lst = self._tags.setdefault(uid, {}).setdefault(thread_id, [])
@@ -103,6 +119,9 @@ class Badge:
     def everyone_changed(self, force: bool = False) -> None:
         """The setting was switched: bring everyone's badge up to date (or clear it)."""
         uids = {u for t in self.messenger.data.get("threads", {}).values() for u in t["participants"]}
+        mailer = self.hass.data.get("crow_messenger_email")
+        if mailer is not None:
+            uids |= {a.acc["owner"] for a in mailer.accounts.values()}
         for uid in uids:
             self.hass.async_create_task(self.async_push(uid, force=force, clear=not self.enabled))
 

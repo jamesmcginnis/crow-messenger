@@ -1,7 +1,8 @@
 """The Crow Messenger integration.
 
 Private messaging between Home Assistant users, with attachments, group
-chats, phone notifications (iPhone and Android) and a per-user contacts book.
+chats, phone notifications (iPhone and Android) and a per-user contacts book,
+plus the Feed and (when an administrator switches it on) Email.
 The card ships inside the integration and is added to every dashboard
 automatically, so one download installs both.
 """
@@ -32,7 +33,7 @@ from .const import CLEANUP_INTERVAL_MINUTES, DOMAIN, HA_SENDER_ID, SERVICE_SEND_
 SERVICE_POST = "post"
 # parts of the card in files of their own, fetched by the card the first time each is used
 LAZY_FILES = {"feed": "crow-feed.js", "pdf": "crow-pdf.js", "games": "crow-games.js",
-              "live": "crow-live.js", "people": "crow-people.js"}
+              "live": "crow-live.js", "people": "crow-people.js", "email": "crow-email.js"}
 from .http import BackupView, MediaView, PushMediaView, UploadView, PushImageView
 from .manager import Messenger, MessengerError, new_id, now_ms
 from .const import ACTION_PREFIX
@@ -164,9 +165,14 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     entry.async_on_unload(async_track_time_interval(hass, _expire, timedelta(minutes=1)))
 
+    # Email: off until an administrator switches it on (the editor's Email page)
+    from .email import EmailRuntime
+    messenger.email = EmailRuntime(hass, entry, messenger)
+
     # Each person's sensors
     entry.async_on_unload(await messenger.entities.async_start())
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    await messenger.email.async_sync()
 
     # Reply typed into a phone notification.
     async def _on_notification_action(event: Event) -> None:
@@ -174,6 +180,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         action = str(data.get("action") or "")
         text = str(data.get("reply_text") or "").strip()
         uid = event.context.user_id
+        # Email's notifications have buttons and tags of their own (Email handles them)
+        if action.startswith("CROW_EMAIL") or str(data.get("tag") or "").startswith("crow_email_"):
+            return
         # Discard on a "Send link to…" notification (Share to Home Assistant)
         if action.startswith(share.DISCARD_PREFIX) and uid:
             await share.async_done(hass, messenger, uid, action[len(share.DISCARD_PREFIX):])
@@ -394,6 +403,9 @@ async def async_remove_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    m = hass.data.get(DOMAIN)
+    if m is not None and getattr(m, "email", None):
+        await m.email.async_unload()
     if not await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
         return False
     hass.services.async_remove(DOMAIN, SERVICE_SEND_MESSAGE)
