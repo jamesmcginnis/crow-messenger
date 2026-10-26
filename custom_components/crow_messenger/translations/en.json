@@ -36,6 +36,214 @@
           "description": "Optional buttons under the message, e.g. [\"Unlock\", \"Ignore\"] or [{\"title\": \"Unlock\", \"action\": \"UNLOCK_DOOR\"}]. Tapping one (in the card or the notification) fires the crow_messenger_action event with who tapped it."
         }
       }
+    },
+    "post": {
+      "name": "Post to the Feed",
+      "description": "Post in the Crow Messenger Feed, optionally with photos or videos. Posts as Home Assistant from an automation, or as the person who ran the action.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "What the post says."
+        },
+        "attachment": {
+          "name": "Photos or videos",
+          "description": "Optional photo or video files to include: paths inside an allowed folder or /local/… URLs. One, or a list."
+        },
+        "to": {
+          "name": "Who can see it",
+          "description": "Optional: everyone (the default), or Home Assistant users, names or person entities who can see it."
+        },
+        "group": {
+          "name": "Group",
+          "description": "Optional: the name of a Feed group to post in instead. Only its members see it."
+        },
+        "background": {
+          "name": "Background",
+          "description": "Optional coloured background for a short post with no photos: accent, sunset, ocean, forest, berry, night, rose or gold."
+        }
+      }
+    },
+    "send_email": {
+      "name": "Send email",
+      "description": "Sends an email from one of the Crow Messenger Email accounts.",
+      "fields": {
+        "account": {
+          "name": "From account",
+          "description": "The account to send from: its email address or its name in Crow Messenger Email."
+        },
+        "to": {
+          "name": "To",
+          "description": "Who to send to. Separate several addresses with commas."
+        },
+        "cc": {
+          "name": "Cc",
+          "description": "Copied to."
+        },
+        "bcc": {
+          "name": "Bcc",
+          "description": "Copied to, without the others seeing."
+        },
+        "subject": {
+          "name": "Subject",
+          "description": "The subject line."
+        },
+        "message": {
+          "name": "Message",
+          "description": "The email, as plain text. The account's signature is added."
+        },
+        "html": {
+          "name": "HTML",
+          "description": "The email as HTML instead of plain text (no signature is added)."
+        },
+        "attachments": {
+          "name": "Attachments",
+          "description": "Files to attach, from /config/www (/local/...), /media (/media/local/...) or another allowed folder."
+        },
+        "send_at": {
+          "name": "Send at",
+          "description": "Send it later, at this time, instead of straight away."
+        },
+        "buttons": {
+          "name": "Buttons",
+          "description": "Buttons in the email, each with a title and an action (and optionally a colour). Tapping one fires a crow_email_action event with that action, once. Each button works for two weeks."
+        },
+        "poll": {
+          "name": "Voting buttons",
+          "description": "Two to eight choices. People vote by tapping one and sending the reply that opens; each vote fires a crow_email_vote event."
+        },
+        "read_receipt": {
+          "name": "Ask for a read receipt",
+          "description": "Asks the person's mail app to send a receipt when they open the email (they can choose not to)."
+        }
+      }
+    },
+    "mark_email_as_read": {
+      "name": "Mark email as read",
+      "description": "Marks an email as read (or unread).",
+      "fields": {
+        "account": {
+          "name": "Account",
+          "description": "The account's email address (or its name in Crow Messenger Email)."
+        },
+        "folder": {
+          "name": "Folder",
+          "description": "The folder the email is in. INBOX unless you say otherwise."
+        },
+        "uid": {
+          "name": "Email",
+          "description": "The email's uid, from the crow_email_received event (trigger.event.data.uid)."
+        },
+        "message_id": {
+          "name": "Message-ID",
+          "description": "Or find the email by its Message-ID header."
+        },
+        "read": {
+          "name": "Read",
+          "description": "Off marks it as unread."
+        },
+        "all": {
+          "name": "Every email",
+          "description": "Mark every email in the folder."
+        }
+      }
+    },
+    "archive_email": {
+      "name": "Archive email",
+      "description": "Moves an email to the account's Archive folder.",
+      "fields": {
+        "account": {
+          "name": "Account",
+          "description": "The account's email address (or its name in Crow Messenger Email)."
+        },
+        "folder": {
+          "name": "Folder",
+          "description": "The folder the email is in. INBOX unless you say otherwise."
+        },
+        "uid": {
+          "name": "Email",
+          "description": "The email's uid, from the crow_email_received event (trigger.event.data.uid)."
+        },
+        "message_id": {
+          "name": "Message-ID",
+          "description": "Or find the email by its Message-ID header."
+        }
+      }
+    },
+    "move_email": {
+      "name": "Move email to folder",
+      "description": "Moves an email to another folder.",
+      "fields": {
+        "account": {
+          "name": "Account",
+          "description": "The account's email address (or its name in Crow Messenger Email)."
+        },
+        "folder": {
+          "name": "Folder",
+          "description": "The folder the email is in. INBOX unless you say otherwise."
+        },
+        "uid": {
+          "name": "Email",
+          "description": "The email's uid, from the crow_email_received event (trigger.event.data.uid)."
+        },
+        "message_id": {
+          "name": "Message-ID",
+          "description": "Or find the email by its Message-ID header."
+        },
+        "to_folder": {
+          "name": "To folder",
+          "description": "The folder to move it to, by name."
+        }
+      }
+    },
+    "flag_email": {
+      "name": "Flag email",
+      "description": "Flags an email (or removes the flag).",
+      "fields": {
+        "account": {
+          "name": "Account",
+          "description": "The account's email address (or its name in Crow Messenger Email)."
+        },
+        "folder": {
+          "name": "Folder",
+          "description": "The folder the email is in. INBOX unless you say otherwise."
+        },
+        "uid": {
+          "name": "Email",
+          "description": "The email's uid, from the crow_email_received event (trigger.event.data.uid)."
+        },
+        "message_id": {
+          "name": "Message-ID",
+          "description": "Or find the email by its Message-ID header."
+        },
+        "flagged": {
+          "name": "Flagged",
+          "description": "Off removes the flag."
+        }
+      }
+    },
+    "refresh_email": {
+      "name": "Check for new email",
+      "description": "Checks for new mail now and updates the sensors.",
+      "fields": {
+        "account": {
+          "name": "Account",
+          "description": "Just this account. Leave empty for all of them."
+        }
+      }
+    },
+    "update_email_badge": {
+      "name": "Update the app badge's email number",
+      "description": "Brings the red number on the Home Assistant app's icon up to date for the person who owns an account, optionally adding a number of your own (for example parcels on their way). Needs App Icon Badge turned on in the card editor.",
+      "fields": {
+        "account": {
+          "name": "Account",
+          "description": "Any of the person's email accounts, by email address or description."
+        },
+        "extra": {
+          "name": "Extra",
+          "description": "A number added to the badge, kept until you change it. Use 0 to stop adding one."
+        }
+      }
     }
   },
   "entity": {
@@ -45,6 +253,173 @@
       },
       "latest": {
         "name": "Latest message"
+      },
+      "new_posts": {
+        "name": "New posts"
+      },
+      "feed_notifications": {
+        "name": "Feed notifications"
+      },
+      "last_seen": {
+        "name": "Last seen"
+      },
+      "viewing": {
+        "name": "Viewing",
+        "state": {
+          "off": "Not open",
+          "messages": "Messages",
+          "chat": "A chat",
+          "feed": "Feed",
+          "contacts": "Contacts",
+          "other": "Other"
+        }
+      },
+      "waiting": {
+        "name": "Waiting on reply"
+      },
+      "reminders": {
+        "name": "Pending reminders"
+      },
+      "last_post": {
+        "name": "Last post"
+      },
+      "messages_today": {
+        "name": "Messages today"
+      },
+      "storage": {
+        "name": "Storage used"
+      },
+      "next_event": {
+        "name": "Next event"
+      },
+      "active_chats": {
+        "name": "Active chats"
+      },
+      "people_online": {
+        "name": "People online"
+      },
+      "email_unread": {
+        "name": "Unread"
+      },
+      "email_unread_vip": {
+        "name": "Unread VIP"
+      },
+      "email_latest": {
+        "name": "Latest email"
+      },
+      "email_received_today": {
+        "name": "Received today"
+      },
+      "email_flagged": {
+        "name": "Flagged"
+      },
+      "email_drafts_scheduled": {
+        "name": "Drafts and scheduled"
+      },
+      "email_storage": {
+        "name": "Mailbox usage"
+      },
+      "email_last_checked": {
+        "name": "Last checked"
+      },
+      "email_parcels": {
+        "name": "Parcels"
+      },
+      "email_junk": {
+        "name": "Junk"
+      },
+      "email_badge": {
+        "name": "App badge"
+      },
+      "email_attention_today": {
+        "name": "Needs attention today"
+      },
+      "email_bills_due": {
+        "name": "Bills due this week"
+      },
+      "email_snoozed": {
+        "name": "Snoozed"
+      },
+      "email_reminders": {
+        "name": "Reminders"
+      },
+      "email_waiting_reply": {
+        "name": "Waiting for a reply"
+      },
+      "email_screener": {
+        "name": "Screener"
+      },
+      "email_next_bill": {
+        "name": "Next bill"
+      },
+      "email_latest_vip": {
+        "name": "Latest VIP email"
+      },
+      "email_subscriptions": {
+        "name": "Subscriptions"
+      },
+      "email_unread_people": {
+        "name": "Unread people"
+      },
+      "email_unread_notifications": {
+        "name": "Unread notifications"
+      },
+      "email_unread_shopping": {
+        "name": "Unread shopping"
+      },
+      "email_unread_social": {
+        "name": "Unread social"
+      },
+      "email_unread_newsletters": {
+        "name": "Unread newsletters"
+      },
+      "email_food_arriving": {
+        "name": "Food arriving"
+      },
+      "email_next_grocery_delivery": {
+        "name": "Next supermarket delivery"
+      },
+      "email_food_spend": {
+        "name": "Food order spend this month"
+      },
+      "email_grocery_spend": {
+        "name": "Supermarket spend this month"
+      },
+      "email_next_travel": {
+        "name": "Next travel"
+      },
+      "email_refunds_owed": {
+        "name": "Refunds owed"
+      },
+      "email_return_deadline": {
+        "name": "Return deadline"
+      },
+      "email_next_renewal": {
+        "name": "Next renewal"
+      },
+      "email_next_home_visit": {
+        "name": "Next home visit"
+      },
+      "email_next_event": {
+        "name": "Next event"
+      },
+      "email_council_updates": {
+        "name": "Council updates"
+      },
+      "email_warranties_ending": {
+        "name": "Warranties ending soon"
+      },
+      "email_unread_council": {
+        "name": "Unread council and local"
+      },
+      "attention": {
+        "name": "Needs my attention"
+      },
+      "mentions": {
+        "name": "Unread mentions"
+      },
+      "next_birthday": {
+        "name": "Next birthday"
       }
     },
     "binary_sensor": {
@@ -56,6 +431,51 @@
       },
       "ringing": {
         "name": "Phone ringing"
+      },
+      "typing": {
+        "name": "Typing"
+      },
+      "live_location": {
+        "name": "Sharing live location"
+      },
+      "birthday": {
+        "name": "Birthday today"
+      },
+      "email_connected": {
+        "name": "Connected"
+      },
+      "email_new_mail": {
+        "name": "New mail"
+      },
+      "email_out_for_delivery": {
+        "name": "Parcel out for delivery"
+      },
+      "email_bill_overdue": {
+        "name": "Bill overdue"
+      },
+      "email_food_order": {
+        "name": "Food order in progress"
+      },
+      "email_groceries_coming": {
+        "name": "Supermarket delivery coming"
+      },
+      "email_away_on_trip": {
+        "name": "Away on a trip"
+      },
+      "email_travel_disruption": {
+        "name": "Travel disruption"
+      },
+      "email_renewal_due_soon": {
+        "name": "Renewal due soon"
+      },
+      "email_home_visit_today": {
+        "name": "Home visit today"
+      },
+      "email_home_visit_now": {
+        "name": "Home visit now"
+      },
+      "quiet_mode": {
+        "name": "Quiet mode"
       }
     }
   }
