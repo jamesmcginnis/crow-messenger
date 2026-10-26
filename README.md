@@ -4,6 +4,8 @@ Crow Messenger is a Home Assistant integration and Lovelace card for private mes
 
 It also has a **Feed**: a private, Facebook-style social feed just for your household, with posts, photos, videos, stories, groups, albums, events and more — every post seen only by the people you share it with.
 
+And, when an administrator switches it on, **Email**: each person's own iCloud, Gmail, Yahoo, Outlook or other email accounts in the card, sharing the same contacts book and app icon badge as Messages (see [Email](#email)).
+
 Everything is **private to your household** — messages, photos and contacts are stored by the integration on your Home Assistant server, never in the cloud.
 
 > **One download installs both.** The card is bundled inside the integration and is loaded into your dashboards automatically — there's no separate resource to add.
@@ -127,12 +129,12 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **Private address book** — each person has their own contacts, with vCard import
 - **My Card and Shared Name and Photo** — choose how you appear to everyone else
 - **Who voted in a poll** — small photos of who chose each option (yours first, then +N), in chat polls and Feed polls; tap a photo for that person's profile, or +N for everyone. Turn on **Anonymous Poll** when making one and only the totals show — nobody, not even whoever made it, is told who chose what
-- **Favourites** — Add to Favourites on a contact card (a ★ shows by their name). Favourites get a row of photos at the top of Contacts (tap to message, press and hold for Message, Call or Contact Card), come first in New Message, Forward and Send to a Chat, and have their own filter on Messages. Adding a favourite offers once to pin your chat with them
-- **People Map** — where everyone is, from their Home Assistant person, with Find Me. Tap someone to see their address, how long they've been there, the weather where they are, what they're doing (walking, driving and so on), whether Focus is on, their battery and whether it's charging, and the Wi-Fi network they're on, from the Companion app's sensors on their phone. People in the same place sit side by side on the map
+- **Favourites** — Add to Favourites on a contact card (a ★ shows by their name). Favourites get a row of photos at the top of Contacts (tap for their contact card, press and hold for Message, Call or Contact Card), come first in New Message, Forward and Send to a Chat, and have their own filter on Messages. Adding a favourite offers once to pin your chat with them
+- **People Map** — where everyone is, from their Home Assistant person, with Find Me. Open it with **Maps** in the app bar. Tap someone to see their address, how long they've been there, the weather where they are, what they're doing (walking, driving and so on), whether Focus is on, their battery and whether it's charging, and the Wi-Fi network they're on, from the Companion app's sensors on their phone. People in the same place sit side by side on the map
 - **Find Nearby** — optional and off by default: toilets, cafés, restaurants, pubs, cash machines, pharmacies, supermarkets, petrol stations, EV chargers or parking near someone, or near the middle of the map, from OpenStreetMap. Each place shows its address, opening hours, phone and website (both ask before calling or opening), and wheelchair access, with Directions, Share (in a chat or through the share sheet) and Add Zone. Distances are from the person you're looking at. Closing a search stops it straight away
 - **Saved places** — places Find Nearby has found are remembered on each device for a week, two weeks or a month, and stay on the map as small pins you can tap to open without searching again. Press and hold a pin for Directions, Share or Remove from Map. The map style menu can show, hide or clear saved places
 - **Zones** — create Home Assistant zones straight from the map, Check In and shared locations
-- **A household member's contact card** also shows whether they're **Active now**, a **Feed** button, their **Feed profile** with their latest post and recent photos, **Post on Their Page**, their **birthday from the Feed** (with Write on the Card on the day), your **chats** with them (with unread counts), **Shared in Chats**, **Hide Alerts** and **Ring Phone**. Only posts and photos shared with you are ever shown, and nothing from the Feed shows when the Feed is switched off. Other contacts are unchanged. Switch it off in the editor (This Card → Contacts & People → Feed and Chats on Contact Cards)
+- **A household member's contact card** also shows whether they're **Active now**, a **Feed** button, their **Feed profile** with their latest post and recent photos, **Post on Their Page**, their **birthday from the Feed** (with Write on the Card on the day), your **chats** with them (with unread counts), **Shared in Chats**, **Hide Alerts** and **Ring Phone**. Only posts and photos shared with you are ever shown, and nothing from the Feed shows when the Feed is switched off. Other contacts are unchanged. Switch it off in the editor (Contacts & Maps → Feed and Chats on Contact Cards)
 
 
 ### AI Features
@@ -147,8 +149,9 @@ All optional, and each can be switched off individually in the editor:
 - **Add to Calendar and Reminders** — turn a message into an event or a to-do
 - **Ask This Chat** — ask a question about a conversation and see the messages the answer came from
 - **Photo Descriptions** — a description of any photo, for anyone who can't see it
+- **Link Safety** — links shared in chats and the Feed are checked, and one that looks like a scam (a fake bank or courier site, look-alike letters, a well-known name on a site that isn't theirs) gets a warning underneath and a question before it opens. Only the link and its page's title and description go to the AI, never the message, and well-known sites aren't sent at all
 
-**In the Feed** (each with its own switch under **Household → AI → Feed**):
+**In the Feed** (each with its own switch on the editor's **AI** page):
 
 - **Writing Tools** — the ✨ button in the composer and the comment box
 - **Suggest a Caption** — a few captions for the photos you've just added
@@ -163,6 +166,7 @@ All optional, and each can be switched off individually in the editor:
 - **Memory Captions** — a short caption for On This Day memories, and a suggested caption for posts waiting for review
 - **Kindness Check** — a gentle "Post This?" before something that could come across as harsh, with **Edit** or **Post Anyway**. It never blocks: if the AI is slow, the post goes out
 - **Ask the Feed** — Feed ••• → Ask the Feed answers questions like "When is the BBQ?" from posts shared with you, with links to them
+- **Make an Album** — after a busy few days of photos (a weekend away, a birthday), the top of the Feed offers to gather them into an album, with three names from the AI to choose from (or your own). Your photos go in straight away, and everyone else who posted photos in those days is asked, at the top of their Feed, whether to add theirs. Only photos shared with everyone are gathered, the album is shared with everyone, and the copies only appear in the album, not as new posts
 
 Only posts and photos the person using the feature can see are ever sent to the AI.
 
@@ -176,7 +180,7 @@ A private social feed for the people in your home. It's **on by default** and ca
   - **The ••• menu** on Notifications: Mark All as Read, Show (All, Unread, Reactions, Comments and Replies, Mentions and Tags, Posts on Your Page, or Birthdays, Groups and More), Turned Off Posts, Recently Removed (put back anything removed or cleared in the last 30 days), Notification Settings and **Clear All** (asks first)
   - Removed, cleared, read and turned-off notifications are remembered by Home Assistant, so they're the same on every device. Something new on a post (another reaction, a new comment) brings its notification back
 - **Menu** — your profile, then Activity Log, Saved, Photos, Albums, Add to Story, New Post, Feed Settings and Messages
-- **More like Facebook** — each can be switched off under Household → Feed in the editor:
+- **More like Facebook** — each can be switched off on the editor's Feed page:
   - **Intro and Featured Photos** — a short bio and details on your profile (where you work, your pets…), each for **Everyone** or **Only Me**, and up to nine featured photos (each only shows to people who can see the post it's from)
   - **Story Highlights** — keep stories on your profile after the 24 hours, as named circles. Tap **+ New** on your profile, tick the stories you want (numbered in the order you pick), then name it and choose a cover. Or open one of your stories and tap **Highlight**. Each keeps the audience its story had; press and hold one to add stories, rename or delete it. The row only shows on your profile once you've posted a story
   - **Story Archive** — after its 24 hours each story is kept privately for the person who posted it, so it can go into a highlight later. Only they can see it. It follows Keep Posts (up to 300 stories each); switching it off in the card editor empties everyone's archive. A story you delete yourself isn't archived
@@ -193,12 +197,12 @@ A private social feed for the people in your home. It's **on by default** and ca
   - **Quiet Mode** — Feed Settings → pause Feed notifications for a while or every night, optionally hiding the red dots too. The bell still counts them; messages aren't affected
   - **Comment sorting** — Most Relevant, Newest or All Comments on a post
   - New notification switches in Feed Settings for Shares, Waves and Stories
-- **New post notifications** — by default everyone is told about every new post shared with them (**Every New Post**). An administrator can change the household default under Household → Feed → **New Post Notifications** to Important Only (events, polls, Up for Grabs, Chip In, lists and posts from their Favourites) or Nothing, and each person can change theirs in Feed Settings
+- **New post notifications** — by default everyone is told about every new post shared with them (**Every New Post**). An administrator can change the household default on the editor's Feed page (**New Post Notifications**) to Important Only (events, polls, Up for Grabs, Chip In, lists and posts from their Favourites) or Nothing, and each person can change theirs in Feed Settings
   - **Get Notified** — the bell on someone's profile: Off, Their Posts, or Their Posts and Stories
   - Several posts from the same person within five minutes become one notification ("person2 posted 3 times") instead of a buzz each time
   - Buttons on the new kinds: tick items off a list or add one, Recommend Someone, Open Original on a shared post, and Love or Comment on a new profile or cover photo
   - In **Quiet Mode**, notifications are held back; when it ends, one "While you were quiet" notification says how many, and opens the bell. Muted posts and hidden people are never notified
-- **Cover photos and your profile photo, like Facebook** — on your own profile, the camera on the banner adds a **cover photo** (Upload Photo, Reposition by dragging it up or down, View Photo, Remove), and the camera on your picture changes your **profile photo** (Choose Photo, Take Photo, Use My Home Assistant Picture, View Photo) with a Move and Scale step to frame it. A new profile photo shows straight away everywhere — chats, contacts, the Feed, comments and notifications, on everyone's card — and switches on Shared Name and Photo for you; your own contact card gets it too. Either can be shared to the Feed as a post. Cover photos are kept on the server like other photos (resized to about 1600px, the old one deleted when you change it), show behind the person's photo on their contact card, and can be switched off in the editor (**Cover Photos**, under Household → Feed). Tap anyone's cover or profile photo to see it full screen
+- **Cover photos and your profile photo, like Facebook** — on your own profile, the camera on the banner adds a **cover photo** (Upload Photo, Reposition by dragging it up or down, View Photo, Remove), and the camera on your picture changes your **profile photo** (Choose Photo, Take Photo, Use My Home Assistant Picture, View Photo) with a Move and Scale step to frame it. A new profile photo shows straight away everywhere — chats, contacts, the Feed, comments and notifications, on everyone's card — and switches on Shared Name and Photo for you; your own contact card gets it too. Either can be shared to the Feed as a post. Cover photos are kept on the server like other photos (resized to about 1600px, the old one deleted when you change it), show behind the person's photo on their contact card, and can be switched off in the editor (**Cover Photos**, on the editor's Feed page). Tap anyone's cover or profile photo to see it full screen
 
 - **Private by design** — every post is shared with **Everyone at home**, **Chosen people**, **Only me** or a **group**. Only those people see the post, its photos and videos, its comments and who reacted, and only they are ever notified about it. The audience can be changed after posting
 - **Link previews like Facebook** — paste a link and a preview of the page appears as you write (tap ✕ to leave it off); in the Feed it shows the page's picture across the post with the site, title and description, and the link itself isn't repeated in the words. If a site doesn't answer at first, the preview is tried again later
@@ -207,6 +211,7 @@ A private social feed for the people in your home. It's **on by default** and ca
 - **Post on someone's page** — like Facebook: it shows on their profile as “person1 ▸ person2” and they're told about it. It's always shared with them (and whoever else you choose), and they can hide it from their page or delete it. Every profile has **Post on Their Page**
 - **Tag people in photos** — tap where someone is; they're told, can see it in their Photos, and can remove the tag
 - **Reactions** — Love, Like, Haha, Wow, Sad and Angry (press and hold Like), and see who reacted with what
+- **One row under each post** — Like, Comment and Share, each with how many, a Save bookmark (saved posts are in Menu → Saved), and the reactions on the right (tap them to see who reacted)
 - **Comments** — with replies, @mentions, a photo or a sticker, reactions on comments, edit and delete
 - **Who can comment** — everyone who can see the post, or only people you choose
 - **Stories** — photos, videos or words that disappear after 24 hours, with who's seen yours and replies straight to a chat
@@ -262,16 +267,353 @@ A private social feed for the people in your home. It's **on by default** and ca
 
 ---
 
+## Email
+
+Email is an email client inside the card: each person adds their own iCloud, Gmail, Yahoo, Outlook / Microsoft 365 or other IMAP accounts and reads and writes email from the **Email** button in the app bar, next to Messages, Contacts and the Feed.
+
+**Email is off until an administrator switches it on**: card editor → **Household** → **Features** → **Email**, then press **Save**. It starts straight away, with no restart. While it's off nothing runs: no mail server connections, no entities, no actions and no Assist tools, and the card never downloads Email's screens. Switching it off again removes its entities and devices (each person's accounts and settings are kept for next time).
+
+- **One contacts book.** Email uses the card's Contacts: a contact added from an email shows in Messages, and tapping an email address on a contact starts an email.
+- **One app icon badge.** When **App Icon Badge** is on (the editor's Notifications page), unread email is added to the number on the Home Assistant app's icon. Each person chooses which email counts (all unread, email that notified them, VIPs only, or none) in Email's Settings.
+- **The card's look.** Email follows the card's light or dark mode, Liquid Glass or Classic, the Home Assistant theme, the accent colour and full screen. Its mail skins are all kept (iPhone, Airmail, Gmail, Outlook, Spark, Superhuman, Proton Mail, Outlook Express, Hotmail 2000, You've Got Mail, Terminal, iPhone OS 3, BlackBerry and Mac OS 9). Unless someone picks one of their own (Email's ⋯ menu → Skin) or the editor sets one for the card, Email uses the mail skin closest to their Crow Messenger skin: Material You uses Gmail, MSN and Yahoo! use Hotmail 2000, AIM uses You've Got Mail, ICQ and Windows use Outlook Express, Aqua uses Mac OS 9, BlackBerry and Nokia use BlackBerry, IRC uses Terminal, Signal uses Proton Mail, Discord uses Superhuman, and the rest use iPhone in the card's own colours.
+- **Opens on the Inbox.** Email always opens on the Inbox (all your accounts together), with the card's app bar at the top left and a Mailboxes button after it. Tapping Email in the app bar while you're in Email goes back to the Inbox; tapping it on the Inbox opens the Mailboxes.
+- **Settings.** The editor's **Email** page has this card's mail skin, wide layout, mail list, Inbox Tools and calendars, then the household's notices, Microsoft sign-in, attachments and automations. Email's notification and AI settings are on the Notifications and AI pages.
+
+### Messages, Contacts, the Feed and Email Together
+
+- **Recent emails on a contact card** — the last few emails to and from that person, with See All in Email. Each person can show or hide this in the ⋯ menu at the top right of any contact card, which also has Send Message, New Email, Edit, Share, Export as PDF, Favourites and Delete
+- **From an email** (⋯ in an open email) — Message the sender when they're in your household, Send to a Chat (the sender, subject and start of the email go into the chats you choose), Post Photos in the Feed, Make a Feed Event (filled in from the appointment Email found, if there is one) and Who's This? for someone new
+- **Ask Home Assistant about your email** — in the Home Assistant chat, ask things like "any emails from the school today?" or "when's my parcel coming?". Only your own email is used, and only in your own chat with Home Assistant
+- **What Did I Miss?** — on Messages, Filter → What Did I Miss? gives one short catch-up on unread messages, new Feed posts and important email (needs Catch Up under AI). The morning briefing includes your messages and the Feed too
+- **Search everything** — searching Messages also finds Feed posts and email, each in its own section
+- **Favourites are VIPs** — your Favourites in Contacts count as Email VIPs (each person can turn this off in Email's Settings)
+- **One sticker collection and one background** — stickers you save are in Messages and Email, and the background for all chats is also the background for all mailboxes. My Card (the email signature) can be filled in from your card in Contacts
+- **Household notices** — an administrator can have Home Assistant post in the Feed when someone's email says a parcel is out for delivery, a supermarket delivery is booked or on its way, or bin collections change (Email page → Household Notices, each off until switched on)
+- **Snooze until I get home** — Snooze has When I Get Home, which brings the email back when you next arrive home
+- **Quiet during Focus** — new email arrives silently while your phone's Focus or Do Not Disturb is on, as in Messages. VIPs still come through (each person can turn this off in Email's Settings)
+- **Notifications** open the card's dashboard (General page → Dashboards) straight into the email.
+
+### Adding Accounts
+
+Each person adds their own accounts in the card (**Settings → Add Account**). Only they can see them.
+
+| Provider | How to sign in |
+|----------|----------------|
+| **iCloud** | An app-specific password: [appleid.apple.com](https://appleid.apple.com) → **Sign-In and Security** → **App-Specific Passwords** |
+| **Gmail** | An App Password: [myaccount.google.com](https://myaccount.google.com) → **Security** → **2-Step Verification** → **App passwords** |
+| **Yahoo** | An app password: **Yahoo Account Security** → **Generate app password** |
+| **Outlook** (Outlook.com, Hotmail, Live and Microsoft 365) | Sign in with Microsoft: a short code is shown, you open **microsoft.com/devicelogin** on any device and sign in. Needs a one-off app registration — see below |
+| **Other** | Your provider's IMAP and SMTP server settings |
+
+Passwords and Microsoft sign-in tokens are kept by Home Assistant, never in the card.
+
+#### Microsoft (Outlook) Setup
+
+Microsoft only lets apps it knows sign in to Outlook, so an administrator registers Crow Messenger once (free, about five minutes):
+
+1. Go to [entra.microsoft.com](https://entra.microsoft.com) (or the Azure portal) and sign in with any Microsoft account
+2. Open **App registrations** → **New registration**
+3. Name it **Crow Messenger**, and under **Supported account types** choose **Accounts in any organizational directory and personal Microsoft accounts**. Leave **Redirect URI** empty, then click **Register**
+4. Open **Authentication** → **Advanced settings**, set **Allow public client flows** to **Yes**, and click **Save**
+5. Open **API permissions** → **Add a permission** → **APIs my organization uses** → **Office 365 Exchange Online** → **Delegated permissions**, tick **IMAP.AccessAsUser.All** and **SMTP.Send**, and click **Add permissions**
+6. On the **Overview** page, copy the **Application (client) ID**
+7. In the card editor, open the **Email** page, go to **Accounts and Sending** and paste it into **Application (Client) ID**. Leave **Tenant** as `common` for personal and work accounts, or enter your organisation's tenant ID to allow only its accounts
+
+> For Microsoft 365 work or school accounts, an administrator may need to grant consent for the permissions, and **Authenticated SMTP** must be allowed for the mailbox in the Microsoft 365 admin centre.
+
+
+
+### Features
+
+#### Mail
+
+- **iPhone Mail design** — Liquid Glass bars, large titles, swipe actions and smooth page transitions
+- **Every account in one place** — All Inboxes, VIP, Flagged, Unread, Today and Attachments, plus each account's own folders
+- **Side by side on a wide screen** — mailboxes, the list and the email together on a tablet, a computer or a Panel view
+- **Swipes** — swipe right for Read and Pin, left for More, Flag and Archive (or Delete), with a long swipe to archive. Turn on **Custom Swipes** and each person chooses their own
+- **Press and hold an email** — Reply, Forward, Mark as Read, Flag, Remind Me, Move, Export as PDF, Report Spam, Archive and Delete
+- **Select Emails** — mark, move, copy, archive or delete several at once
+- **Search** — across every account, with filters for unread, flagged, VIPs, attachments and today
+- **Remind Me** — an email comes back to the top of the Inbox, with a notification, when you choose
+- **Send Later and Undo Send** — schedule an email, or take one back in the seconds after sending
+- **Pin to Top of Inbox** — keep important emails at the top
+- **Conversations** — the emails in a back-and-forth, shown together
+- **Export as PDF** — an email or a whole conversation, then download it or attach it to a new email
+- **Group by Type** — optional: the Inbox in sections — People, Notifications, Shopping, Social and Newsletters
+- **Instant when you come back** — the emails you've seen are kept on your device, so the card opens straight away, then quietly fetches anything new
+
+#### Writing
+
+- **Rich text** — bold, italic, underline, lists, quotes, emoji and stickers
+- **Attachments** — photos, files and PDFs, up to 25 MB by default
+- **Signatures** for each account
+- **Voting buttons** — a poll in an email; replies are counted for you
+- **Event invitations** — send one, or answer one with Accept, Maybe or Decline
+- **Contact cards** — attach a contact from your address book
+- **Read receipts** — ask for one, and answer them
+
+#### Inbox Tools
+
+Each one is off until it's switched on in the editor:
+
+- **Snooze** — put an email away until later. It waits in a Snoozed folder, then comes back to the top of the Inbox, unread, with a notification
+- **Mute Conversation** — replies in a busy thread skip the Inbox and don't notify you
+- **The Screener** — the first email from someone new waits in the Screener until you choose **Let In** or **Screen Out**. Contacts, VIPs and anyone you've emailed always get through
+- **Subscriptions** — every mailing list in your Inbox, busiest first, with one-tap Unsubscribe where the sender supports it and **Unsubscribe All** for the ones you never read
+- **Sweep** — delete or archive everything from one sender, keep only the latest, or delete ones over 10 days old
+- **Custom Swipes** — each person chooses the buttons a swipe shows, and what a long swipe does
+- **Today** — a panel at the top of the Mailboxes with parcels arriving, food orders, supermarket delivery slots, appointments, bills due, reminders, snoozed emails coming back and follow-ups
+- **Keyboard shortcuts** — on a tablet or computer: `j`/`k` to move, `e` archive, `#` delete, `r` reply, `c` new email, `/` search, `?` for the full list
+
+#### Parcels and Dates
+
+- **Track Parcel** — tracking numbers are found in delivery emails from couriers in the UK, Ireland, the US, Canada, Australia and New Zealand, with a link to the courier's own tracking page (no API keys)
+- **Parcels** — a mailbox of deliveries on their way, with swipes, Rename, Share and Add to Calendar, an Arriving Today section, and a countdown before delivered parcels are tidied away
+- **Food Orders** — takeaway and restaurant orders (Just Eat, Deliveroo, Uber Eats, Foodhub and others) in a mailbox of their own, with when each should arrive or be ready to collect. An order counts as delivered an hour after it was due if no email says otherwise, and leaves a few hours later
+- **Supermarket Deliveries** — supermarket deliveries and click and collect (Tesco, Sainsbury's, Asda, Ocado and others) in a mailbox of their own, with the slot, the last time the order can be changed, substitutions and missing items. A delivery counts as delivered two hours after its slot if no email says otherwise, and stays two days so the substitutions can be checked
+- **Travel** — flights, trains, ferries, coaches, hotels and car hire grouped into trips, with check-in times, terminals, seats, delays and gate changes
+- **Home Visits** — engineers, services, installs and big deliveries coming to your home, with their time window
+- **Tickets** — concerts, matches, shows and the cinema, with doors, seats and Show Ticket
+- **Returns and Refunds** — things you're sending back, with the last day to return them and the refund to come
+- **Renewals** — insurance, MOT, TV licence, contracts and memberships, with the renewal date and last year's price to compare
+- **Council and Local** — bin collection changes, council tax, school news, road works and consultations, with any deadline
+- **Receipts** — receipts for things worth keeping, with warranties and a search
+- **Sign-in Codes** — the latest sign-in or verification code from a new email at the top of the Inbox, with Copy, for 10 minutes (found without AI, never saved, and never in sensors or events)
+- **Add to…** — in an email's menu, adds an older email (or one that went into Parcels) to Food Orders, Supermarket Deliveries or any of the sections above
+- **Add to Calendar** — tap a date in an email (optional, off by default) to add it to the calendar each person chooses, with the time, place and notes filled in
+
+#### Look and Feel
+
+- **The card's own look** — light or dark, Classic or Liquid Glass (with the card's Glass amount), the Home Assistant theme and the accent colour all come from the card
+- **Mail skins** — each person can pick their own look: iPhone, Airmail, Gmail, Outlook, Spark, Superhuman, Proton Mail, or old-school Outlook Express, Hotmail 2000, You've Got Mail, Terminal, iPhone OS 3, BlackBerry and Mac OS 9. Match Crow Messenger (the standard) uses the one closest to their card skin
+- **Backgrounds** — any photo, for one mailbox or all of them
+- **Colour** — one accent colour, or each account's own
+- **Full Screen** — the card's full screen button is at the top of the Mailboxes too
+
+#### Privacy and Safety
+
+- **Images** — pictures from the web are hidden until you choose Show Images (or always shown for senders you trust), so senders can't tell when you've opened an email
+- **Block Trackers** — the hidden pictures that report when you open an email are left out, even when images are shown
+- **Hide My Location** — pictures can be fetched through Home Assistant, so senders never see your IP address
+- **Block Ads** — ads from ad networks are taken out before the email reaches you, and optionally labelled sponsored sections are folded away
+- **Report Spam, Block Sender and Report Phishing** — with Unsubscribe in the same step
+- **Scam warnings** — emails pretending to be from someone else, or with links that go somewhere other than they say, are flagged
+- **Private contacts** — each person's own address book, with VIPs
+
+#### AI Features
+
+All optional, and each can be switched off individually in the editor:
+
+- **Catch Up and Summaries** — a digest of unread email, and a summary of any email or whole conversation
+- **Ask About This Email** — ask a question, like "When's the refund deadline?"
+- **Smart Replies and Writing Tools** — suggested replies, proofreading, rewriting, or an email from a few words
+- **Tone Check** — a gentle warning if an email might come across badly, with a kinder version
+- **Translate** and **Describe Pictures**
+- **Smart Search** — "the plumber's email about the boiler last month"
+- **Find Dates and To-dos** — appointments and deadlines, ready for a calendar or to-do list
+- **Smart Notifications** — only email worth a notification
+- **Smart Categories** — Primary, Transactions, Updates and Promotions
+- **Parcel Tracker** — deliveries found in email, with a Parcels sensor
+- **Food Orders and Supermarket Deliveries** — found in email, each with its own mailbox, sensors and event. Parcels leaves them out while these are on
+- **Travel, Home Visits, Tickets, Returns and Refunds, Renewals, Council and Local, and Receipts** — found in email, each with its own mailbox, sensors and event
+- **Appointments** — bookings found in new email, with Add to Calendar
+- **Bills** — amounts and due dates, a reminder a few days before, and a warning when a bill is much higher than last time
+- **Morning Briefing** — a short summary of your day each morning, as a notification or read aloud on a speaker
+- **Smart Snooze** — a suggested time from what's in the email, like the morning of a delivery
+- **Screener Insights** — who each new sender seems to be, with a suggested Let In or Screen Out
+- **Subscription Notes** — what each mailing list sends
+- **Inbox Tidy-Up** — old promotions, unopened newsletters, sign-in codes and order confirmations to clear in one go
+- **Contacts from Signatures** — add a sender's phone number or address to their contact
+- **Follow-Up Nudges and Write the Follow-Up** — emails you sent that haven't had a reply, with a polite chaser drafted for you
+- **AI Rules** — describe a rule in plain English, like "anything about my car insurance"
+- **Email Details for Automations** — bills, amounts, deliveries and appointments in a `crow_email_details` event
+- **Ask Your Email** — ask an Assist conversation agent about your email
+
+#### Integration
+
+- **Phone notifications** — through the Companion app on iPhone and Android, with the sender, subject and preview, grouped by sender if you like
+- **Notification buttons** — Reply, Mark as Read, Archive, Flag, Remind Me in 1 Hour and Delete (each can be switched on or off)
+- **Quiet Hours** — new email arrives silently overnight; VIPs still come through
+- **App icon badge** — unread email is added to the card's App Icon Badge (when it's on), and the Email button in the app bar gets a red dot
+- **Rules** — move, mark or flag new email, and choose whether it notifies you
+- **Email Home Assistant** — optional and off by default: email yourself a subject starting `HA:`, like "HA: is the garage door closed?", and Assist answers by email
+- **Sensors and binary sensors** for every account (below)
+- **Actions and events** for your automations (below)
+- Runs entirely on your own Home Assistant — no cloud service of its own
+
+
+
+### Sensors
+
+Each account is a device (made by Crow Messenger) with these entities, while Email is on:
+
+| Entity | Description |
+|--------|-------------|
+| Unread | Unread emails in the Inbox |
+| Unread VIP | Unread emails from VIPs |
+| Unread people, notifications, council and local, shopping, social and newsletters | Unread emails in each of the Inbox's groups, sorted the same way as the card (an email added to Council and Local counts there) |
+| Latest email | Who the newest email is from, and its subject |
+| Latest VIP email | Who the newest email from a VIP is from, and its subject |
+| Received today | Emails received today |
+| Flagged | Flagged emails |
+| Drafts and scheduled | Drafts, plus emails waiting to Send Later |
+| Mailbox usage | How full the mailbox is, where the provider says |
+| Last checked | When the account was last checked |
+| Junk | Emails in Junk (or Spam) |
+| Parcels | Deliveries on their way (with the Parcel Tracker) |
+| Needs attention today | Parcels arriving, appointments, bills due, reminders, snoozed emails and follow-ups |
+| Bills due this week | Unpaid bills due in the next 7 days, with the total (with Bills) |
+| Next bill | The due date of the next unpaid bill, with who it's to and how much (with Bills) |
+| Snoozed | Snoozed emails, and when the next one comes back |
+| Reminders | Emails with a Remind Me set, and when the next one is due |
+| Waiting for a reply | Emails you sent that haven't had a reply (with Follow-Up Nudges) |
+| Screener | Emails from first-time senders waiting for a Yes or No, and who sent them (with the Screener on) |
+| Subscriptions | Mailing lists in the Inbox you're still subscribed to, counted every 6 hours |
+| Food arriving | When the next food order should arrive or be ready, with the restaurant, status and total (with Food Orders) |
+| Food order spend this month | What food orders found in email have cost this month, in Home Assistant's currency, with last month's total (with Food Orders) |
+| Next supermarket delivery | The start of the next delivery or collection slot, with the shop, the end of the slot, the last time to change the order, substitutions and missing items (with Supermarket Deliveries) |
+| Supermarket spend this month | What supermarket orders found in email have cost this month, with last month's total (with Supermarket Deliveries) |
+| Next travel | When the next booking starts, with the flight or train, from and to, terminal, gate, seat, delay, check-in time and the trip (with Travel) |
+| Next home visit | The start of the next visit's window, with what it is, the company and the end of the window (with Home Visits) |
+| Next event | When the next event starts, with the venue, doors, seats and number of tickets (with Tickets) |
+| Refunds owed | Refunds still to come, in Home Assistant's currency, with each return (with Returns and Refunds) |
+| Return deadline | The last day to send back the next thing that hasn't been sent, with the days left (with Returns and Refunds) |
+| Next renewal | The next renewal or expiry date, with the price, last year's price and the change (with Renewals) |
+| Council updates | Current news from the council, school or local services, with the next bin collection change (with Council and Local) |
+| Warranties ending soon | Warranties ending in the next 90 days (with Receipts) |
+| Badge | The number on the app icon (with the App Icon Badge) |
+| Connected | On while Home Assistant is signed in to the mail server |
+| New mail | On when unread email has arrived since the Inbox was last looked at |
+| Parcel out for delivery | On while a parcel is out for delivery (with the Parcel Tracker) |
+| Food order in progress | On from ordering until the food is delivered or collected, with whether it's on its way or ready to collect (with Food Orders) |
+| Supermarket delivery coming | On while a supermarket delivery is on its way, ready to collect, or during its slot (with Supermarket Deliveries) |
+| Away on a trip | On from the start of a trip to its end (a trip with somewhere to stay, more than one booking, or over 12 hours), with when you're back (with Travel) |
+| Travel disruption | On while a booking in the next two days is delayed, changed or cancelled (with Travel) |
+| Renewal due soon | On while something renews or runs out in the next 30 days (with Renewals) |
+| Home visit today | On all day when an engineer, service or delivery is due (with Home Visits) |
+| Home visit now | On during a visit's time window, or for four hours from its start when no end is given (with Home Visits) |
+| Bill overdue | On while a bill is past its due date and not marked paid (with Bills) |
+
+> Each account's **Show Sender and Subject** and **Show Preview Text** settings decide whether those details appear in its sensors and events, since anyone who can see your Home Assistant can see them.
+
+
+
+### Actions and Events
+
+#### Actions
+
+| Action | Description |
+|--------|-------------|
+| `crow_messenger.send_email` | Sends an email from one of the accounts. `account` is its email address or name; `to`, `cc` and `bcc` take addresses separated by commas. Optional `subject`, `message` (or `html`), `attachments` (files under `/local/`, your `www` folder, or `/media/local/`), `send_at`, `buttons`, `poll` and `read_receipt` |
+| `crow_messenger.mark_email_as_read` | Marks an email (by `uid` or `message_id`), or `all` emails in a folder, as read or unread |
+| `crow_messenger.archive_email` | Archives an email |
+| `crow_messenger.move_email` | Moves an email to another folder |
+| `crow_messenger.flag_email` | Flags or unflags an email |
+| `crow_messenger.refresh_email` | Checks one account, or all of them, for new email now |
+| `crow_messenger.update_email_badge` | Updates the app icon badge, optionally adding a number of your own |
+
+#### Events
+
+| Event | Description |
+|-------|-------------|
+| `crow_email_received` | A new email arrived, with the account, sender, subject, whether it's from a VIP and (if allowed) a preview |
+| `crow_email_sent` | An email was sent |
+| `crow_email_rule_matched` | One of your rules matched a new email |
+| `crow_email_details` | What the AI found in a new email: its kind, amount, due date, appointment time, location and reference (with Email Details for Automations) |
+| `crow_email_follow_up` | An email you sent may need a follow-up |
+| `crow_email_parcel` | A parcel was added, changed status or was removed |
+| `crow_email_food` | A food order was added, changed status (including probably delivered) or was removed |
+| `crow_email_grocery` | A supermarket delivery was added, changed status (including probably delivered) or was removed, with how many substitutions and missing items |
+| `crow_email_travel`, `crow_email_visit`, `crow_email_ticket`, `crow_email_return`, `crow_email_renewal`, `crow_email_council`, `crow_email_receipt` | Something was added, changed or removed in that section. `change` says which (`added`, `changed` for a new status, `updated` or `removed`); `crow_email_council` has a `topic`, such as `bins` |
+| `crow_email_blocked` | Email from a blocked sender was moved to Junk |
+| `crow_email_action` | Someone tapped a button in an email sent by an automation |
+| `crow_email_vote` | Someone voted on an email with voting buttons |
+
+
+
+### Automation Examples
+
+#### Email a snapshot when the doorbell rings
+
+```yaml
+alias: Doorbell snapshot by email
+triggers:
+  - trigger: state
+    entity_id: binary_sensor.doorbell
+    to: "on"
+actions:
+  - action: camera.snapshot
+    target:
+      entity_id: camera.front_door
+    data:
+      filename: /config/www/snapshots/doorbell.jpg
+  - action: crow_messenger.send_email
+    data:
+      account: me@icloud.com
+      to: me@icloud.com
+      subject: Someone is at the front door
+      message: Here's who was there.
+      attachments:
+        - /local/snapshots/doorbell.jpg
+```
+
+#### Buttons in an email
+
+```yaml
+actions:
+  - action: crow_messenger.send_email
+    data:
+      account: me@icloud.com
+      to: me@icloud.com
+      subject: The garage door has been open for 30 minutes
+      buttons:
+        - title: Close the garage
+          action: close_garage
+```
+
+```yaml
+alias: Close the garage from an email
+triggers:
+  - trigger: event
+    event_type: crow_email_action
+    event_data:
+      action: close_garage
+actions:
+  - action: cover.close_cover
+    target:
+      entity_id: cover.garage_door
+```
+
+#### Flash a light when a VIP emails
+
+```yaml
+alias: VIP email light
+triggers:
+  - trigger: event
+    event_type: crow_email_received
+    event_data:
+      vip: true
+actions:
+  - action: light.turn_on
+    target:
+      entity_id: light.hallway
+    data:
+      flash: short
+```
+
+---
+
 ## Share from Your Phone
 
-Share a link from any app on your phone — Safari, Chrome, YouTube, News — either into a chat or onto someone's page in the Feed:
+Share a link from any app on your phone — Safari, Chrome, YouTube, News — into a chat, onto someone's page in the Feed, or into an email:
 
 1. Tap **Share** and choose **Home Assistant** (on iPhone, tap **Post** in the small box that appears — anything you type there comes along as your comment)
-2. A notification arrives on that phone. Press and hold it to choose:
+2. A notification arrives on that phone, showing the page's title, its site and (on iPhone) its picture. Press and hold it to choose:
    - **Send in a Chat** — Crow Messenger opens on **Send To**: pick one or more chats, or someone you haven't messaged yet, add a comment if you like, and tap **Send**
    - **Post on a Page** — the Feed opens on **New Post** with the link filled in. Choose **Your Page** or someone else's, who can see it, and tap **Post**
-   - **Discard** — throws it away
-3. Tapping the notification itself opens the Feed if the card's **Startup Screen** is one of the Feed screens, and Messages otherwise. Either way the other is one tap away: **Post on a Page instead** on the Send To sheet, or **Send in a Chat instead** on New Post
+   - **Send in an Email** — Email opens on a new email with the link in it and the page's title as the subject (with Email switched on and an email account of your own)
+   - **Discard** — throws it away (on Android, which shows three buttons at most, Discard is left out when all three places are offered: swipe the notification away instead)
+3. Tapping the notification itself asks where it should go: a chat, a page or an email (or Discard). On the Send To sheet, **Post on a Page instead** and **Send in an Email instead** are one tap away too
 
 The link arrives with its preview. Nothing is sent or posted until you choose, so things you share to Home Assistant for other reasons never end up anywhere. Links and text can be shared (not photos or files), and a shared link waits for 24 hours. With the Feed switched off, only **Send in a Chat** is offered. Sharing can be switched off in the editor with **Share to Crow Messenger**.
 
@@ -298,6 +640,9 @@ Each person in your home is a device, **Crow Messenger (Name)**, with these enti
 | Sharing live location | On while they're sharing a Live Location in a chat |
 | Last post | When they last posted in the Feed, with `posts_this_week` |
 | Birthday today | On all day on their birthday, if they share it in the Feed |
+| Needs my attention | One number for everything waiting on them: unread conversations (not muted), polls from the last two weeks they haven't voted in (in chats and the Feed), Feed events they haven't answered, and sent emails that haven't had a reply (with Follow-Up Nudges on). Attributes: `unread_conversations`, `polls_to_vote_in`, `events_to_answer` and `emails_to_follow_up` |
+| Unread mentions | Unread @mentions in chats (including ones with Hide Alerts on, as mentions still get through) and in the Feed's posts, comments and stories, with `in_chats` and `in_feed` |
+| Quiet mode | On while they don't want to be disturbed: the Feed's Quiet Mode (paused, or its nightly hours) or Focus (iPhone) / Do Not Disturb (Android) on their phone. Attributes: `feed_quiet_mode`, `phone_focus`, `quiet_until`, `nightly` and how many `conversations_with_hide_alerts` |
 
 The household has its own device, **Crow Messenger (Household)**:
 
@@ -308,6 +653,7 @@ The household has its own device, **Crow Messenger (Household)**:
 | Next event | When the next Feed event shared with everyone starts, with its `title`, how many are `going` and `maybe`, `location` and `post_id` |
 | Active chats | Conversations with a message in the last 24 hours |
 | People online | How many people have the card open, with their `names` (not counting anyone who hides their activity) |
+| Next birthday | Whose birthday is next, with its `date`, how many `days` away and the next few as `upcoming`. Only people who share their birthday in the Feed, and never their age |
 
 > **What a message or a post says never goes into an entity**, only who sent it and in which chat, because anyone who can see your Home Assistant can see entities and their history.
 
@@ -449,7 +795,7 @@ show_people_map: true
 feed_nav: true
 ```
 
-> **Note:** Everything above can be set from the visual editor, which has two tabs: **This Card** (how this card looks and behaves on this dashboard — anyone who can edit the dashboard) and **Household** (saved in Home Assistant and used by everyone — administrators only). Search covers both tabs and jumps to the setting it finds, and the editor remembers which sections you left open.
+> **Note:** Everything above can be set from the visual editor. It opens on a list of pages, like iPhone Settings: General, Messages, Contacts & Maps, Feed, Email, Notifications, AI, and Storage & Reset. Each page shows this card's own settings first (anyone who can edit the dashboard), then its **Household (everyone)** settings, which are saved in Home Assistant and used by every card and phone (administrators only). Feed, Email and AI start with their own on/off switch, rarely changed settings are under **More**, and a setting that only matters while another is on is only shown then. The search box at the top finds any setting on any page and takes you to it.
 
 ### The Crow Feed card
 
@@ -470,7 +816,7 @@ The Feed shows what's shared with whoever is signed in on that device. On a shar
 | Option | Default | Description |
 |--------|---------|-------------|
 | `feed_nav` | `true` | The Facebook-style navigation bar along the bottom of the Feed (frosted glass with `glass_bars` on, solid with it off) |
-| `app_bar_items` | `[messages, contacts, feed]` | Which places are in the app bar at the top left, in order. One left out still shows on its own screen |
+| `app_bar_items` | `[messages, contacts, maps, feed, email]` | Which places are in the app bar at the top left, in order. One left out still shows on its own screen. Maps shows while the People map is on, and Email while Email is switched on |
 | `app_bar_filter` | `true` | The Filter button in the app bar on Messages |
 | `app_bar_dots` | `true` | Red dots in the app bar for unread chats and new Feed posts or notifications |
 | `feed_start_tab` | `feed` | The tab the Feed opens on: `feed` (Home), `videos`, `groups` or `events` |
@@ -497,7 +843,7 @@ The Feed shows what's shared with whoever is signed in on that device. On a shar
 | `contact_sort` | `last` | Sort contacts by `first` or `last` name |
 | `contact_display` | `first` | Show contacts as First Last or Last, First |
 | `show_my_card` | `true` | Show My Card at the top of Contacts |
-| `show_people_map` | `true` | The People Map in Contacts and Find Me in conversations |
+| `show_people_map` | `true` | The People Map (Maps in the app bar) and Find Me in conversations |
 | `people_here_since` | `true` | On the People Map, when someone arrived where they are, and for how long |
 | `people_weather` | `true` | On the People Map, the temperature and weather where someone is (from Open-Meteo) |
 | `people_activity` | `true` | On the People Map, whether someone is walking, running, cycling, driving or still |

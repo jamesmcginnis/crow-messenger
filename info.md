@@ -4,6 +4,8 @@ Crow Messenger is a Home Assistant integration and Lovelace card for private mes
 
 It also has a **Feed**: a private, Facebook-style social feed for your household — every post seen only by the people you share it with.
 
+And, when an administrator switches it on, **Email**: each person's own iCloud, Gmail, Yahoo, Outlook or other email accounts in the card, sharing the same contacts book and app icon badge as Messages.
+
 Everything is **private to your household** — nothing is stored in the cloud.
 
 > **One download installs both.** The card is bundled inside the integration and loads into your dashboards automatically — no resource to add.
@@ -72,6 +74,16 @@ On by default, and can be switched off in the editor.
 - **Favourites** — a row at the top of Contacts, first when choosing who to message, and a Favourites filter on Messages
 - **Startup Screen** — open the card on Messages (the default), Contacts, the Feed, or straight to the Feed's Videos, Groups, Events or Notifications
 
+## Email (Optional)
+
+Off until an administrator switches it on (the card editor's Email page). Each person adds their own iCloud, Gmail, Yahoo, Outlook / Microsoft 365 or other IMAP accounts and reads and writes email from the Email button in the app bar.
+
+- **One contacts book** — the same Contacts as Messages; tap an email address on a contact to write to them
+- **One app icon badge** — unread email is added to the App Icon Badge, and the Email button gets a red dot
+- **Follows the card** — light and dark, Liquid Glass, the Home Assistant theme, the accent colour and full screen, with every mail skin kept (or the one matching your card skin)
+- **Notifications, sensors, actions and events** for every account, plus Ask Your Email in Assist
+- **Works with the rest of the card** — recent emails on contact cards, send an email to a chat or the Feed, ask Home Assistant about your email, one What Did I Miss? and one search across Messages, the Feed and Email
+
 ## AI Features
 
 All optional, and each can be switched off individually:
@@ -83,7 +95,8 @@ All optional, and each can be switched off individually:
 - **Add to Calendar and Reminders**
 - **Ask This Chat** — ask a question about a conversation
 - **Photo Descriptions**
-- **In the Feed** — Writing Tools, Suggest a Caption, Suggested Comments, Make It an Event or Poll, Album Names, What Did I Miss?, Catch Up on Comments, Translate, Photo Descriptions, Photo Search (off until switched on), Memory Captions, a Kindness Check before posting and Ask the Feed
+- **Link Safety** — a warning on links in chats and the Feed that look like scams
+- **In the Feed** — Writing Tools, Suggest a Caption, Suggested Comments, Make It an Event or Poll, Album Names, Make an Album, What Did I Miss?, Catch Up on Comments, Translate, Photo Descriptions, Photo Search (off until switched on), Memory Captions, a Kindness Check before posting and Ask the Feed
 
 ## Integration
 
@@ -92,8 +105,8 @@ All optional, and each can be switched off individually:
 - **Notification Buttons** — Tapbacks, Mark as Read, Hide Alerts, and I'm Home or On My Way
 - **Richer Notifications** — the sender's photo, stickers, link previews, maps and live camera views
 - **Share to Crow Messenger** — tap Share in any app on your phone, choose Home Assistant, then **Send in a Chat** or **Post on a Page** in the Feed
-- **Sensors for each person** — Unread messages, Latest message, New messages, New posts, Feed notifications, Last seen, Typing, Viewing, Waiting on reply, Pending reminders, Sharing live location, Last post, Birthday today, Active now and Phone ringing (who sent what, never what it says)
-- **Household sensors** — Messages today, Storage used, Next event, Active chats and People online
+- **Sensors for each person** — Unread messages, Latest message, New messages, New posts, Feed notifications, Last seen, Typing, Viewing, Waiting on reply, Pending reminders, Sharing live location, Last post, Birthday today, Needs my attention, Unread mentions, Quiet mode, Active now and Phone ringing (who sent what, never what it says)
+- **Household sensors** — Messages today, Storage used, Next event, Next birthday, Active chats and People online
 - **More events** — reactions, Feed comments, chats being read and Ring Phone answered
 - **`crow_messenger.send_message` action** — send messages, photos and buttons from automations
 - **`crow_messenger_message_received` event** — for automations around new messages
