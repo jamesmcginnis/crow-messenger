@@ -128,26 +128,6 @@ const PLAY_CSS = `
 .apps-note { font-size: 13px; color: var(--cm-text2); text-align: center; margin: 2px 12px 8px; line-height: 1.4; }
 .apps-note[hidden] { display: none; }
 
-/* Home Status */
-.xcard.status { width: 268px; }
-.st-row { display: flex; align-items: center; gap: 10px; padding: 7px 13px; cursor: pointer; }
-.st-row .sti { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
-.st-row .sti svg { width: 17px; height: 17px; }
-.st-row .stl { font-size: 13px; opacity: 0.7; }
-.st-row .stv { font-size: 15px; font-weight: 500; line-height: 1.25; word-break: break-word; }
-.st-row.ok .sti { background: #34C759; } .st-row.warn .sti { background: #FF9F0A; } .st-row.bad .sti { background: #FF3B30; } .st-row.info .sti { background: #5E5CE6; }
-
-/* Shared Timer */
-.xcard.timer { width: 248px; }
-.tm-top { display: flex; align-items: center; gap: 12px; padding: 12px 13px 10px; }
-.tm-ring { width: 54px; height: 54px; flex-shrink: 0; transform: rotate(-90deg); }
-.tm-ring circle { fill: none; stroke-width: 4.5; stroke-linecap: round; }
-.tm-ring .bg { stroke: color-mix(in srgb, currentColor 16%, transparent); }
-.tm-ring .fg { stroke: #FF9F0A; transition: stroke-dashoffset 0.95s linear; }
-.timer.done .tm-ring .fg { stroke: #34C759; } .timer.cancelled .tm-ring .fg { stroke: #8E8E93; }
-.tm-left { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.1; }
-.tm-lab { font-size: 14px; opacity: 0.75; margin-top: 2px; word-break: break-word; }
-
 /* Games */
 .xcard.game { width: 268px; }
 .g-who { display: flex; align-items: center; justify-content: center; gap: 12px; font-size: 13px; opacity: 0.8; padding: 0 13px 6px; }
@@ -176,10 +156,6 @@ const PLAY_CSS = `
 .gpick .gpi { width: 46px; height: 46px; border-radius: 12px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
 .gpick .gpi svg { width: 26px; height: 26px; }
 .gpick .gpn { font-size: 16px; font-weight: 600; } .gpick .gps { font-size: 13px; color: var(--cm-text2); margin-top: 2px; }
-.tm-custom { display: flex; gap: 8px; margin-top: 10px; }
-.tm-custom[hidden] { display: none; }
-.tm-custom label { flex: 1; display: flex; align-items: center; gap: 6px; background: var(--cm-fill); border-radius: 12px; padding: 0 12px; height: 46px; color: var(--cm-text2); font-size: 15px; }
-.tm-custom input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--cm-text); font-size: 17px; text-align: right; }
 
 /* ── Reversi, Draughts and Sea Battle ── */
 .xcard.game.big { width: 276px; }
@@ -236,31 +212,6 @@ const PLAY_CSS = `
 .sea-two .g-sea.small { width: 124px; }
 .sea-two .sea-l { padding: 2px 0 4px; }
 
-/* ── Archive, Remind Me, Location request ── */
-.arch-row { width: calc(100% - 20px); margin: 2px 10px 6px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--cm-fill2, var(--cm-fill)); color: var(--cm-text); text-align: left; font-size: 16px; }
-.arch-row .ai { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--cm-fill); color: var(--cm-text2); }
-.arch-row .ai svg { width: 18px; height: 18px; }
-.arch-row .al { flex: 1; font-weight: 600; }
-.arch-row .ac { color: var(--cm-text2); font-size: 15px; }
-.arch-row .ac b { color: #fff; background: var(--cm-accent); border-radius: 10px; padding: 1px 7px; font-size: 13px; }
-.arch-row > svg { width: 13px; height: 13px; color: var(--cm-text3, var(--cm-text2)); }
-.arch-note { margin: 0 16px 10px; font-size: 13px; line-height: 1.4; color: var(--cm-text2); text-align: center; }
-.arch-note button { display: block; margin: 6px auto 0; color: var(--cm-accent); font-size: 14px; font-weight: 600; }
-.pill.archback { padding: 0 14px 0 10px; gap: 2px; }
-.pill.archback svg { width: 18px; height: 18px; }
-.swipe-actions .arch { background: #8E8E93; }
-.remindmk { display: inline-flex; align-items: center; gap: 4px; margin: 2px 6px 0; font-size: 11.5px; font-weight: 600; color: var(--cm-accent); }
-.remindmk svg { width: 13px; height: 13px; }
-.remtag { color: var(--cm-accent); font-weight: 600; }
-.remtag::before { content: '⏰ '; }
-.xcard.lqcard { width: 260px; }
-.xcard.ringcard { width: 260px; }
-.xcard.ringcard .xh svg { color: #F0480F; }
-.xcard.ringcard.on .xh svg { animation: cm-ring-shake 1s ease-in-out infinite; transform-origin: 50% 50%; }
-@keyframes cm-ring-shake { 0%, 50%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-14deg); } 20%, 40% { transform: rotate(14deg); } }
-@media (prefers-reduced-motion: reduce) { .xcard.ringcard.on .xh svg { animation: none; } }
-.xcard.lqcard .xh svg { color: #FF453A; }
-.xbtns button.bold { font-weight: 700; }
 `;
 
 const G8 = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];

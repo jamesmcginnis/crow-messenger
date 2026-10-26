@@ -40,6 +40,7 @@ const FI = {
   chat: mdi('chat-outline'),
   bookmark: mdi('bookmark-outline'),
   bookmarkFill: mdi('bookmark'),
+  likeFill: mdi('thumb-up'),
   pinned: mdi('pin-outline'),
   edit: mdi('pencil-outline'),
   trash: mdi('trash-can-outline'),
@@ -249,16 +250,24 @@ const FEED_CSS = `
 .fp-stats .rx .em span { width: 21px; height: 21px; border-radius: 50%; background: var(--fd-card); display: flex; align-items: center; justify-content: center; font-size: 13px; margin-left: -4px; box-shadow: 0 0 0 1.5px var(--fd-card); }
 .fp-stats .rx .em span:first-child { margin-left: 0; }
 .fp-stats .cc { cursor: pointer; }
-.fp-acts { display: flex; border-top: 0.5px solid var(--cm-sep); margin: 0 10px; }
-.fp-acts button { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 9px 4px 10px; font-size: 14px; font-weight: 600; color: var(--cm-text2); border-radius: 10px; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
-.fp-acts button svg { width: 19px; height: 19px; }
+.fp-acts { display: flex; align-items: center; gap: 2px; border-top: 0.5px solid var(--cm-sep); margin: 0 6px; padding: 4px 2px; }
+.fp-acts button { display: flex; align-items: center; gap: 6px; height: 40px; padding: 0 10px; font-size: 15px; font-weight: 500; color: var(--cm-text); border-radius: 20px; user-select: none; -webkit-user-select: none; }
+.fp-acts button svg { width: 22px; height: 22px; }
 .fp-acts button.on { color: var(--cm-accent); }
-.fp-acts button .re { font-size: 17px; line-height: 1; }
+.fp-acts button .re { font-size: 20px; line-height: 1; }
 .fp-acts button:active { background: var(--cm-fill); }
+.fp-acts .fa-n { font-variant-numeric: tabular-nums; }
+.fp-acts .fa-cnt { padding: 0 8px 0 0; margin-left: -6px; font-variant-numeric: tabular-nums; }
+.fp-acts .fa-sp { flex: 1; }
+.fp-acts .fa-rx { padding: 0 6px; gap: 0; }
+.fp-acts .fa-rx span { width: 24px; height: 24px; border-radius: 50%; background: var(--fd-card); display: flex; align-items: center; justify-content: center; font-size: 15px; margin-left: -6px; box-shadow: 0 0 0 2px var(--fd-card); }
+.fp-acts .fa-rx span:first-child { margin-left: 0; }
 .fd-rpick { position: absolute; z-index: 45; display: flex; gap: 2px; padding: 6px 8px; border-radius: 30px; background: var(--cm-glass-strong); box-shadow: var(--cm-shadow); border: 0.5px solid var(--cm-glass-edge); animation: fd-pop .18s cubic-bezier(.3,1.4,.6,1); }
 .fd-rpick button { width: 42px; height: 42px; font-size: 27px; border-radius: 50%; transition: transform .15s; }
 .fd-rpick button:hover, .fd-rpick button:active { transform: scale(1.3) translateY(-4px); }
 .fd-rpick button.on { background: var(--cm-fill); }
+/* pressing and holding Like (and the reactions that open): no iPhone text selection or callout */
+[data-fa="react"], .fd-rpick, .fd-rpick button { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
 @keyframes fd-pop { from { transform: scale(.6); opacity: 0; } to { transform: none; opacity: 1; } }
 /* comments */
 .fp-cprev { padding: 2px 14px 12px; }
@@ -705,6 +714,24 @@ const FEED_CSS = `
 .fdc-smart button ha-icon { --mdc-icon-size: 18px; color: var(--cm-accent); display: inline-flex; flex-shrink: 0; }
 .fdc-smart .x { width: 38px; border-radius: 14px; background: var(--cm-fill); display: flex; align-items: center; justify-content: center; }
 .fai-miss { display: flex; align-items: center; gap: 6px; padding: 6px; }
+/* Make an Album */
+.fai-alb { padding: 12px 14px; }
+.fai-alb .fa-h { display: flex; align-items: flex-start; gap: 10px; }
+.fai-alb .fa-h > ha-icon, .fai-alb .fa-h > svg { --mdc-icon-size: 24px; width: 24px; height: 24px; color: var(--cm-accent); display: inline-flex; flex-shrink: 0; margin-top: 2px; }
+.fai-alb .fa-h > div { flex: 1; min-width: 0; }
+.fai-alb .fa-h b { display: block; font-size: 15.5px; font-weight: 650; }
+.fai-alb .fa-h span { display: block; font-size: 13.5px; color: var(--cm-text2); margin-top: 2px; line-height: 1.35; }
+.fai-alb .x { width: 32px; height: 32px; margin: -4px -6px 0 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--cm-text2); flex-shrink: 0; }
+.fai-alb .fa-cov { display: grid; grid-template-columns: repeat(4, 1fr); gap: 3px; margin: 12px 0 10px; border-radius: 12px; overflow: hidden; }
+.fai-alb .fa-cov div { aspect-ratio: 1; background: var(--cm-fill); }
+.fai-alb .fa-cov img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fai-alb .fa-n { display: flex; flex-wrap: wrap; gap: 6px; }
+.fai-alb .fa-n button { padding: 6px 12px; border-radius: 16px; background: var(--cm-fill); color: var(--cm-text); font-size: 13.5px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fai-alb .fa-n button.on { background: color-mix(in srgb, var(--cm-accent) 18%, transparent); color: var(--cm-accent); font-weight: 600; }
+.fai-alb .fa-b { display: flex; gap: 8px; margin-top: 12px; }
+.fai-alb .fa-b button { flex: 1; padding: 9px 12px; border-radius: 12px; background: var(--cm-fill); color: var(--cm-text); font-size: 14.5px; font-weight: 600; }
+.fai-alb .fa-b button.go { background: var(--cm-accent); color: #fff; }
+.fai-alb .fa-note { font-size: 12px; color: var(--cm-text2); margin-top: 8px; line-height: 1.35; }
 .fai-miss > button[data-a="missed"] { flex: 1; display: flex; align-items: center; gap: 12px; text-align: left; padding: 8px 10px; font-size: 14px; color: var(--cm-text2); }
 .fai-miss > button[data-a="missed"] b { color: var(--cm-text); font-size: 15.5px; }
 .fai-miss ha-icon { --mdc-icon-size: 24px; color: var(--cm-accent); display: inline-flex; flex-shrink: 0; }
@@ -849,7 +876,7 @@ const FEED_CSS = `
 .fp-media .mi .vplay ha-icon { --mdc-icon-size: 26px; display: inline-flex; margin-left: 3px; }
 .fp-media .mi .tg ha-icon { --mdc-icon-size: 15px; display: inline-flex; }
 .fp-media .mi.missing ha-icon { --mdc-icon-size: 34px; display: inline-flex; }
-.fp-acts button ha-icon { --mdc-icon-size: 19px; display: inline-flex; }
+.fp-acts button ha-icon { --mdc-icon-size: 22px; display: inline-flex; }
 .fd-cbar .rep button ha-icon { --mdc-icon-size: 16px; display: inline-flex; }
 .fd-cbar .cbtn ha-icon { --mdc-icon-size: 22px; display: inline-flex; }
 .fd-cbar .go ha-icon { --mdc-icon-size: 18px; display: inline-flex; }
@@ -897,6 +924,8 @@ const FEED_CSS = `
 
 // ── Little helpers ───────────────────────────────────────────────────────────
 const plural = (n, one, many) => `${n} ${n === 1 ? one : (many || one + 's')}`;
+// 7, 950, 1.1K, 12K, 1.2M
+const fdCount = (n) => n < 1000 ? String(n) : n < 10000 ? `${(Math.floor(n / 100) / 10).toString()}K` : n < 1e6 ? `${Math.floor(n / 1000)}K` : `${(Math.floor(n / 1e5) / 10).toString()}M`;
 const dayKey = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; };
 const pad = (n) => String(n).padStart(2, '0');
 const isoDay = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
@@ -1112,12 +1141,12 @@ Object.assign(Card.prototype, {
     if (p.home) body += this._fhomeHtml(p.home);
     if (p.shared_post) body += this._fsharedHtml(p.shared_post);
     if (p.link && !p.media?.length) body += this._flinkHtml(p.link);
+    body += this._lsafeHtml(p.link_safety);
     return `<article class="fp${full ? ' fp-full' : ''}" data-pid="${esc(p.id)}">${label}
       <div class="fp-h"><span data-prof="${esc(p.author)}">${this._userAv(p.author, 42)}</span>
         <div class="fp-who"><b data-prof="${esc(p.author)}">${esc(name)}</b><span class="fp-x">${bits.join('')}</span><div class="fp-sub">${sub.join(' ')}</div></div>
         <button class="fp-more" data-fa="more" aria-label="More">${FI.more}</button></div>
       ${body}
-      ${this._fstatsHtml(p)}
       ${this._factsHtml(p)}
       ${this._fcommentsHtml(p, full)}
     </article>`;
@@ -1150,12 +1179,29 @@ Object.assign(Card.prototype, {
       <span>${nc ? `<span class="cc" data-fa="open">${plural(nc, 'comment')}</span>` : ''}${nc && ns ? ' · ' : ''}${ns ? `<span class="cc">${plural(ns, 'share')}</span>` : ''}</span></div>`;
   },
 
+  // Under a post, in one row: Like, Comment, Share (each with how many) and Save on the left, the
+  // reactions on the right (tap them, or the Like count, to see who reacted). Press and hold Like for
+  // the other reactions.
   _factsHtml(p) {
-    const mine = p.reactions?.[this._s.me];
+    const me = this._s.me, mine = p.reactions?.[me];
     const r = mine ? RE[mine] : null;
-    return `<div class="fp-acts"><button data-fa="react" class="${mine ? 'on' : ''}">${r ? `<span class="re">${r.e}</span>${esc(r.n)}` : `${FI.like}Like`}</button>
-      ${p.can_comment === false ? '' : `<button data-fa="comment">${FI.comment}Comment</button>`}
-      ${this._fon('shares') && !p.archived && !p.scheduled_at ? `<button data-fa="share">${FI.shareFb}Share</button>` : `<button data-fa="send">${FI.send}Send</button>`}</div>`;
+    const rx = Object.values(p.reactions || {});
+    const counts = {};
+    rx.forEach(k => { counts[k] = (counts[k] || 0) + 1; });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([k]) => RE[k]?.e || '👍');
+    const nc = (p.comments || []).length, ns = p.shares || 0;
+    const n = (v) => v ? `<span class="fa-n">${fdCount(v)}</span>` : '';
+    const likeIcon = !mine ? FI.like : mine === 'like' ? FI.likeFill : `<span class="re">${r?.e || '👍'}</span>`;
+    const likeLabel = mine ? (r?.n || 'Like') : 'Like';
+    const canShare = this._fon('shares') && !p.archived && !p.scheduled_at;
+    return `<div class="fp-acts">
+      <button data-fa="react" class="${mine ? 'on' : ''}" aria-label="${esc(likeLabel)}" title="${esc(likeLabel)}">${likeIcon}</button>${rx.length ? `<button class="fa-cnt" data-fa="who" aria-label="Who reacted">${fdCount(rx.length)}</button>` : ''}
+      ${p.can_comment === false ? '' : `<button data-fa="comment" aria-label="Comment" title="Comment">${FI.comment}${n(nc)}</button>`}
+      ${canShare ? `<button data-fa="share" aria-label="Share" title="Share">${FI.shareFb}${n(ns)}</button>` : `<button data-fa="send" aria-label="Send" title="Send">${FI.send}</button>`}
+      <button data-fa="save" class="${p.saved ? 'on' : ''}" aria-label="${p.saved ? 'Saved' : 'Save'}" title="${p.saved ? 'Saved' : 'Save'}" aria-pressed="${p.saved ? 'true' : 'false'}">${p.saved ? FI.bookmarkFill : FI.bookmark}</button>
+      <span class="fa-sp"></span>
+      ${rx.length ? `<button class="fa-rx" data-fa="who" aria-label="Who reacted">${top.map(e => `<span>${e}</span>`).join('')}</button>` : ''}
+    </div>`;
   },
 
   _fmediaHtml(p) {
@@ -1352,6 +1398,8 @@ Object.assign(Card.prototype, {
     let notifs = null, notifsLoading = false, nfilter = 'all', nLocalAt = 0;
     // What did I miss? (when several posts came in while you were away), and Search Photos
     let missSince = null, missed = null, photoQ = '', photoHits = null, photoTimer = null;
+    // Make an Album (an AI feature): an offer at the top of the Feed, and albums others made with your photos in
+    let albumSug = null, albumAsked = false, albumPick = 0, albumOwn = '';
     const memCaps = this._fmemcap = this._fmemcap || {};
     const body = el.querySelector('.fd-body'), scroll = el.querySelector('.scroll'), small = el.querySelector('.top .title'), newBtn = el.querySelector('.fd-new');
     let order = [], more = false, loading = false, media = null;
@@ -1379,6 +1427,27 @@ Object.assign(Card.prototype, {
       if (!missed) return `<div class="fd-card fai-miss"><button data-a="missed">${FI.ai}<span><b>What did I miss?</b><br>A quick catch-up on the posts since you last looked</span></button><button class="x" data-a="nomiss" aria-label="No thanks">${FI.x}</button></div>`;
       return `<div class="fd-card fai-miss done"><div class="fm-h">${FI.ai}What you missed<button class="x" data-a="nomiss" aria-label="Close">${FI.x}</button></div><div class="fm-t">${esc(missed.summary)}</div>${(missed.posts || []).map(id => fd.posts.get(id)).filter(Boolean).map(p => `<div class="fm-p" data-open="${esc(p.id)}">${this._userAv(p.author, 26)}<span>${esc(this._fsummary(p).slice(0, 90))}</span>${FI.chevR}</div>`).join('')}</div>`;
     };
+    const albumHtml = () => {
+      if (!albumSug || !this._faiOn('make_album')) return '';
+      const names = (uids) => {
+        const n = uids.map(u => u === s.me ? 'you' : this._fname(u, true));
+        return n.length > 2 ? `${n.slice(0, -1).join(', ')} and ${n[n.length - 1]}` : n.join(' and ');
+      };
+      const day = (ts) => new Date(ts).toLocaleDateString(undefined, { weekday: 'short', day: 'numeric', month: 'short' });
+      let html = (albumSug.invites || []).map(inv => `<div class="fd-card fai-alb inv"><div class="fa-h">${FI.album}<div><b>${esc(this._fname(inv.by, true))} made an album</b><span>“${esc(inv.name)}”. Add your ${inv.count} photo${inv.count === 1 ? '' : 's'} from those days?</span></div></div>
+        <div class="fa-b"><button class="go" data-a="albjoin" data-id="${esc(inv.album_id)}">Add My Photos</button><button data-a="albno" data-id="${esc(inv.album_id)}">No Thanks</button></div></div>`).join('');
+      const o = albumSug.offer;
+      if (o) {
+        const when = day(o.start) === day(o.end) ? day(o.start) : `${day(o.start)} – ${day(o.end)}`;
+        const chosen = albumOwn || o.names[albumPick] || o.names[0];
+        html += `<div class="fd-card fai-alb"><div class="fa-h">${FI.ai}<div><b>Make an Album?</b><span>${o.count} photos from ${esc(when)}, by ${esc(names(o.people))}</span></div><button class="x" data-a="albskip" aria-label="Not now">${FI.x}</button></div>
+          <div class="fa-cov">${o.cover.map(c => `<div><img data-att="${esc(c.id)}" data-thumb="1" alt=""></div>`).join('')}</div>
+          <div class="fa-n">${o.names.map((n, i) => `<button class="${!albumOwn && i === albumPick ? 'on' : ''}" data-a="albname" data-i="${i}">${esc(n)}</button>`).join('')}<button class="${albumOwn ? 'on' : ''}" data-a="albown">${albumOwn ? esc(albumOwn) : 'Your Own Name…'}</button></div>
+          <div class="fa-b"><button class="go" data-a="albmake">Make “${esc(chosen)}”</button></div>
+          <div class="fa-note">Your photos go in now. ${o.people.some(u => u !== s.me) ? 'Everyone else is asked whether to add theirs. ' : ''}Shared with everyone, like the photos.</div></div>`;
+      }
+      return html;
+    };
     const memoriesHtml = () => {
       if (!fd.memories.length || this._config.show_memories === false) return '';
       return `<div class="fd-card fd-mem"><div class="mh">${FI.history}On This Day</div>${fd.memories.map(p => {
@@ -1405,7 +1474,7 @@ Object.assign(Card.prototype, {
       if (view === 'feed') {
         const pinnedIds = new Set(fd.pinned.map(p => p.id));
         const posts = order.map(id => fd.posts.get(id)).filter(p => p && !pinnedIds.has(p.id));
-        body.innerHTML = storiesHtml() + boxHtml() + missHtml() + fd.pinned.map(p => this._fpostHtml(p, { pinnedLabel: true })).join('') + memoriesHtml()
+        body.innerHTML = storiesHtml() + boxHtml() + missHtml() + albumHtml() + fd.pinned.map(p => this._fpostHtml(p, { pinnedLabel: true })).join('') + memoriesHtml()
           + (posts.length ? posts.map(p => this._fpostHtml(p)).join('') : (loading ? '<div class="fd-loading">Loading…</div>' : `<div class="empty"><b>Nothing here yet</b>Posts shared with you appear here. Share something with the household to get it started.</div>`))
           + (more ? '<div class="fd-loading">Loading more…</div>' : '');
       } else if (view === 'photos' && this._faiOn('search')) {
@@ -1435,6 +1504,10 @@ Object.assign(Card.prototype, {
         fd.newer = 0; newBtn.hidden = true;
       } catch (err) { body.innerHTML = `<div class="empty">${esc(err.message)}</div>`; loading = false; return; }
       loading = false; render();
+      if (!albumAsked && this._faiOn('make_album')) {
+        albumAsked = true;
+        this._fai('album_suggest').then(r => { albumSug = r; albumPick = 0; albumOwn = ''; if (view === 'feed') render(); }).catch(() => {});
+      }
     };
     const loadMore = async () => {
       if (loading || !order.length) return;
@@ -1653,6 +1726,35 @@ Object.assign(Card.prototype, {
         return;
       }
       if (a === 'nomiss') { missSince = null; missed = null; render(); return; }
+      if (a === 'albname') { albumPick = +e.target.closest('[data-i]').dataset.i || 0; albumOwn = ''; render(); return; }
+      if (a === 'albown') {
+        const r = await this._alert({ title: 'Album Name', input: { value: albumOwn || albumSug?.offer?.names?.[albumPick] || '', placeholder: 'Album Name' },
+          buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'OK', value: 'ok', style: 'ok' }] });
+        if (r.value === 'ok' && (r.input || '').trim()) { albumOwn = r.input.trim().slice(0, 80); render(); }
+        return;
+      }
+      if (a === 'albskip') { const o = albumSug?.offer; if (o) { albumSug.offer = null; render(); this._fai('album_skip', { key: o.key }).catch(() => {}); } return; }
+      if (a === 'albmake') {
+        const o = albumSug?.offer;
+        if (!o) return;
+        const name = albumOwn || o.names[albumPick] || o.names[0];
+        const r = await this._fbusy('Making the album…', () => this._fai('album_make', { key: o.key, text: name }));
+        if (r) {
+          albumSug.offer = null; render();
+          this._toast(r.asked ? `Album made. ${r.asked === 1 ? 'The other person has' : 'The others have'} been asked to add their photos.` : 'Album made');
+          this._nav('falbum', { aid: r.album.id });
+        }
+        return;
+      }
+      if (a === 'albjoin' || a === 'albno') {
+        const id = e.target.closest('[data-id]').dataset.id;
+        albumSug.invites = (albumSug.invites || []).filter(x => x.album_id !== id);
+        if (a === 'albno') { render(); this._fai('album_join', { album_id: id, add: false }).catch(() => {}); return; }
+        const r = await this._fbusy('Adding your photos…', () => this._fai('album_join', { album_id: id, add: true }));
+        render();
+        if (r) { this._toast(`Added ${r.added} photo${r.added === 1 ? '' : 's'}`); this._nav('falbum', { aid: id }); }
+        return;
+      }
       const gi = e.target.closest('[data-gview]');
       if (gi && photoQ && photoHits) { this._fviewGrid(photoHits, gi.dataset.gview); return; }
       if (gi && media?.items) { this._fviewGrid(media.items, gi.dataset.gview); return; }
@@ -1896,8 +1998,14 @@ Object.assign(Card.prototype, {
     const card = e.target.closest('.fp[data-pid]');
     const prof = e.target.closest('[data-prof]');
     if (prof) { if (prof.dataset.prof !== HA_ID) this._nav('fprofile', { uid: prof.dataset.prof }); return true; }
+    const ls = card ? this._fpost(card.dataset.pid)?.link_safety : null;
+    const risky = ls && (ls.risk === 'caution' || ls.risk === 'danger');
+    if (e.target.closest('[data-lsafe]') && ls) { this._lsafeInfo(ls); return true; }
+    // a link in the post's words, when Link Safety has warned about it: ask first
+    const anchor = risky ? e.target.closest('.fp-text a[href]') : null;
+    if (anchor) { e.preventDefault(); if (await this._lsafeOk(ls)) openExternal(anchor.href); return true; }
     const url = e.target.closest('[data-url]');
-    if (url) { openExternal(url.dataset.url); return true; }
+    if (url) { if (!risky || await this._lsafeOk(ls)) openExternal(url.dataset.url); return true; }
     if (!card) return false;
     const pid = card.dataset.pid;
     const p = this._fpost(pid);
@@ -1929,6 +2037,11 @@ Object.assign(Card.prototype, {
         return true;
       }
       case 'who': this._fwhoReacted(p); return true;
+      case 'save': {
+        const on = !p.saved;
+        if (await call('feed/save', { on })) this._toast(on ? 'Saved' : 'Removed from Saved');
+        return true;
+      }
       case 'more': this._fpostMenu(btn, p); return true;
       case 'send': this._fsendToChat(p); return true;
       case 'share': this._fshareMenu(btn, p); return true;
@@ -1994,10 +2107,12 @@ Object.assign(Card.prototype, {
         const card = btn.closest('.fp[data-pid]');
         const p = this._fpost(card?.dataset.pid);
         if (!p) return;
-        const pick = await this._freactPicker(btn, p.reactions?.[this._s.me]);
+        const pick = await this._freactPicker(btn, p.reactions?.[this._s.me], { hold: true });
+        // the tap from lifting the finger may never reach Like: don't let it swallow your next tap
+        setTimeout(() => { btn._longPressed = false; }, 0);
         if (pick === undefined) return;
         try { const r = await this._ws('feed/react', { post_id: p.id, reaction: pick }); this._fd.posts.set(p.id, r.post); this._refresh('fpost', p.id); } catch (err) { this._toast(err.message); }
-      }, 420);
+      }, 500);
     });
     const stop = () => clearTimeout(timer);
     scope.addEventListener('pointerup', stop);
@@ -2006,8 +2121,10 @@ Object.assign(Card.prototype, {
     scope.addEventListener('contextmenu', (e) => { if (e.target.closest('[data-fa="react"]')) e.preventDefault(); });
   },
 
-  // the six reactions in a row; resolves with the one picked, null to take yours off, undefined if closed
-  _freactPicker(anchor, current) {
+  // the six reactions in a row; resolves with the one picked, null to take yours off, undefined if closed.
+  // hold: opened by pressing and holding Like. Lifting your finger then leaves it open to choose from
+  // (or picks the reaction you slid onto), rather than the release closing it straight away.
+  _freactPicker(anchor, current, { hold = false } = {}) {
     return new Promise((resolve) => {
       const wrap = this._el(`<div class="menu-wrap"><div class="fd-rpick">${REACTIONS.map(([k, e, n]) => `<button data-r="${k}" class="${current === k ? 'on' : ''}" aria-label="${n}" title="${n}">${e}</button>`).join('')}</div></div>`);
       this._root.appendChild(wrap);
@@ -2016,13 +2133,33 @@ Object.assign(Card.prototype, {
       const w = pick.offsetWidth, h = pick.offsetHeight;
       pick.style.left = `${clamp(ar.left - rr.left + ar.width / 2 - w / 2, 8, rr.width - w - 8)}px`;
       pick.style.top = `${Math.max(8, ar.top - rr.top - h - 8)}px`;
-      let armed = false;
-      setTimeout(() => { armed = true; }, 250);
-      wrap.addEventListener('click', (e) => {
-        if (!armed) return;
-        const r = e.target.closest('[data-r]')?.dataset.r;
+      let done = false;
+      const finish = (r) => {
+        if (done) return;
+        done = true;
+        window.removeEventListener('pointerup', onRelease, true);
+        window.removeEventListener('pointercancel', onRelease, true);
         wrap.remove();
         resolve(r ? (r === current ? null : r) : undefined);
+      };
+      // Only a new touch, started after the reactions opened, can choose one or close them. The finger still
+      // down from pressing and holding Like (and any tap the phone makes when it lifts) is ignored, unless it
+      // lifts on top of a reaction, which picks it (press, slide and let go).
+      let fresh = !hold;
+      const opened = Date.now();
+      const onRelease = (e) => {
+        window.removeEventListener('pointerup', onRelease, true);
+        window.removeEventListener('pointercancel', onRelease, true);
+        const under = e.type === 'pointerup' ? this.shadowRoot?.elementFromPoint?.(e.clientX, e.clientY) : null;
+        const r = under && wrap.contains(under) ? under.closest('[data-r]')?.dataset.r : null;
+        if (r) finish(r);
+      };
+      if (hold) { window.addEventListener('pointerup', onRelease, true); window.addEventListener('pointercancel', onRelease, true); }
+      wrap.addEventListener('pointerdown', () => { if (Date.now() - opened > 150) fresh = true; }, true);
+      wrap.addEventListener('contextmenu', (e) => e.preventDefault());
+      wrap.addEventListener('click', (e) => {
+        if (!fresh || Date.now() - opened < 250) return;
+        finish(e.target.closest('[data-r]')?.dataset.r);
       });
     });
   },
@@ -2370,6 +2507,8 @@ Object.assign(Card.prototype, {
         if (preset.page && preset.page !== me) st.page = preset.page;
         if (preset.shared) { st.shared = preset.shared; sharedView = preset.sharedView || null; }
         if (preset.home) st.home = preset.home;
+        // from Email: an appointment it found, as an event (title, day, times and place)
+        if (preset.event) Object.assign(st.event, Object.fromEntries(Object.entries(preset.event).filter(([, v]) => v !== undefined && v !== null)));
       }
     }
     const el = this._el(`<div class="fd fdc">
@@ -2806,6 +2945,8 @@ Object.assign(Card.prototype, {
       checkLink();
       if (pickMedia) setTimeout(async () => { const files = await this._fpickFiles('image/*,video/*', true); if (files.length) addFiles(files); }, 50);
       else setTimeout(() => { const ta = inner.querySelector('.fdc-text'); if (ta && st.kind !== 'event' && st.kind !== 'fund') { try { ta.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 350);
+      // from Email: its photos, uploaded like ones chosen here
+      if (preset?.files?.length) setTimeout(() => addFiles(preset.files), 50);
     };
     page.refresh = (what) => { if (what === 'fmeta') render(); };
     return page;
@@ -4345,13 +4486,11 @@ Object.assign(Card.prototype, {
     const s = this._s;
     const tiles = [['activity', FI.activity, 'Activity Log'], ['saved', FI.bookmark, 'Saved'], ['photos', FI.photos, 'Photos'],
       ['albums', FI.album, 'Albums'], ['archive', FI.archive, 'Archive'], ...(this._fstoriesOn() ? [['story', FI.plus, 'Add to Story']] : []), ['new', FI.edit, 'New Post']];
-    const canBack = !root && !this._config.feed_only;
     return `<div class="fd-card fm-me" data-menu="me" role="button">${this._userAv(s.me, 44)}<div class="fm-n"><b>${esc(this._fname(s.me))}</b><div>See your profile</div></div><span class="rch">${FI.chevR}</span></div>
       <div class="fd-h2">Shortcuts</div>
       <div class="fm-grid">${tiles.map(([k, ic, n]) => `<button class="fm-tile" data-menu="${k}"><span class="fm-i">${ic}</span>${esc(n)}</button>`).join('')}</div>
       <div class="fd-card fm-rows">
         <div class="fd-row" data-menu="settings"><span class="ri">${FI.settings}</span><div class="rb"><div class="r1">Feed Settings</div><div class="r2">Notifications, your birthday and milestones</div></div><span class="rch">${FI.chevR}</span></div>
-        ${canBack ? `<div class="fd-row" data-menu="messages"><span class="ri">${FI.messages}</span><div class="rb"><div class="r1">Messages</div><div class="r2">Back to your chats</div></div><span class="rch">${FI.chevR}</span></div>` : ''}
       </div>`;
   },
 

@@ -425,11 +425,12 @@ Object.assign(CrowMessengerCard.prototype, {
     return isApple() ? `https://maps.apple.com/?daddr=${q}` : isAndroid() ? `geo:${q}?q=${q}(${encodeURIComponent(name || '')})` : `https://www.google.com/maps/dir/?api=1&destination=${q}`;
   },
 
-  _pg_people({ focus } = {}) {
+  // place: opened from the app bar (it has the bar instead of Back, like Messages, Contacts and the Feed)
+  _pg_people({ focus, place } = {}) {
     const el = this._el(`<div>
       <style>${FM_CSS}</style>
       <div class="fm-map"></div>
-      <div class="top"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><div></div></div>
+      <div class="top">${place ? this._appBarHtml('maps') : `<button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button>`}<div></div></div>
       <div class="fm-ctrls">
         <div class="fm-vcap g"><button data-a="maptype" aria-label="Map style">${FM_ICON.map}</button><button data-a="locate" aria-label="Show me">${FM_ICON.locate}</button>${this._config.people_nearby === true ? `<button data-a="nearbyhere" aria-label="Find nearby">${ICON.search}</button>` : ''}</div>
         <button class="fm-3d g" data-a="3d" aria-label="3D">3D</button>

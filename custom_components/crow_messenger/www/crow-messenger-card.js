@@ -1,14 +1,15 @@
 /*
  * Crow Messenger Card
- * Private messages, group chats, attachments and contacts between Home Assistant users.
+ * Private messages, group chats, attachments and contacts between Home Assistant users,
+ * the household Feed and (when an administrator switches it on) Email.
  * Ships inside the crow_messenger integration (loaded into every dashboard automatically).
  * https://github.com/jamesmcginnis/crow-messenger
  */
 (() => {
 'use strict';
-const CM_VERSION = '0.1.1';
+const CM_VERSION = '0.1.2';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '25 Oct 2026 13:55';
+const CM_BUILD = '26 Oct 2026 07:25';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -16,6 +17,10 @@ const _f = (d) => `<svg viewBox="0 0 24 24" fill="currentColor">${d}</svg>`;
 // the Feed button: Home Assistant's own newspaper icon
 const FEED_ICON = '<ha-icon icon="mdi:newspaper-variant-outline"></ha-icon>';
 const MSG_ICON = '<ha-icon icon="mdi:message-outline"></ha-icon>';
+// the Email button: Home Assistant's own envelope icon
+const EMAIL_ICON = '<ha-icon icon="mdi:email-outline"></ha-icon>';
+// the Maps button: where everyone is (the People map)
+const MAPS_ICON = '<ha-icon icon="mdi:map-marker-outline"></ha-icon>';
 const ARCH_ICON = _s('<rect x="3" y="4" width="18" height="5" rx="1.5"/><path d="M5 9v9.5A1.5 1.5 0 006.5 20h11a1.5 1.5 0 001.5-1.5V9M10 13h4"/>');
 const REMIND_ICON = _s('<circle cx="12" cy="13" r="7.5"/><path d="M12 9v4l2.6 1.6M5 3.5L2.8 5.6M19 3.5l2.2 2.1"/>');
 const ICON = {
@@ -87,7 +92,7 @@ const ICON = {
 // whether it's offered on this card; the one you're on is highlighted.
 // the screens the card can start on (editor: Opening → Startup Screen)
 const START_VIEWS = [
-  ['messages', 'Messages'], ['contacts', 'Contacts'], ['feed', 'Feed'],
+  ['messages', 'Messages'], ['contacts', 'Contacts'], ['feed', 'Feed'], ['email', 'Email'],
   ['feed_videos', 'Feed · Videos'], ['feed_groups', 'Feed · Groups'], ['feed_events', 'Feed · Events'], ['feed_alerts', 'Feed · Notifications'],
 ];
 const APP_DESTS = [
@@ -95,8 +100,13 @@ const APP_DESTS = [
   { id: 'messages', label: 'Messages', icon: MSG_ICON, cls: 'msgbtn', page: 'list', show: (c) => !c._config.feed_only,
     dot: (c) => [...c._s.threads.values()].some(t => (t.unread > 0 || t.marked_unread) && !t.muted && t.visible !== false && !t.archived) },
   { id: 'contacts', label: 'Contacts', icon: ICON.contacts, page: 'contacts', show: (c) => !c._config.feed_only },
+  // Maps: only while this card shows the People map
+  { id: 'maps', label: 'Maps', icon: MAPS_ICON, page: 'people', show: (c) => c._config.show_people_map !== false && !c._config.feed_only },
   { id: 'feed', label: 'Feed', icon: FEED_ICON, cls: 'feedbtn', page: 'feed', show: (c) => !!c._s.feed?.enabled,
     dot: (c) => (c._s.feed?.unseen > 0 || c._s.feed?.notif_unread > 0) && !c._feedQuietDots() },
+  // Email: only while an administrator has it switched on (the editor's Email page)
+  { id: 'email', label: 'Email', icon: EMAIL_ICON, cls: 'emailbtn', page: 'email', show: (c) => !!c._s.email?.enabled && !c._config.feed_only,
+    dot: (c) => (c._s.email?.unread || 0) > 0 },
 ];
 
 // ── Small helpers ────────────────────────────────────────────────────────────
@@ -484,6 +494,8 @@ function telValue(v) { return String(v || '').replace(/[^\d+*#,;]/g, ''); }
 // (a mailto: in a new tab would leave an empty tab behind).
 function inIosApp() { return !!window.webkit?.messageHandlers?.externalBus; }
 function linkTarget(url) { return /^https?:/i.test(url) || inIosApp() ? '_blank' : ''; }
+const LSAFE_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M12 2 1 21h22L12 2zm0 4.3L19.5 19h-15L12 6.3zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z"/></svg>';
+
 function openExternal(url) {
   if (/^https?:/i.test(url) && !inIosApp()) {
     const w = window.open(url, '_blank', 'noopener');
@@ -664,16 +676,24 @@ svg { display: block; }
 .capsule { display: flex; align-items: center; height: 44px; border-radius: 22px; padding: 0 4px; }
 .capsule button { width: 40px; height: 40px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: transform .15s; }
 .capsule button svg { width: 21px; height: 21px; }
-.capsule .feedbtn, .capsule .msgbtn { position: relative; }
+.capsule .feedbtn, .capsule .msgbtn, .capsule .emailbtn { position: relative; }
 .capsule .msgbtn .fdot { position: absolute; top: 7px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--cm-red); box-shadow: 0 0 0 2px var(--cm-bg); }
 /* the app bar: places first (the one you're on tinted), a hairline, then the screen's own tools */
 .appbar .ab-ds { display: contents; }
+/* the small title that appears as you scroll: never over the app bar (moved into the space beside it, or left out) */
+.top .title.no-room { visibility: hidden !important; }
 .appbar .ab-d.on { background: color-mix(in srgb, var(--cm-accent) 18%, transparent); color: var(--cm-accent); }
 .appbar .ab-d.on ha-icon { color: var(--cm-accent); }
 .appbar .ab-sep { width: .5px; height: 22px; margin: 0 3px; background: var(--cm-sep); flex-shrink: 0; }
 .appbar[hidden], .appbar.ab-empty, .appbar [hidden] { display: none !important; }
 :host([data-retro]) .appbar .ab-d.on { border-radius: 3px; }
 .capsule .feedbtn .fdot { position: absolute; top: 7px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--cm-red); box-shadow: 0 0 0 2px var(--cm-bg); }
+.ctop-r { display: flex; align-items: center; gap: 8px; }
+.wdim { padding: 2px 4px 10px; font-size: 16px; line-height: 1.45; user-select: text; -webkit-user-select: text; }
+.wdim-l + .wdim-l { margin-top: 8px; }
+.capsule .emailbtn .fdot { position: absolute; top: 7px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--cm-red); box-shadow: 0 0 0 2px var(--cm-bg); }
+/* Email's screen: Email draws everything inside it (see crow-email.js) */
+.mailpg > crow-messenger-email { position: absolute; inset: 0; }
 .bottom { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; align-items: center; gap: 10px; padding: 0 14px 14px; pointer-events: none; }
 .bottom > * { pointer-events: auto; }
 .searchbar { flex: 1; height: 48px; border-radius: 24px; display: flex; align-items: center; gap: 8px; padding: 0 8px 0 16px; min-width: 0; }
@@ -1432,6 +1452,56 @@ const CM_EXTRA_CSS = `
 
 /* ── Cards inside messages (polls, check in, devices, links) ── */
 .xcard { width: 260px; max-width: 100%; border-radius: 18px; overflow: hidden; position: relative; }
+.tm-custom { display: flex; gap: 8px; margin-top: 10px; }
+.tm-custom[hidden] { display: none; }
+.tm-custom label { flex: 1; display: flex; align-items: center; gap: 6px; background: var(--cm-fill); border-radius: 12px; padding: 0 12px; height: 46px; color: var(--cm-text2); font-size: 15px; }
+.tm-custom input { flex: 1; min-width: 0; border: 0; outline: 0; background: none; color: var(--cm-text); font-size: 17px; text-align: right; }
+/* ── Archive, Remind Me, Location request ── */
+.arch-row { width: calc(100% - 20px); margin: 2px 10px 6px; display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 14px; background: var(--cm-fill2, var(--cm-fill)); color: var(--cm-text); text-align: left; font-size: 16px; }
+.arch-row .ai { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; background: var(--cm-fill); color: var(--cm-text2); }
+.arch-row .ai svg { width: 18px; height: 18px; }
+.arch-row .al { flex: 1; font-weight: 600; }
+.arch-row .ac { color: var(--cm-text2); font-size: 15px; }
+.arch-row .ac b { color: #fff; background: var(--cm-accent); border-radius: 10px; padding: 1px 7px; font-size: 13px; }
+.arch-row > svg { width: 13px; height: 13px; color: var(--cm-text3, var(--cm-text2)); }
+.arch-note { margin: 0 16px 10px; font-size: 13px; line-height: 1.4; color: var(--cm-text2); text-align: center; }
+.arch-note button { display: block; margin: 6px auto 0; color: var(--cm-accent); font-size: 14px; font-weight: 600; }
+.pill.archback { padding: 0 14px 0 10px; gap: 2px; }
+.pill.archback svg { width: 18px; height: 18px; }
+.swipe-actions .arch { background: #8E8E93; }
+.remindmk { display: inline-flex; align-items: center; gap: 4px; margin: 2px 6px 0; font-size: 11.5px; font-weight: 600; color: var(--cm-accent); }
+.remindmk svg { width: 13px; height: 13px; }
+.remtag { color: var(--cm-accent); font-weight: 600; }
+.remtag::before { content: '⏰ '; }
+.xcard.lqcard { width: 260px; }
+.xcard.ringcard { width: 260px; }
+.xcard.ringcard .xh svg { color: #F0480F; }
+.xcard.ringcard.on .xh svg { animation: cm-ring-shake 1s ease-in-out infinite; transform-origin: 50% 50%; }
+@keyframes cm-ring-shake { 0%, 50%, 100% { transform: rotate(0); } 10%, 30% { transform: rotate(-14deg); } 20%, 40% { transform: rotate(14deg); } }
+@media (prefers-reduced-motion: reduce) { .xcard.ringcard.on .xh svg { animation: none; } }
+.xcard.lqcard .xh svg { color: #FF453A; }
+.xbtns button.bold { font-weight: 700; }
+/* Home Status and the Shared Timer are drawn by the card itself, so their styles live here (not with the games) */
+/* Home Status */
+.xcard.status { width: 268px; }
+.st-row { display: flex; align-items: center; gap: 10px; padding: 7px 13px; cursor: pointer; }
+.st-row .sti { width: 30px; height: 30px; border-radius: 50%; flex-shrink: 0; display: flex; align-items: center; justify-content: center; color: #fff; }
+.st-row .sti svg { width: 17px; height: 17px; }
+.st-row .stl { font-size: 13px; opacity: 0.7; }
+.st-row .stv { font-size: 15px; font-weight: 500; line-height: 1.25; word-break: break-word; }
+.st-row.ok .sti { background: #34C759; } .st-row.warn .sti { background: #FF9F0A; } .st-row.bad .sti { background: #FF3B30; } .st-row.info .sti { background: #5E5CE6; }
+
+/* Shared Timer */
+.xcard.timer { width: 248px; }
+.tm-top { display: flex; align-items: center; gap: 12px; padding: 12px 13px 10px; }
+.tm-ring { width: 54px; height: 54px; flex-shrink: 0; transform: rotate(-90deg); }
+.tm-ring circle { fill: none; stroke-width: 4.5; stroke-linecap: round; }
+.tm-ring .bg { stroke: color-mix(in srgb, currentColor 16%, transparent); }
+.tm-ring .fg { stroke: #FF9F0A; transition: stroke-dashoffset 0.95s linear; }
+.timer.done .tm-ring .fg { stroke: #34C759; } .timer.cancelled .tm-ring .fg { stroke: #8E8E93; }
+.tm-left { font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: -0.02em; line-height: 1.1; }
+.tm-lab { font-size: 14px; opacity: 0.75; margin-top: 2px; word-break: break-word; }
+
 .me .xcard { background: color-mix(in srgb, var(--cm-sent) 18%, var(--cm-recv)); color: var(--cm-recv-text); }
 .them .xcard { background: var(--cm-recv); color: var(--cm-recv-text); }
 .xcard .xh { display: flex; align-items: center; gap: 8px; padding: 11px 13px 4px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; opacity: 0.65; }
@@ -1481,6 +1551,15 @@ const CM_EXTRA_CSS = `
 .ent-cam { width: 100%; aspect-ratio: 16 / 9; object-fit: cover; display: block; background: #000; }
 .ent-note { padding: 0 13px 11px; font-size: 15px; }
 .linkc { width: 260px; max-width: 100%; border-radius: 18px; overflow: hidden; cursor: pointer; }
+/* Link Safety: a warning under a link that looks like a scam */
+.lsafe { display: flex; align-items: flex-start; gap: 8px; width: 260px; max-width: 100%; box-sizing: border-box; margin-top: 4px; padding: 8px 11px; border-radius: 14px; font-size: 13px; line-height: 1.3; cursor: pointer; background: rgba(255,159,10,0.14); color: #c77700; }
+:host([data-mode="dark"]) .lsafe { color: #ffb340; }
+.lsafe.danger { background: rgba(255,59,48,0.13); color: #d70015; }
+:host([data-mode="dark"]) .lsafe.danger { color: #ff6961; }
+.lsafe svg { width: 17px; height: 17px; flex-shrink: 0; margin-top: 1px; }
+.lsafe b { display: block; font-weight: 650; }
+.lsafe span { display: block; opacity: 0.9; margin-top: 1px; }
+.fp .lsafe { width: auto; margin: 0 14px 10px; }
 .xcard.postc { width: 250px; max-width: 100%; padding: 0; overflow: hidden; cursor: pointer; }
 .xcard.lazy-ph { padding: 16px 18px; color: var(--cm-text2); font-size: 14px; min-width: 160px; }
 .postc .pc-pic { position: relative; background: var(--cm-fill); }
@@ -1581,6 +1660,19 @@ const CM_EXTRA_CSS = `
 .xsheet .xbody { overflow-y: auto; padding: 4px 16px 24px; -webkit-overflow-scrolling: touch; }
 .xsheet .pill.accent[disabled] { opacity: 0.4; }
 .apps { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px 8px; padding: 8px 4px 10px; }
+/* the Add to Message drawer while you're editing it (here, not in the games file, so the − and + badges
+   are hidden until you tap Edit even before a game has ever been opened) */
+.apps.editing .app { animation: cm-jiggle 0.32s ease-in-out infinite alternate; touch-action: none; }
+.apps.editing .app:nth-child(2n) { animation-delay: -0.16s; }
+@keyframes cm-jiggle { from { transform: rotate(-1.6deg); } to { transform: rotate(1.6deg); } }
+.app { position: relative; }
+.app.hid { opacity: 0.38; }
+.app .abadge { display: none; position: absolute; top: -4px; left: calc(50% - 36px); width: 22px; height: 22px; border-radius: 50%; color: #fff; font-size: 18px; font-weight: 700; line-height: 22px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.3); z-index: 2; }
+.apps.editing .app .abadge { display: block; background: #8E8E93; }
+.apps.editing .app.hid .abadge { background: #34C759; }
+.app.dragging { z-index: 5; animation: none !important; transform: scale(1.12); opacity: 0.9; }
+.apps-note { font-size: 13px; color: var(--cm-text2); text-align: center; margin: 2px 12px 8px; line-height: 1.4; }
+.apps-note[hidden] { display: none; }
 .app { display: flex; flex-direction: column; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; text-align: center; }
 .app .ai { width: 58px; height: 58px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: #fff; box-shadow: 0 3px 10px rgba(0,0,0,0.18); }
 .app .ai svg { width: 28px; height: 28px; }
@@ -2064,7 +2156,9 @@ const CM_DEFAULTS = {
   // the Facebook-style bar along the bottom of the Feed
   feed_nav: true,
   // the app bar (the capsule at the top left): which places, in what order; Filter on Messages; red dots
-  app_bar_items: ['messages', 'contacts', 'feed'], app_bar_filter: true, app_bar_dots: true,
+  app_bar_items: ['messages', 'contacts', 'maps', 'feed', 'email'], app_bar_filter: true, app_bar_dots: true,
+  // Email on this card (Mail List, Inbox Tools, the mail skin…): set in the editor's Email section
+  email: {},
   // the Feed on this card
   feed_autoplay: false, show_stories: true, show_memories: true, feed_start_tab: 'feed',
   // a household member's contact card shows their Feed and your chats with them
@@ -2082,6 +2176,31 @@ const RS_WIN_ICON = `<svg class="rsw-max" viewBox="0 0 10 9"><path fill="current
   + `<svg class="rsw-res" viewBox="0 0 10 9"><path fill="currentColor" fill-rule="evenodd" d="M3 0h7v6H8V2H4v1H3zM0 3h7v6H0zM1 5h5v3H1z"/></svg>`
   + `<svg class="rsw-zoom" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="4"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/></svg>`;
 
+// One size for the controls: everything on a screen's top bar (Back and the other round buttons, the app bar,
+// the capsules on the right and the Edit / Done buttons) is 42 px tall, with 38 px buttons in the capsules, and
+// the Search bar and round buttons at the bottom are 44 px. Each keeps a 44 px tap area. When a top bar won't fit
+// at that size (a narrow card with every place in the app bar), the card drops to 38 px (data-bar-tight).
+// The sizes are variables so Email, inside the card, matches. The skins keep their own sizes.
+const SIZE_CSS = `
+:host(:not([data-skin])) { --cmb-h: 42px; --cmb-b: 38px; --cmb-sv: 21px; --cmb-i: 22px; --cmb-cs: 20px; --cmb-rs: 15px; }
+:host(:not([data-skin])[data-bar-tight]) { --cmb-h: 38px; --cmb-b: 34px; --cmb-sv: 19px; --cmb-i: 20px; --cmb-cs: 18px; --cmb-rs: 14px; }
+:host(:not([data-skin])) .top .cb { width: var(--cmb-h); height: var(--cmb-h); position: relative; flex-shrink: 0; }
+:host(:not([data-skin])) .top .cb svg { width: var(--cmb-cs); height: var(--cmb-cs); }
+:host(:not([data-skin])) .top .cb ha-icon { --mdc-icon-size: calc(var(--cmb-cs) + 1px); }
+:host(:not([data-skin])) .top .cb::after { content: ''; position: absolute; inset: calc((var(--cmb-h) - 44px) / 2); }
+:host(:not([data-skin])) .top .capsule { height: var(--cmb-h); border-radius: calc(var(--cmb-h) / 2); padding: 0 3px; flex-shrink: 0; }
+:host(:not([data-skin])) .top .capsule > button, :host(:not([data-skin])) .top .capsule .ab-ds > button { width: var(--cmb-b); height: var(--cmb-b); position: relative; flex-shrink: 0; }
+:host(:not([data-skin])) .top .capsule > button::after, :host(:not([data-skin])) .top .capsule .ab-ds > button::after { content: ''; position: absolute; inset: calc((var(--cmb-b) - 44px) / 2) 0; }
+:host(:not([data-skin])) .top .capsule button svg { width: var(--cmb-sv); height: var(--cmb-sv); }
+:host(:not([data-skin])) .top .capsule button ha-icon { --mdc-icon-size: var(--cmb-i); }
+:host(:not([data-skin])) .top .capsule .rs-btn svg { width: var(--cmb-rs); height: var(--cmb-rs); }
+:host(:not([data-skin])) .top .capsule .fdot { top: calc(var(--cmb-b) / 6); right: calc(var(--cmb-b) / 8); width: 8px; height: 8px; }
+:host(:not([data-skin])) .top .appbar .ab-sep { height: calc(var(--cmb-h) / 2); }
+:host(:not([data-skin])) :is(.top, .xhd, .skt, .shead) .pill { height: var(--cmb-h); border-radius: calc(var(--cmb-h) / 2); position: relative; }
+:host(:not([data-skin])) .top .pill::after { content: ''; position: absolute; inset: calc((var(--cmb-h) - 44px) / 2) 0; }
+:host(:not([data-skin])) .bottom .cb { width: 44px; height: 44px; }
+:host(:not([data-skin])) .bottom .searchbar { height: 44px; border-radius: 22px; }
+`;
 const RS_CSS = `
 /* ── the resize button: an ordinary round control, so every skin dresses it like its others ── */
 .rs-btn { position: relative; }
@@ -2193,8 +2312,10 @@ class CrowMessengerCard extends HTMLElement {
 
   setConfig(config) {
     this._config = { ...CM_DEFAULTS, ...(config || {}) };
+    this._barTightW = 0;   // the app bar's places may have changed: measure again
     if (this._full && this._config.fullscreen_button === false) this._exitFull(false);
     if (this._built) { this._applyTheme(); this._refresh('all'); }
+    (this._stack || []).forEach(p => p.mail?.setConfig(this._emailConfig()));
   }
 
   getCardSize() { return Math.ceil(this._heightPx() / 50); }
@@ -2206,6 +2327,7 @@ class CrowMessengerCard extends HTMLElement {
     const darkChanged = this._hass?.themes?.darkMode !== hass?.themes?.darkMode;
     this._hass = hass;
     this._lives.forEach(l => { l.hass = hass; });
+    (this._stack || []).forEach(p => { if (p.mail) p.mail.hass = hass; });
     if (!this._built) this._build();
     if (first || darkChanged) this._applyTheme();
     if (first) this._autoFull();
@@ -2240,6 +2362,7 @@ class CrowMessengerCard extends HTMLElement {
   disconnectedCallback() {
     this._saveResume();
     CrowMessengerCard.instances.delete(this);
+    this._barRO?.disconnect(); this._barRO = null;
     window.removeEventListener('location-changed', this._onLoc);
     window.removeEventListener('popstate', this._onLoc);
     document.removeEventListener('visibilitychange', this._onVis);
@@ -2257,7 +2380,7 @@ class CrowMessengerCard extends HTMLElement {
   // ── Build & theme ──────────────────────────────────────────────────────────
   _build() {
     this._built = true;
-    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${SKIN_CSS}${RS_CSS}${Object.values(CrowMessengerCard.lazyCss || {}).join('')}</style><ha-card><div class="cm-root"><div class="cm-pages"></div></div><button type="button" class="rs-win" data-rs>${RS_WIN_ICON}</button></ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${SKIN_CSS}${RS_CSS}${SIZE_CSS}${Object.values(CrowMessengerCard.lazyCss || {}).join('')}</style><ha-card><div class="cm-root"><div class="cm-pages"></div></div><button type="button" class="rs-win" data-rs>${RS_WIN_ICON}</button></ha-card>`;
     this._root = this.shadowRoot.querySelector('.cm-root');
     // the app bar's places work the same on every screen that has one
     this._root.addEventListener('click', (e) => { const b = e.target.closest('[data-app]'); if (b && this._root.contains(b)) { e.stopPropagation(); this._appGo(b.dataset.app); } });
@@ -2354,6 +2477,7 @@ class CrowMessengerCard extends HTMLElement {
       ? 'calc(100dvh - var(--header-height, 56px) - 24px)' : `${this._heightPx()}px`);
     h.toggleAttribute('data-rs', this._rsOn());
     if (this._built) this._rsSync();
+    this._emailSync('theme');
   }
 
   // ── Server connection ──────────────────────────────────────────────────────
@@ -2488,6 +2612,7 @@ class CrowMessengerCard extends HTMLElement {
     s.stickers = r.stickers || [];
     s.features = r.features || {};
     s.feed = { ...(s.feed || {}), ...(r.feed || { enabled: false }) };
+    s.email = { ...(r.email || { enabled: false, unread: 0 }) };
     s.modules = r.modules || s.modules || {};
     s.focusEntities = r.focus_entities || {};
     s.presence = r.presence || {};
@@ -2560,6 +2685,9 @@ class CrowMessengerCard extends HTMLElement {
         break;
       case 'feed': case 'feed_removed': case 'story': case 'story_removed': case 'feed_groups': case 'feed_albums': case 'feed_seen': case 'feed_milestones': case 'feed_notif': case 'feed_options': case 'feed_quiet':
         this._feedLive(ev);
+        break;
+      case 'email_state': case 'email_unread':
+        this._emailLive(ev);
         break;
       case 'thread_removed':
         s.threads.delete(ev.thread_id);
@@ -2654,6 +2782,14 @@ class CrowMessengerCard extends HTMLElement {
 
   _checkDeepLink() {
     const params = new URLSearchParams(window.location.search);
+    // an Email notification (?crow_email=…): open Email, which takes the link from there
+    if (params.has('crow_email')) {
+      this._deepLinked = true;
+      if (this._s.ready && this.isConnected && this._s.email?.enabled && !this._config.feed_only) {
+        const top = this._stack[this._stack.length - 1];
+        if (top?.type !== 'email') this._openEmail({}, { anim: false });
+      }
+    }
     const tid = params.get('crow_thread');
     const sid = params.get('crow_share');
     const fpost = params.get('crow_post'), fcomment = params.get('crow_comment'), fgroup = params.get('crow_group'), fmedia = params.get('crow_media');
@@ -2670,7 +2806,9 @@ class CrowMessengerCard extends HTMLElement {
     if (sid) {
       const to = shareTo || (this._startFeed() ? 'feed' : 'chat');
       this._deepLinked = true;
-      if (to === 'feed' && this._s.feed?.enabled) this._openFeed('fcompose', { share: sid });
+      if (to === 'pick') this._pickShare(sid);
+      else if (to === 'email' && this._s.email?.enabled) this._shareToEmail(sid);
+      else if (to === 'feed' && this._s.feed?.enabled) this._openFeed('fcompose', { share: sid });
       else this._openShare(sid);
     }
     // a Feed notification: the post (and the comment), or a group you were added to
@@ -2691,6 +2829,7 @@ class CrowMessengerCard extends HTMLElement {
     const v = this._config.start_view || 'messages';
     if (this._config.feed_only || !START_VIEWS.some(([k]) => k === v)) return 'messages';
     if (v.startsWith('feed') && !this._s.feed?.enabled) return 'messages';
+    if (v === 'email' && !this._s.email?.enabled) return 'messages';
     return v;
   }
   _startFeed() { return this._startView().startsWith('feed'); }
@@ -2701,10 +2840,11 @@ class CrowMessengerCard extends HTMLElement {
     this._startViewDone = true;
     // a notification that opened a chat, a post or a share wins
     const q = new URLSearchParams(window.location.search);
-    if (this._deepLinked || ['crow_thread', 'crow_share', 'crow_post', 'crow_group', 'crow_profile', 'crow_story', 'crow_feed'].some(k => q.has(k))) return;
+    if (this._deepLinked || ['crow_thread', 'crow_share', 'crow_post', 'crow_group', 'crow_profile', 'crow_story', 'crow_feed', 'crow_email'].some(k => q.has(k))) return;
     if (this._stack.length !== 1) return;
     const v = this._startView();
     if (v === 'contacts') this._nav('contacts', {}, { anim: false });
+    else if (v === 'email') this._openEmail({}, { anim: false });
     else if (v.startsWith('feed')) this._openFeed('feed', v === 'feed' ? {} : { view: v.slice(5) }, { anim: false });
   }
 
@@ -2713,6 +2853,139 @@ class CrowMessengerCard extends HTMLElement {
     try { await this._lazy('feed'); } catch (err) { this._toast('Couldn’t open the Feed. Check your connection and try again.'); return null; }
     this._feedSetup();
     return this._nav(type, data, opts);
+  }
+
+  // ── Email (its screens are a separate file, loaded the first time it's opened) ──
+  // Email keeps its own screens and skins inside this screen, and follows this card: its look,
+  // its app bar, its full screen button and its contacts book (see crow-email.js).
+  async _openEmail(opts = {}, navOpts = {}) {
+    if (!this._s.email?.enabled) { this._toast('Email is switched off'); return null; }
+    const at = this._stack.findIndex(p => p.type === 'email');
+    let page;
+    if (at >= 0) {
+      while (this._stack.length > at + 1) this._back(false);
+      page = this._stack[at];
+    } else {
+      while (this._stack.length > 1) this._back(false);
+      page = this._nav('email', {}, navOpts);
+    }
+    if (opts.compose && page) page.whenMail().then(m => m._hostCompose(opts.compose)).catch(() => {});
+    if (opts.open && page) page.whenMail().then(m => m._hostOpen(opts.open)).catch(() => {});
+    if (opts.search && page) page.whenMail().then(m => m._hostSearch(opts.search)).catch(() => {});
+    return page;
+  }
+
+  // your own contact card (My Card), for Email's signature
+  _myCardContact() { const id = this._s.profile?.my_card; return id ? this._s.contacts.get(id) || null : null; }
+
+  // choose one or more chats, then send(tid) for each (Email's "Send to a Chat")
+  _sendToChats({ title = 'Send to a Chat', note = '', send }) {
+    const s = this._s, chosen = new Set();
+    const threads = [...s.threads.values()].filter(t => t.visible !== false && !t.archived).sort((a, b) => (b.updated_at || 0) - (a.updated_at || 0));
+    const sh = this._xsheet({
+      title, action: 'Send',
+      body: `${note ? `<div class="xnote" style="margin-top:0">${esc(note)}</div>` : ''}<input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>`,
+      onAction: async () => {
+        if (!chosen.size) { this._toast('Choose a chat'); return false; }
+        let ok = 0;
+        for (const tid of chosen) { try { await send(tid); ok++; } catch (err) { this._toast(err.message); } }
+        if (ok) this._toast(ok === 1 ? 'Sent' : `Sent to ${ok} chats`);
+      },
+    });
+    const list = sh.el.querySelector('.fwlist'), q = sh.el.querySelector('.q');
+    const render = () => {
+      const w = q.value.toLowerCase();
+      list.innerHTML = threads.filter(t => !w || this._threadTitle(t).toLowerCase().includes(w)).map(t =>
+        `<div class="pick-row${chosen.has(t.id) ? ' on' : ''}" data-t="${esc(t.id)}">${this._threadAv(t, 36)}<div class="pn">${esc(this._threadTitle(t))}</div><span class="pck2">${chosen.has(t.id) ? ICON.check : ''}</span></div>`).join('')
+        || '<div class="pick-row"><div class="pn" style="color:var(--cm-text2)">No conversations</div></div>';
+      this._hydrate?.(list);
+    };
+    q.addEventListener('input', render);
+    list.addEventListener('click', (e) => { const r = e.target.closest('[data-t]'); if (!r) return; const id = r.dataset.t; chosen.has(id) ? chosen.delete(id) : chosen.add(id); render(); });
+    render();
+    return sh;
+  }
+
+  // What Did I Miss?: one catch-up on unread messages, new Feed posts and important email
+  async _whatDidIMiss() {
+    const sh = this._xsheet({ title: 'What Did I Miss?', body: `<div class="xnote" style="text-align:center;padding:30px 0">Catching up on Messages, the Feed${this._s.email?.enabled ? ' and Email' : ''}…</div>` });
+    try {
+      const r = await this._ws('catchup_all');
+      if (!sh.wrap.isConnected) return;
+      const lines = String(r.text || '').split(/\n+/).filter(Boolean).map(l => `<div class="wdim-l">${esc(l)}</div>`).join('');
+      const c = r.counts || {};
+      const chips = [c.messages ? `${c.messages} unread message${c.messages === 1 ? '' : 's'}` : '', c.posts ? `${c.posts} new post${c.posts === 1 ? '' : 's'}` : '', c.email ? `${c.email} unread email${c.email === 1 ? '' : 's'}` : ''].filter(Boolean);
+      sh.el.innerHTML = `${chips.length ? `<div class="xnote" style="margin-top:0">${esc(chips.join(' · '))}</div>` : ''}<div class="wdim">${lines}</div>`;
+    } catch (err) {
+      if (sh.wrap.isConnected) sh.el.innerHTML = `<div class="xnote" style="text-align:center;padding:24px 0">${esc(err.message || 'Couldn’t catch up just now.')}</div>`;
+    }
+  }
+
+  // what this card's editor has for Email (Mail List, Inbox Tools, the mail skin…)
+  _emailConfig() { const e = this._config.email; return e && typeof e === 'object' ? { ...e } : {}; }
+
+  _pg_email() {
+    const el = this._el(`<div class="mailpg"><div class="scroll"><div class="empty lazy-msg" style="padding-top:140px">Loading…</div></div><div class="top">${this._appBarHtml('email')}<div></div></div></div>`);
+    let resolve, reject;
+    const ready = new Promise((a, b) => { resolve = a; reject = b; });
+    ready.catch(() => {});
+    const page = { el, whenMail: () => ready };
+    this._lazy('email').then(() => {
+      if (!this._stack.includes(page)) return;
+      const m = document.createElement('crow-messenger-email');
+      m.host = this;
+      m.setConfig(this._emailConfig());
+      el.innerHTML = '';
+      el.appendChild(m);
+      m.hass = this._hass;
+      page.mail = m;
+      resolve(m);
+    }).catch((err) => {
+      const msg = el.querySelector('.lazy-msg');
+      if (msg) msg.textContent = 'Couldn’t open Email. Check your connection and try again.';
+      reject(err);
+    });
+    page.refresh = () => {};
+    page.onShow = () => page.mail?._hostSync?.();
+    page.destroy = () => { page.mail?.remove(); page.mail = null; };
+    return page;
+  }
+
+  // Email switched on or off (by an administrator), or how much unread email there is
+  _emailLive(ev) {
+    const e = this._s.email || (this._s.email = { enabled: false, unread: 0 });
+    if (ev.type === 'email_unread') e.unread = ev.unread || 0;
+    else {
+      const was = !!e.enabled;
+      Object.assign(e, { enabled: !!ev.enabled, switched_on: !!ev.switched_on });
+      if (!e.enabled) e.unread = 0;
+      // switched off, or started again: Email's screen starts afresh
+      if (was !== e.enabled || !e.enabled) {
+        const at = this._stack.findIndex(p => p.type === 'email');
+        if (at >= 0) { while (this._stack.length > at) this._back(false); }
+      }
+    }
+    if (this._root) this._appBarSync(this._root);
+  }
+
+  // Email's screen follows this card: its look, the app bar and full screen
+  _emailSync(what) {
+    (this._stack || []).forEach(p => {
+      if (!p.mail) return;
+      if (what === 'bar') p.mail._appBarRefresh?.();
+      else if (what === 'full') p.mail._fsSync?.();
+      else p.mail._hostSync?.();
+    });
+  }
+
+  // the app bar's places for Email's screen (which it draws in its own skin)
+  _appBarModel(current) {
+    const want = Array.isArray(this._config.app_bar_items) ? this._config.app_bar_items : CM_DEFAULTS.app_bar_items;
+    const shown = this._appDests().filter(d => d.show(this) && (want.includes(d.id) || d.id === current));
+    if (shown.length < 2) return [];
+    // Email keeps its red dot while you're in it, while there's unread email
+    return shown.map(d => ({ id: d.id, label: d.label, icon: d.icon, on: d.id === current,
+      dot: this._config.app_bar_dots !== false && (d.id !== current || d.id === 'email') && !!d.dot?.(this) }));
   }
 
   // Quiet Mode with Hide Red Dots: no red dots for the Feed while it's quiet
@@ -2971,6 +3244,42 @@ class CrowMessengerCard extends HTMLElement {
     return `<div class="capsule g appbar ${extra}" data-current="${current}"><span class="ab-ds">${dests}</span><span class="ab-sep" hidden></span>${tools}</div>`;
   }
 
+  // The top bars at the bigger size, unless one of the screens on show doesn't fit: then the whole card
+  // uses the smaller size, so every screen's bar stays the same. Checked when the card changes size and
+  // when a screen's app bar is drawn.
+  _barFit() {
+    if (!this.shadowRoot || this.hasAttribute('data-skin')) { this.removeAttribute('data-bar-tight'); return; }
+    if (!this._barRO && window.ResizeObserver) {
+      this._barRO = new ResizeObserver(() => { cancelAnimationFrame(this._barRaf); this._barRaf = requestAnimationFrame(() => this._barFit()); });
+      this._barRO.observe(this);
+    }
+    const was = this.hasAttribute('data-bar-tight');
+    this.removeAttribute('data-bar-tight');
+    const tops = [...this.shadowRoot.querySelectorAll('.top')];
+    this.shadowRoot.querySelectorAll('crow-messenger-email').forEach(e => { if (e.shadowRoot) tops.push(...e.shadowRoot.querySelectorAll('.top')); });
+    const over = tops.some(t => {
+      const b = t.getBoundingClientRect();
+      if (!b.width || !b.height) return false;
+      const cs = getComputedStyle(t);
+      const l = b.left + (parseFloat(cs.paddingLeft) || 0) - 0.5, r = b.right - (parseFloat(cs.paddingRight) || 0) + 0.5;
+      return [...t.children].some(c => {
+        if (c.classList.contains('title') || c.hidden) return false;
+        const cb = c.getBoundingClientRect();
+        return cb.width > 0 && (cb.right > r || cb.left < l);
+      });
+    });
+    // the screens not on show can't be measured, so: the widest bar there could be (every place in this
+    // card's app bar, the full screen button, and two buttons on the right), and any bar that has ever
+    // been too wide at this width, keep the smaller size. Then going from screen to screen never changes it.
+    const w = this.getBoundingClientRect().width;
+    const want = Array.isArray(this._config?.app_bar_items) ? this._config.app_bar_items : CM_DEFAULTS.app_bar_items;
+    const n = APP_DESTS.filter(d => d.show(this) && want.includes(d.id)).length + (this._config?.fullscreen_button === false ? 0 : 1);
+    const widest = 28 + n * 38 + 13 + 10 + 82 + 2;
+    if (over) this._barTightW = Math.max(this._barTightW || 0, w);
+    else if (this._barTightW && w > this._barTightW + 1) this._barTightW = 0;
+    if (over || (w && w < widest) || (this._barTightW && w <= this._barTightW + 1)) this.setAttribute('data-bar-tight', '');
+  }
+
   // which places this card offers, the red dot on the Feed, and the line between places and tools
   _appBarSync(scope) {
     scope.querySelectorAll('.appbar').forEach(bar => {
@@ -2987,7 +3296,42 @@ class CrowMessengerCard extends HTMLElement {
       const tools = [...bar.children].filter(c => !c.classList.contains('ab-ds') && !c.classList.contains('ab-sep') && !c.hidden && (!c.isConnected || getComputedStyle(c).display !== 'none'));
       bar.querySelector('.ab-sep').hidden = !many || !tools.length;
       bar.classList.toggle('ab-empty', !many && !tools.length);
+      this._titleRoom(bar.parentElement);
     });
+    this._emailSync('bar');
+    this._barFit();
+  }
+
+  // A screen's small title (it fades in as you scroll) sits in the middle of the top bar. With the
+  // app bar on the left it could land on top of it, so it goes in the middle of the space between the
+  // app bar and the buttons on the right instead, or, when it won't fit there, it's left out.
+  _titleRoom(top) {
+    const title = top?.querySelector?.(':scope > .title');
+    if (!title) return;
+    if (!top._titleRO && window.ResizeObserver) {
+      top._titleRO = new ResizeObserver(() => this._titleRoom(top));
+      top._titleRO.observe(top);
+      top._titleRO.observe(title);
+      const bar = top.querySelector(':scope > .appbar');
+      if (bar) top._titleRO.observe(bar);
+    }
+    const bar = top.querySelector(':scope > .appbar');
+    title.style.left = '';
+    if (!bar || bar.hidden || !top.clientWidth || getComputedStyle(title).position !== 'absolute') { title.classList.remove('no-room'); return; }
+    const tr = top.getBoundingClientRect();
+    const leftEdge = bar.getBoundingClientRect().right - tr.left + 8;
+    const right = [...top.children].filter(c => c !== bar && c !== title && c.offsetParent && c.getBoundingClientRect().left - tr.left > leftEdge)
+      .reduce((m, c) => Math.min(m, c.getBoundingClientRect().left - tr.left), tr.width);
+    const rightEdge = right - 8;
+    const w = Math.min(title.scrollWidth, title.offsetWidth || title.scrollWidth);
+    const mid = tr.width / 2;
+    if (mid - w / 2 >= leftEdge && mid + w / 2 <= rightEdge) { title.classList.remove('no-room'); return; }
+    if (rightEdge - leftEdge >= title.scrollWidth) {
+      title.style.left = `${(leftEdge + rightEdge) / 2}px`;
+      title.classList.remove('no-room');
+      return;
+    }
+    title.classList.add('no-room');
   }
 
   // go to one of the app bar's places, like switching tabs: back to it if it's underneath,
@@ -2997,11 +3341,15 @@ class CrowMessengerCard extends HTMLElement {
     if (!d) return;
     const top = this._stack[this._stack.length - 1];
     const at = this._stack.findIndex(p => p.type === d.page);
-    if (top && at === this._stack.length - 1) { top.el.querySelector('.scroll')?.scrollTo({ top: 0, behavior: 'smooth' }); return; }
+    if (top && at === this._stack.length - 1) {
+      if (top.mail) top.mail._hostHome?.(); else top.el.querySelector('.scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
     if (at >= 0) { while (this._stack.length > at + 2) this._back(false); this._back(); return; }
     while (this._stack.length > 1) this._back(false);
     if (id === 'feed') await this._openFeed();
-    else this._nav(d.page);
+    else if (id === 'email') this._openEmail();
+    else this._nav(d.page, id === 'maps' ? { place: true } : {});
   }
 
   _back(anim = true) {
@@ -3095,6 +3443,7 @@ class CrowMessengerCard extends HTMLElement {
     // old-style window skins show it in the title bar, also only on the front screen
     this.toggleAttribute('data-rs-front', this._stack.length === 1 && front?.type === 'list');
     this.shadowRoot.querySelectorAll('[data-rs]').forEach(b => this._rsLabel(b));
+    this._emailSync('full');
   }
 
   _rsSpin() {
@@ -3316,9 +3665,20 @@ class CrowMessengerCard extends HTMLElement {
       clearTimeout(searchTimer);
       if (input.value.trim().length >= 2 || s.searchKind) {
         searchTimer = setTimeout(async () => {
-          try { const r = await this._ws('search', { query: input.value.trim(), ...(s.searchKind ? { kind: s.searchKind } : {}) }); s.searchHits = r.messages; page.refresh('list'); } catch (e) { /* ignore */ }
+          const q = input.value.trim();
+          try { const r = await this._ws('search', { query: q, ...(s.searchKind ? { kind: s.searchKind } : {}) }); s.searchHits = r.messages; page.refresh('list'); } catch (e) { /* ignore */ }
+          // and the Feed and Email (words only, not the Photos / Links / Files filters)
+          if (s.searchKind || q.length < 2) { s.searchFeed = []; s.searchMail = []; return; }
+          const seq = (this._searchSeq = (this._searchSeq || 0) + 1);
+          const [fr, mr] = await Promise.all([
+            s.feed?.enabled ? this._ws('feed/find', { query: q }).catch(() => null) : null,
+            s.email?.enabled ? this._hass.callWS({ type: 'crow_messenger_email/search', query: q }).catch(() => null) : null,
+          ]);
+          if (seq !== this._searchSeq || input.value.trim() !== q) return;
+          s.searchFeed = fr?.posts || []; s.searchMail = (mr?.items || []).slice(0, 12);
+          page.refresh('list');
         }, 280);
-      } else s.searchHits = [];
+      } else { s.searchHits = []; s.searchFeed = []; s.searchMail = []; }
     };
     input.addEventListener('input', onSearch);
     // search filters (Photos, Links, Files…) appear while searching
@@ -3354,6 +3714,7 @@ class CrowMessengerCard extends HTMLElement {
       if (a === 'feed') { this._appGo('feed'); return; }
       if (a === 'filter') {
         const v = await this._menu(e.target.closest('button'), [
+          ...(s.ai?.catchup ? [{ text: 'What Did I Miss?', value: 'missed', icon: ICON.ai }, { sep: true }] : []),
           ...([...s.threads.values()].some(t => t.visible !== false && t.last && !!t.archived === !!s.archivedView)
             ? [{ text: 'Select Conversations', value: 'select', icon: ICON.checkCircle }, { sep: true }] : []),
           { header: 'Filter' },
@@ -3366,6 +3727,7 @@ class CrowMessengerCard extends HTMLElement {
         ]);
         if (v?.startsWith?.('skin:')) { this._setSkin(v.slice(5)); return; }
         if (v === 'starred') { this._nav('starred'); return; }
+        if (v === 'missed') { this._whatDidIMiss(); return; }
         if (v === 'select') { s.editing = true; s.selected.clear(); page.refresh('list'); return; }
         if (v) { s.filter = v; page.refresh('list'); }
         return;
@@ -3401,6 +3763,10 @@ class CrowMessengerCard extends HTMLElement {
       }
       const sm = e.target.closest('[data-smid]');
       if (sm) { this._jumpTo(sm.dataset.stid, +sm.dataset.ts, sm.dataset.smid); return; }
+      const fhit = e.target.closest('[data-fhit]');
+      if (fhit) { this._openFeed('fpost', { pid: fhit.dataset.fhit }); return; }
+      const mhit = e.target.closest('[data-mhit]');
+      if (mhit) { this._openEmail({ open: { account: mhit.dataset.acc, folder: mhit.dataset.folder, uid: +mhit.dataset.uid } }); return; }
       const hit = e.target.closest('.hit');
       if (hit) { this._openThread(hit.dataset.tid, {}); this._flashMsg = hit.dataset.mid; return; }
       const row = e.target.closest('.row');
@@ -3655,7 +4021,18 @@ class CrowMessengerCard extends HTMLElement {
           <div class="preview">${m.sender === s.me ? 'You: ' : t.is_group ? esc(this._userName(m.sender, true)) + ': ' : ''}${txt}</div></div></div></div>`;
       }).join('');
     }
-    if (q && !threads.length && !s.searchHits.length) html = chips + `<div class="empty"><b>No Results</b>Nothing matches “${esc(s.search.trim())}”.</div>`;
+    const hl = (raw) => { let t = esc(raw || ''); for (const w of q.split(/\s+/).filter(Boolean)) t = t.replace(new RegExp(`(${w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'ig'), '<span class="hl">$1</span>'); return t; };
+    if (q && s.searchFeed?.length) {
+      html += `<div class="section-h">Feed</div>` + s.searchFeed.map(p => `<div class="row hit" data-fhit="${esc(p.id)}"><div class="row-inner"><div class="dot"></div>${this._userAv(p.author, 52)}
+        <div class="body"><div class="line1"><div class="name">${esc(this._userName(p.author, true))}</div><div class="date">${esc(fmtListDate(p.ts, this._hass))}${ICON.chevR}</div></div>
+        <div class="preview">${hl(p.summary)}${p.media ? ` · ${p.media} ${p.media === 1 ? 'photo' : 'photos'}` : ''}</div></div></div></div>`).join('');
+    }
+    if (q && s.searchMail?.length) {
+      html += `<div class="section-h">Email</div>` + s.searchMail.map(m => { const f = (m.from || [])[0] || {}; const who = f.name || f.email || 'Email'; return `<div class="row hit" data-mhit="1" data-acc="${esc(m.account)}" data-folder="${esc(m.folder || 'INBOX')}" data-uid="${esc(m.uid)}"><div class="row-inner"><div class="dot"${m.seen === false ? ' style="background:var(--cm-accent)"' : ''}></div>${this._avHtml({ name: who, size: 52 })}
+        <div class="body"><div class="line1"><div class="name">${esc(who)}</div><div class="date">${esc(fmtListDate(m.date, this._hass))}${ICON.chevR}</div></div>
+        <div class="preview">${hl(m.subject || '(No subject)')}</div></div></div></div>`; }).join('');
+    }
+    if (q && !threads.length && !s.searchHits.length && !s.searchFeed?.length && !s.searchMail?.length) html = chips + `<div class="empty"><b>No Results</b>Nothing matches “${esc(s.search.trim())}”.</div>`;
     return html;
   }
 
@@ -6233,9 +6610,29 @@ Object.assign(CrowMessengerCard.prototype, {
 
   _linkHtml(m) {
     const l = m.link;
-    if (!l) return '';
+    const safe = this._lsafeHtml(m.link_safety, 'data-x="linksafe"');
+    if (!l) return safe;
     return `<div class="linkc" data-x="link" data-url="${esc(l.url)}">${l.image ? `<img src="${esc(l.image)}" alt="" draggable="false" data-no-missing>` : ''}
-      <div class="lt">${esc(l.title || l.url)}</div><div class="ls">${esc(l.site || '')}</div></div>`;
+      <div class="lt">${esc(l.title || l.url)}</div><div class="ls">${esc(l.site || '')}</div></div>${safe}`;
+  },
+
+  // Link Safety (an AI feature): a warning under a link that looks like a scam, in chats and the Feed
+  _lsafeHtml(ls, attr = 'data-lsafe') {
+    if (!ls || (ls.risk !== 'caution' && ls.risk !== 'danger')) return '';
+    const head = ls.risk === 'danger' ? 'This link looks like a scam' : 'Be careful with this link';
+    return `<div class="lsafe ${ls.risk}" ${attr} role="button">${LSAFE_ICON}<div><b>${head}</b>${ls.reason ? `<span>${esc(ls.reason)}</span>` : ''}</div></div>`;
+  },
+  _lsafeInfo(ls) {
+    this._alert({ title: ls.risk === 'danger' ? 'This Link Looks Like a Scam' : 'Be Careful with This Link',
+      message: `${ls.reason || 'It might not be what it seems.'}\n\nLink Safety checks links people share with AI, and can be wrong. Don’t sign in, pay or download anything from a link you weren’t expecting.`,
+      buttons: [{ text: 'OK', style: 'cancel' }] });
+  },
+  // opening a risky link: ask first
+  async _lsafeOk(ls) {
+    if (!ls || (ls.risk !== 'caution' && ls.risk !== 'danger')) return true;
+    const r = await this._alert({ title: 'Open This Link?', message: ls.reason || 'Link Safety thinks it might not be what it seems.',
+      buttons: [{ text: 'Open Anyway', value: 'open', style: 'destructive' }, { text: 'Cancel', style: 'cancel' }] });
+    return r.value === 'open';
   },
 
   _actionsHtml(m) {
@@ -6436,6 +6833,18 @@ Object.assign(CrowMessengerCard.prototype, {
     }
     const spd = e.target.closest('.audio .spd');
     if (spd) { this._audioSpeed(spd); return true; }
+    // a link in a message's words, when Link Safety has warned about it: ask first
+    const anchor = e.target.closest('.btxt a[href]');
+    if (anchor) {
+      const arow = anchor.closest('.mrow');
+      const am = arow ? this._s.msgs.get(tid)?.list.find(y => y.id === arow.dataset.mid) : null;
+      const ls = am?.link_safety;
+      if (ls && (ls.risk === 'caution' || ls.risk === 'danger')) {
+        e.preventDefault();
+        if (await this._lsafeOk(ls)) openExternal(anchor.href);
+        return true;
+      }
+    }
     if (!x) return false;
     const row = x.closest('.mrow');
     const box = this._s.msgs.get(tid);
@@ -6456,7 +6865,8 @@ Object.assign(CrowMessengerCard.prototype, {
       if (kind === 'ttl') { this._toast(this._ttlText(m)); return true; }
       if (kind === 'ink') { this._setInk(row, m.id, !this._revealed.has(m.id)); return true; }
       if (kind === 'edits') { this._showEdits(m); return true; }
-      if (kind === 'link') { openExternal(x.dataset.url); return true; }
+      if (kind === 'link') { if (await this._lsafeOk(m.link_safety)) openExternal(x.dataset.url); return true; }
+      if (kind === 'linksafe') { this._lsafeInfo(m.link_safety); return true; }
       if (kind === 'action') {
         x.closest('.actbtns')?.querySelectorAll('button').forEach(b => { b.disabled = true; });
         await this._ws('action', { thread_id: tid, message_id: m.id, action: x.dataset.act });
@@ -9902,6 +10312,35 @@ Object.assign(CrowMessengerCard.prototype, {
   // ── Share to Home Assistant ─────────────────────────────────────────────────
   // A link (or text) shared from a phone's share sheet to the Home Assistant app: the
   // "Send link to…" notification opens this sheet to choose who it goes to.
+  // tapping a "shared from your phone" notification: where should it go?
+  async _pickShare(sid) {
+    const s = this._s;
+    const opts = [{ text: 'Send in a Chat', value: 'chat' },
+      ...(s.feed?.enabled ? [{ text: 'Post on a Page', value: 'feed' }] : []),
+      ...(s.email?.enabled ? [{ text: 'Send in an Email', value: 'email' }] : [])];
+    if (opts.length === 1) { this._openShare(sid); return; }
+    let item = null;
+    try { item = (await this._ws('share/get', { share_id: sid })).share; } catch (err) { this._toast(err?.message || 'That shared link has expired'); return; }
+    const p = item.preview || {};
+    const r = await this._alert({ title: 'Send To', message: p.title || item.title || item.url || item.text || '', buttons: [...opts, { text: 'Discard', value: 'discard', style: 'destructive' }] });
+    if (r.value === 'chat') this._openShare(sid);
+    else if (r.value === 'feed') this._openFeed('fcompose', { share: sid });
+    else if (r.value === 'email') this._shareToEmail(sid);
+    else if (r.value === 'discard') { this._ws('share/done', { share_id: sid }).catch(() => {}); this._toast('Discarded'); }
+  },
+
+  // Send in an Email: a new email with the link (or the words) in it, and the page's title as its subject
+  async _shareToEmail(sid, comment = '') {
+    let item;
+    try { item = (await this._ws('share/get', { share_id: sid })).share; } catch (err) { this._toast(err?.message || 'That shared link has expired'); return; }
+    const p = item.preview || {};
+    const subject = item.url ? (p.title || item.title || '') : '';
+    const words = [comment || item.comment || '', item.url ? (item.text && item.text !== item.title && item.text !== p.title ? item.text : '') : item.text].filter(Boolean).join('\n\n');
+    const text = [words, item.url || ''].filter(Boolean).join('\n\n');
+    const pg = await this._openEmail({ compose: { subject, text } });
+    if (pg) this._ws('share/done', { share_id: sid }).catch(() => {});
+  },
+
   async _openShare(sid) {
     const s = this._s;
     if (this._shareSheet?.id === sid && this._shareSheet.wrap.isConnected) return;
@@ -9924,6 +10363,7 @@ Object.assign(CrowMessengerCard.prototype, {
       title: 'Send To', action: 'Send',
       body: `${card}<textarea class="xfield shr-c" rows="2" maxlength="2000" placeholder="Add a comment" autocapitalize="sentences"></textarea>
         ${s.feed?.enabled ? `<button class="shr-feed">${FEED_ICON}<span>Post on a Page instead</span></button>` : ''}
+        ${s.email?.enabled ? `<button class="shr-feed shr-mail">${EMAIL_ICON}<span>Send in an Email instead</span></button>` : ''}
         <input class="xfield q" placeholder="Search" type="search" autocomplete="off"><div class="group fwlist"></div>
         <button class="shr-discard">Discard</button>`,
       onAction: async () => {
@@ -9956,7 +10396,12 @@ Object.assign(CrowMessengerCard.prototype, {
     };
     q.addEventListener('input', render);
     list.addEventListener('click', (e) => { const r = e.target.closest('[data-t]'); if (!r) return; chosen.has(r.dataset.t) ? chosen.delete(r.dataset.t) : chosen.add(r.dataset.t); render(); });
-    sh.el.querySelector('.shr-feed')?.addEventListener('click', async () => {
+    sh.el.querySelector('.shr-mail')?.addEventListener('click', () => {
+      const comment = sh.el.querySelector('.shr-c').value.trim();
+      sh.close();
+      this._shareToEmail(sid, comment);
+    });
+    sh.el.querySelector('.shr-feed:not(.shr-mail)')?.addEventListener('click', async () => {
       const comment = sh.el.querySelector('.shr-c').value.trim();
       sh.close();
       const pg = await this._openFeed('fcompose', { share: sid, comment });
@@ -10551,7 +10996,7 @@ Object.assign(CrowMessengerCard.prototype, {
     const el = this._el(`<div>
       <div class="scroll"><div class="large-title ct-title">Contacts</div><div class="ct-list"></div></div>
       <div class="edge top"></div><div class="edge bottom"></div>
-      <div class="top">${this._appBarHtml('contacts')}<div class="title" style="opacity:0">Contacts</div>${this._config.show_people_map !== false ? `<div class="capsule g"><button data-a="people" aria-label="People">${FM_ICON.locate}</button><button data-a="more" aria-label="More">${ICON.more}</button></div>` : `<button class="cb g" data-a="more" aria-label="More">${ICON.more}</button>`}</div>
+      <div class="top">${this._appBarHtml('contacts')}<div class="title" style="opacity:0">Contacts</div><button class="cb g" data-a="more" aria-label="More">${ICON.more}</button></div>
       <div class="az"></div>
       <div class="bottom">
         <label class="searchbar g">${ICON.search}<input type="text" placeholder="Search" autocomplete="off" enterkeyhint="search"><button class="sb-btn clr" hidden aria-label="Clear">${ICON.x}</button></label>
@@ -10630,8 +11075,8 @@ Object.assign(CrowMessengerCard.prototype, {
         if (fv._heldAt && Date.now() - fv._heldAt < 900) return;
         const c = s.contacts.get(fv.dataset.fav);
         if (!c) return;
-        if (c.ha_user && s.users.has(c.ha_user) && c.ha_user !== s.me) this._messageUser(c.ha_user);
-        else this._nav('contact', { cid: c.id });
+        // their contact card (Message is there, and in press and hold)
+        this._nav('contact', { cid: c.id });
         return;
       }
       const row = e.target.closest('.ct-row');
@@ -10686,7 +11131,7 @@ Object.assign(CrowMessengerCard.prototype, {
         const pic = mc?.photo || s.users.get(s.me)?.picture;
         html += `<div class="ct-me" data-a="me">${this._avHtml({ pic, name, size: 64 })}<div><div class="n">${esc(name)}</div><div class="s">My Card</div></div></div>`;
       }
-      // your Favourites: tap to message, press and hold for more
+      // your Favourites: tap for their contact card, press and hold for Message, Call and more
       const favs = !q ? [...s.contacts.values()].filter(c => c.favourite).sort((a, b) => contactName(a, this._config.contact_display).localeCompare(contactName(b, this._config.contact_display))) : [];
       if (favs.length) {
         html += `<div class="ct-favh">Favourites</div><div class="ct-favs">${favs.map(c => { const name = contactName(c, this._config.contact_display); return `<div class="ct-fav" data-fav="${esc(c.id)}" role="button" aria-label="${esc(name)}">${this._avHtml({ pic: this._contactPic(c), name, size: 60 })}<div class="n">${esc((c.first || name).split(' ')[0] || name)}</div></div>`; }).join('')}</div>`;
@@ -10813,10 +11258,33 @@ Object.assign(CrowMessengerCard.prototype, {
     const el = this._el(`<div class="cpage">
       <div class="cbg"><div class="ph"></div><div class="tint"></div></div>
       <div class="scroll"><div class="c-inner"></div></div>
-      <div class="top"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><button class="pill g" data-a="edit">Edit</button></div>
+      <div class="top"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><div class="ctop-r"><button class="pill g" data-a="edit">Edit</button><button class="cb g" data-a="cmore" aria-label="More">${ICON.more}</button></div></div>
     </div>`);
     const page = { el };
     const s = this._s, inner = el.querySelector('.c-inner');
+    // Recent Emails: email to and from them (with Email on, unless you've hidden it in the ⋯ menu)
+    let mail = null, mailFor = '', mailBusy = false;
+    const mailKey = (c) => (c?.emails || []).map(e => String(e.value || '').trim()).filter(Boolean).slice(0, 10).join(',').toLowerCase();
+    const mailOn = (c) => !!(s.email?.enabled && s.profile?.contact_emails !== false && mailKey(c));
+    const loadMail = async (c, force = false) => {
+      const key = mailKey(c);
+      if (!key || mailBusy || (!force && mailFor === key && mail)) return;
+      mailBusy = true;
+      try { mail = await this._hass.callWS({ type: 'crow_messenger_email/contact_mail', emails: key.split(','), limit: 5 }); }
+      catch (err) { mail = { items: [], count: 0, error: true }; }
+      mailFor = key;
+      mailBusy = false;
+      if (el.isConnected) page.refresh('contacts');
+    };
+    const mailHtml = (c) => {
+      if (!mail || mailFor !== mailKey(c)) {
+        return `<div class="group"><div class="cf"><div class="cmain"><div class="cl">recent emails</div><div class="cvv" style="color:var(--cm-text2)">Looking…</div></div><span class="ci">${ICON.mail}</span></div></div>`;
+      }
+      if (!mail.items.length) return `<div class="group"><div class="cf"><div class="cmain"><div class="cl">recent emails</div><div class="cvv" style="color:var(--cm-text2)">${mail.error ? 'Couldn’t look in Email just now' : 'No emails yet'}</div></div><span class="ci">${ICON.mail}</span></div></div>`;
+      const rows = mail.items.map(m => `<div class="cf" data-a="cmail" data-acc="${esc(m.account)}" data-folder="${esc(m.folder)}" data-uid="${esc(m.uid)}"><div class="cmain"><div class="cl">${m.sent ? 'you emailed' : 'email'} · ${esc(timeAgoShort(m.date))}</div><div class="cvv">${m.seen === false && !m.sent ? '<b>' : ''}${esc(m.subject || '(No subject)')}${m.seen === false && !m.sent ? '</b>' : ''}</div></div><span class="ci">${ICON.chevR || ''}</span></div>`);
+      rows.push(`<div class="gr blue" data-a="cmailall"><div class="gl">${mail.count > mail.items.length ? `See All ${mail.count} in Email` : 'See in Email'}</div></div>`);
+      return `<div class="group">${rows.join('')}</div>`;
+    };
     let tintFor = null;
     // a household member's card also shows their Feed and your chats with them (this card's setting)
     let extras = null, extrasAt = 0, extrasBusy = false;
@@ -10924,6 +11392,7 @@ Object.assign(CrowMessengerCard.prototype, {
       if (person) html += grp([`<div class="cf" data-a="locate" data-eid="${esc(person.eid)}"><div class="cmain"><div class="cl">location</div><div class="cvv">${esc(this._placeLabel(person))} · ${esc(timeAgoShort(person.ts))}</div></div><span class="ci">${ICON.pin}</span></div>`, ...(member ? [`<div class="gr blue" data-a="ring"><div class="gl">Ring Phone</div></div>`] : [])]);
       html += grp((c.phones || []).map((p, i) => field('phones', i, p.label || 'phone', p.value, 'phone')));
       html += grp((c.emails || []).map((p, i) => field('emails', i, p.label || 'email', p.value, 'mail')));
+      if (mailOn(c)) { html += mailHtml(c); if (!mailBusy) loadMail(c); }
       html += grp((c.addresses || []).map((p, i) => field('addresses', i, p.label || 'address', formatAddress(p), 'pin')));
       const dates = [];
       if (c.birthday) dates.push(field('birthday', 0, 'birthday', fmtLongDate(c.birthday, this._hass), 'cal'));
@@ -10945,7 +11414,48 @@ Object.assign(CrowMessengerCard.prototype, {
       if (this._set(inner, html)) this._hydrate(inner);
       if (member && feedOn() && !extras && !extrasBusy) loadExtras();
     };
-    page.onShow = () => { loadExtras(true); };
+    page.onShow = () => { loadExtras(true); const c = s.contacts.get(cid); if (mailOn(c)) loadMail(c, true); };
+
+    // the ⋯ menu at the top: Recent Emails on or off, and the card's other actions
+    const moreMenu = async (anchor, c) => {
+      const isMe = s.profile?.my_card === cid;
+      const canMsg = !!(c.ha_user && s.users.has(c.ha_user) && c.ha_user !== s.me);
+      const hasMail = (c.emails || []).some(e => e.value);
+      const v = await this._menu(anchor, [
+        ...(s.email?.enabled ? [{ text: 'Show Recent Emails', value: 'cmails', checked: s.profile?.contact_emails !== false, icon: ICON.mail }, { sep: true }] : []),
+        ...(canMsg && !isMe ? [{ text: 'Send Message', value: 'msg', icon: ICON.bubble }] : []),
+        ...(s.email?.enabled && hasMail && !isMe ? [{ text: 'New Email', value: 'newmail', icon: ICON.compose }] : []),
+        { text: 'Edit Contact', value: 'edit', icon: ICON.pen },
+        { text: 'Share Contact', value: 'share', icon: ICON.share },
+        ...(this._pdfOn('contact') ? [{ text: 'Export as PDF', value: 'pdf', icon: ICON.doc }] : []),
+        { text: c.favourite ? 'Remove from Favourites' : 'Add to Favourites', value: 'fav', icon: c.favourite ? ICON.starFill : ICON.star },
+        ...(isMe ? [] : [{ sep: true }, { text: 'Delete Contact', value: 'delete', icon: ICON.trash, red: true }]),
+      ]);
+      if (!v) return;
+      if (v === 'cmails') {
+        const on = s.profile?.contact_emails === false;
+        await this._setProfile({ contact_emails: on });
+        if (on) { mail = null; mailFor = ''; }
+        page.refresh('contacts');
+        return;
+      }
+      if (v === 'msg') { this._messageUser(c.ha_user); return; }
+      if (v === 'edit') { this._nav('contactEdit', { cid }); return; }
+      if (v === 'newmail') {
+        const go = (e) => this._openEmail({ compose: [{ email: String(e.value).trim(), name: contactName(c, this._config.contact_display) }] });
+        const list = (c.emails || []).filter(e => e.value);
+        if (list.length > 1) this._pickThen(anchor, list, go); else go(list[0]);
+        return;
+      }
+      if (v === 'delete') {
+        const r = await this._alert({ title: `Delete ${contactName(c, this._config.contact_display)}?`, message: 'This contact will be deleted from Contacts (and from Email).', buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', value: true }] });
+        if (!r.value) return;
+        try { await this._ws('contacts/delete', { ids: [cid] }); s.contacts.delete(cid); this._refresh('contacts'); this._back(); } catch (err) { this._toast(err.message); }
+        return;
+      }
+      // Share, Export as PDF and Favourites are the card's own buttons
+      inner.querySelector(`[data-a="${v}"]`)?.click();
+    };
 
     el.addEventListener('change', (e) => {
       const m = e.target.closest('[data-mute]');
@@ -10957,6 +11467,9 @@ Object.assign(CrowMessengerCard.prototype, {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'back') { this._back(); return; }
       if (a === 'edit') { this._nav('contactEdit', { cid }); return; }
+      if (a === 'cmore') { moreMenu(e.target.closest('button'), c); return; }
+      if (a === 'cmail') { const r = e.target.closest('[data-a="cmail"]').dataset; this._openEmail({ open: { account: r.acc, folder: r.folder, uid: +r.uid } }); return; }
+      if (a === 'cmailall') { const addr = (c.emails || []).find(x => x.value)?.value; if (addr) this._openEmail({ search: String(addr).trim() }); return; }
       if (a === 'profile') { this._nav('profile'); return; }
       if (a === 'locate') { this._nav('people', { focus: e.target.closest('[data-eid]').dataset.eid }); return; }
       if (a === 'hamsg') { this._messageUser(c.ha_user); return; }
@@ -11096,6 +11609,11 @@ Object.assign(CrowMessengerCard.prototype, {
   // handing a number / address / link to the phone's own apps.
   async _confirmContactAction(kind, item, c) {
     const name = contactName(c, this._config.contact_display);
+    // with Email on, an email address starts an email in Email
+    if (kind === 'emails' && item?.value && this._s.email?.enabled && !this._config.feed_only) {
+      this._openEmail({ compose: [{ email: String(item.value).trim(), name: name || '' }] });
+      return;
+    }
     const v = item.value;
     let title, message = `${name}${item.label ? ` · ${item.label}` : ''}`, ok, url, after = null;
     switch (kind) {
@@ -12123,6 +12641,35 @@ Object.assign(CrowMessengerCard.prototype, {
 });
 
 // ── Visual editor ─
+// the editor's pages, in the order they're listed
+const ED_PAGES = [
+  { id: 'general', title: 'General', icon: 'mdi:cog-outline', colour: '142,142,147', sum: 'Opening, app bar, look, size, link previews',
+    card: ['openGrp', 'colours', 'sizeGrp', 'pdfGrp'], house: ['featuresGrp', 'usersGrp'] },
+  { id: 'messages', title: 'Messages', icon: 'mdi:message-text-outline', colour: '52,199,89', sum: 'Return key, keep messages, attachments',
+    card: ['cardMsgsGrp'], house: ['msgsGrp'] },
+  { id: 'contacts', title: 'Contacts & Maps', icon: 'mdi:account-box-outline', colour: '191,90,242', sum: 'Sort, My Card, People Map, Find Nearby',
+    card: ['contactsGrp'] },
+  { id: 'feed', title: 'Feed', icon: 'mdi:newspaper-variant-outline', colour: '24,119,242', sum: 'Stories, post types, profiles, keep posts',
+    master: 'f_feed', masterNote: 'For everyone in the house.', offNote: 'The Feed is off. Switch it on to see its settings.',
+    card: ['cardFeedGrp'], house: ['houseFeedGrp'] },
+  { id: 'email', title: 'Email', icon: 'mdi:email-outline', colour: '10,132,255', sum: 'Mail skin, mail list, accounts, automations',
+    master: 'f_email', masterNote: 'For everyone in the house. Each person adds their own accounts in Email.', offNote: 'Email is off. Switch it on to see its settings.',
+    card: ['cardEmailGrp'], house: ['houseEmailGrp'] },
+  { id: 'notif', title: 'Notifications', icon: 'mdi:bell-badge-outline', colour: '255,59,48', sum: 'Phones, previews, sound, badge, buttons',
+    house: ['notifGrp', 'notifBtnGrp', 'notifPeopleGrp'], email: 'notify' },
+  { id: 'ai', title: 'AI', icon: 'mdi:atom', colour: '255,149,0', sum: 'Chat with Home Assistant, replies, writing tools',
+    master: 'ai_enabled', masterNote: 'For everyone in the house. It uses the AI already set up in Home Assistant.', offNote: 'AI is off. Switch it on to see its settings.',
+    house: ['aiGrp'], email: 'ai' },
+  { id: 'storage', title: 'Storage & Reset', icon: 'mdi:harddisk', colour: '99,99,102', sum: 'Photos and files, reset, erase',
+    card: ['resetGrp'], house: ['storageGrp', 'eraseGrp'] },
+];
+// settings people rarely change, under More on their page
+const ED_MORE = {
+  openGrp: ['Full Screen'],
+  featuresGrp: ['Sensors'],
+  contactsGrp: ['Find Nearby', 'Distances'],
+  houseFeedGrp: ['Profiles', 'Posts and Stories', 'Comfort'],
+};
 const ED_CHEVRON = '<path d="M8.59,16.58L13.17,12L8.59,7.41L10,6L16,12L10,18L8.59,16.58Z"/>';
 const ED_ICONS = {
   users: '<path d="M16,13C15.71,13 15.38,13 15.03,13.05C16.19,13.89 17,15 17,16.5V19H23V16.5C23,14.17 18.33,13 16,13M8,13C5.67,13 1,14.17 1,16.5V19H15V16.5C15,14.17 10.33,13 8,13M8,11A3,3 0 0,0 11,8A3,3 0 0,0 8,5A3,3 0 0,0 5,8A3,3 0 0,0 8,11M16,11A3,3 0 0,0 19,8A3,3 0 0,0 16,5A3,3 0 0,0 13,8A3,3 0 0,0 16,11Z"/>',
@@ -12142,7 +12689,7 @@ const RETENTION = [[1, '1 Day'], [7, '1 Week'], [30, '30 Days'], [365, '1 Year']
 const UPLOAD_SIZES = [[25, '25 MB'], [100, '100 MB'], [300, '300 MB'], [1000, '1 GB']];
 const AI_FEATURES = ['assistant', 'replies', 'writing', 'catchup', 'translate', 'actions', 'photos', 'ask',
   'feed_writing', 'feed_captions', 'feed_comments', 'feed_smart', 'feed_albums', 'feed_catchup', 'feed_threads',
-  'feed_translate', 'feed_photos', 'feed_search', 'feed_memories', 'feed_kindness', 'feed_ask'];
+  'feed_translate', 'feed_photos', 'feed_search', 'feed_memories', 'feed_kindness', 'feed_ask', 'feed_make_album', 'links'];
 const AI_OFF_UNTIL_ON = ['feed_search'];
 // Household → Feed: the Facebook extras (each on until switched off)
 const FEED_EXTRAS = ['intro', 'highlights', 'badges', 'waves', 'shares', 'story_replies', 'story_stickers', 'home_cards', 'collections', 'quiet', 'friends', 'story_archive'];
@@ -12212,11 +12759,48 @@ class CrowMessengerCardEditor extends HTMLElement {
     else delete this._raw[CM_HC];
     this._config = { ...CM_DEFAULTS, ...this._raw };
     if (!this._initialized && this._hass) this.render();
-    else if (this._initialized) this.updateUI();
+    else if (this._initialized) { this.updateUI(); this._emailEditors(); }
+  }
+
+  // Email's own settings, from crow-email.js: This Card → Email and Household → Email (while it's on)
+  _emailEditors() {
+    const root = this.shadowRoot;
+    if (!root || !this._initialized) return;
+    const fe = this._ints?.settings?.features;
+    const on = fe ? fe.email === true : !!this._ints?.email?.switched_on;
+    ['card', 'house', 'notify', 'ai'].forEach(part => {
+      const box = root.getElementById(`email-ed-${part}`);
+      const sec = box?.closest('[data-sec]');
+      if (sec) sec.style.display = on ? '' : 'none';
+      if (!on || !box) return;
+      const cur = box.querySelector('crow-messenger-email-editor');
+      if (cur) { cur.setConfig(this._config.email || {}); return; }
+      if (box.dataset.loading) return;
+      box.dataset.loading = '1';
+      box.innerHTML = '<div style="font-size:12px;color:#888;padding:10px 0;">Loading…</div>';
+      const loader = { _hass: this._hass, _s: null, _lazyUrl: CrowMessengerCard.prototype._lazyUrl };
+      CrowMessengerCard.prototype._lazy.call(loader, 'email').then(() => {
+        const ed = document.createElement('crow-messenger-email-editor');
+        ed._embedded = true;
+        ed._part = part;
+        ed.addEventListener('config-changed', (e) => {
+          e.stopPropagation();
+          const cfg = { ...(e.detail?.config || {}) };
+          delete cfg.type;
+          this._updateConfig('email', cfg);
+        });
+        ed.setConfig(this._config.email || {});
+        box.innerHTML = '';
+        box.appendChild(ed);
+        ed.hass = this._hass;
+      }).catch(() => {
+        box.innerHTML = '<div style="font-size:12px;color:#ff453a;padding:10px 0;">Couldn’t load Email’s settings. Check your connection and open the editor again.</div>';
+      }).finally(() => { delete box.dataset.loading; });
+    });
   }
 
   _section(id, colour, icon, title, sub, body) {
-    const HOUSE = ['featuresGrp', 'msgsGrp', 'houseFeedGrp', 'notifGrp', 'notifBtnGrp', 'notifPeopleGrp', 'usersGrp', 'aiGrp', 'storageGrp', 'eraseGrp'];
+    const HOUSE = ['featuresGrp', 'msgsGrp', 'houseFeedGrp', 'houseEmailGrp', 'notifGrp', 'notifBtnGrp', 'notifPeopleGrp', 'usersGrp', 'aiGrp', 'storageGrp', 'eraseGrp'];
     const tab = HOUSE.includes(id) ? 'house' : 'card';
     return `
         <div data-sec="${id}" data-tab="${tab}">
@@ -12238,6 +12822,286 @@ ${body}
             </div>
           </div>
         </div>`;
+  }
+
+  // ── Pages: the editor as a list of apps, like iPhone Settings ────────────
+  // The sections are built as before (same ids, same listeners, same saving) and then moved into pages.
+  _pagesBuild() {
+    const root = this.shadowRoot, box = root.querySelector('.container');
+    if (!box || box.classList.contains('paged')) return;
+    box.classList.add('paged');
+    root.querySelectorAll('.tab-off').forEach(el => el.classList.remove('tab-off'));
+    root.querySelectorAll('.ed-tabs, .ed-tabnote').forEach(el => el.remove());
+    const admin = !!this._hass?.user?.is_admin;
+    const sec = id => root.querySelector(`[data-sec="${id}"]`);
+    const el = (tag, cls, html) => { const e = document.createElement(tag); if (cls) e.className = cls; if (html != null) e.innerHTML = html; return e; };
+    const tile = (p) => `<span class="ed-tile" style="background:rgb(${p.colour})"><ha-icon icon="${p.icon}"></ha-icon></span>`;
+
+    // a section on a page: a plain heading (or none, when it's the only one), always open
+    const place = (id, into, only) => {
+      const s = sec(id);
+      if (!s) return;
+      const h = root.getElementById(id + 'Header'), b = root.getElementById(id + 'Body'), c = root.getElementById(id + 'Chevron');
+      if (b) { b.style.display = 'flex'; b.style.flexDirection = 'column'; b.style.marginTop = only ? '0' : '8px'; }
+      if (c) c.remove();
+      if (h) {
+        h.classList.add('ed-sechead');
+        const t = h.querySelector('[style*="font-weight:600"]');
+        h.dataset.title = only ? '' : (t?.firstChild?.textContent?.trim() || '');
+        h.querySelector('[style*="font-size:11px"]')?.remove();
+        if (only) h.style.display = 'none';
+      }
+      into.appendChild(s);
+    };
+    // the rarer settings in a section go under More
+    const more = (id, titles) => {
+      const b = root.getElementById(id + 'Body');
+      if (!b) return;
+      const subs = [...b.querySelectorAll('.grp-sub')].filter(g => titles.includes(g.textContent.trim()));
+      if (!subs.length) return;
+      const d = el('details', 'ed-more', `<summary><span>More</span><svg viewBox="0 0 24 24">${ED_CHEVRON}</svg></summary>`);
+      const inner = el('div', 'ed-more-in');
+      d.appendChild(inner);
+      subs[0].parentElement.insertBefore(d, subs[0]);
+      subs.forEach(g => {
+        const run = [g];
+        let n = g.nextElementSibling;
+        while (n && !n.classList.contains('grp-sub') && n !== d) { run.push(n); n = n.nextElementSibling; }
+        run.forEach(r => inner.appendChild(r));
+      });
+    };
+    Object.entries(ED_MORE).forEach(([id, titles]) => more(id, titles));
+
+    // the home list
+    const home = el('div', 'ed-home');
+    home.id = 'ed-home';
+    const list = el('div', 'ed-list');
+    ED_PAGES.forEach(p => {
+      const row = el('button', 'ed-row', `${tile(p)}<span class="ed-row-t"><b>${p.title}</b><small>${p.sum}</small></span><span class="ed-row-v" data-pv="${p.id}"></span><svg class="ed-row-c" viewBox="0 0 24 24">${ED_CHEVRON}</svg>`);
+      row.type = 'button';
+      row.dataset.page = p.id;
+      row.addEventListener('click', () => this._pageOpen(p.id));
+      list.appendChild(row);
+    });
+    home.appendChild(list);
+    const an = root.getElementById('admin-note');
+    if (an) home.appendChild(an);
+    home.appendChild(el('div', 'ed-foot', `Settings for <b>This Card</b> are only for this card on this dashboard. <b>Household</b> settings are saved in Home Assistant and used by every card and phone; only administrators can change them.`));
+    box.appendChild(home);
+
+    // the pages
+    ED_PAGES.forEach(p => {
+      const page = el('div', 'ed-page');
+      page.dataset.page = p.id;
+      page.hidden = true;
+      const head = el('div', 'ed-phead', `<button type="button" class="ed-back"><svg viewBox="0 0 24 24">${ED_CHEVRON}</svg>Settings</button><div class="ed-ptitle">${tile(p)}<span>${p.title}</span></div>`);
+      head.querySelector('.ed-back').addEventListener('click', () => this._pageOpen(null));
+      page.appendChild(head);
+      if (p.master) {
+        // the app's own switch first: for everyone, and everything else on the page depends on it
+        const row = root.getElementById(p.master)?.closest('.toggle-item');
+        const m = el('div', 'ed-master', '<div class="card-block" style="padding:2px 12px;"><div class="grp-body" style="display:flex;flex-direction:column;"></div></div>');
+        m.dataset.tab = 'house';
+        if (row) {
+          const g = m.querySelector('.grp-body');
+          g.appendChild(row);
+          (p.masterExtra || []).forEach(id => { const x = root.getElementById(id); if (x) g.appendChild(x); });
+        }
+        page.appendChild(m);
+        page.appendChild(el('div', 'ed-hnote', p.masterNote));
+        page.appendChild(el('div', 'ed-offnote', p.offNote));
+      }
+      const dep = el('div', 'ed-dep');
+      page.appendChild(dep);
+      const group = (kind, ids, extra) => {
+        if (!ids?.length && !extra) return;
+        const g = el('div', 'ed-grp');
+        g.dataset.kind = kind;
+        g.appendChild(el('div', 'ed-h', kind === 'card' ? 'This Card' : 'Household <span>(everyone)</span>'));
+        g.appendChild(el('div', 'ed-hnote', kind === 'card'
+          ? 'Only this card on this dashboard.'
+          : (admin ? 'Every card and every phone in the house.' : 'Every card and every phone in the house. Only an administrator can change these.')));
+        const real = (ids || []).filter(id => sec(id));
+        real.forEach(id => place(id, g, real.length === 1));
+        if (extra) {
+          // Email's own settings for this page, from crow-email.js
+          const w = el('div', 'ed-bare', `<div id="email-ed-${extra}"></div>`);
+          w.dataset.sec = 'email' + extra;
+          w.dataset.tab = 'house';
+          g.appendChild(w);
+        }
+        dep.appendChild(g);
+      };
+      group('card', p.card);
+      group('house', p.house, p.email);
+      box.appendChild(page);
+    });
+    // Email's groups are sections of their own, not boxes inside a box
+    sec('cardEmailGrp')?.classList.add('ed-bare');
+    const hb = root.getElementById('email-ed-house'), hs = sec('houseEmailGrp');
+    if (hb && hs) {
+      const w = el('div', 'ed-bare');
+      w.dataset.sec = 'emailhouse';
+      w.dataset.tab = 'house';
+      w.appendChild(hb);
+      hs.after(w);
+    }
+    // the Features section had the apps' switches; what's left of it lives in General
+    const fs = root.getElementById('featuresGrpBody');
+    if (fs) [...fs.querySelectorAll('.grp-sub')].forEach(g => { const n = g.nextElementSibling; if (!n || n.classList.contains('grp-sub') || n.classList.contains('ed-more')) g.remove(); });
+    // anything not placed (shouldn't happen) stays reachable at the bottom of General
+    const gen = box.querySelector('.ed-page[data-page="general"] .ed-dep');
+    [...box.children].filter(c => c.dataset?.sec).forEach(c => { place(c.dataset.sec, gen, false); });
+
+    this._searchWire();
+    this._pageOpen(this._page || null, true);
+    box.addEventListener('change', () => requestAnimationFrame(() => this._pagesSync()));
+    this._pagesSync();
+  }
+
+  _pageOpen(id, quiet) {
+    const root = this.shadowRoot;
+    if (!root.querySelector('.container.paged')) return;
+    if (!ED_PAGES.some(p => p.id === id)) id = null;
+    this._page = id;
+    root.getElementById('ed-home').hidden = !!id;
+    root.querySelectorAll('.ed-page').forEach(p => { p.hidden = p.dataset.page !== id; });
+    const res = root.getElementById('ed-results');
+    if (res) res.hidden = true;
+    const s = root.getElementById('editor-search');
+    if (s && s.value && !quiet) s.value = '';
+    if (!quiet) root.querySelector('.container')?.scrollIntoView({ block: 'start' });
+  }
+
+  // what's on, what depends on it, and the summaries on the home list
+  _pagesSync() {
+    const root = this.shadowRoot;
+    if (!root?.querySelector('.container.paged')) return;
+    const on = id => !!root.getElementById(id)?.checked;
+    const known = !!this._ints?.settings;
+    const dep = (id, show) => { const e = typeof id === 'string' ? root.getElementById(id) : id; if (e) e.classList.toggle('ed-dephide', !show); };
+    ED_PAGES.filter(p => p.master).forEach(p => {
+      const page = root.querySelector(`.ed-page[data-page="${p.id}"]`);
+      const off = known && !on(p.master);
+      page.classList.toggle('is-off', off);
+      const v = root.querySelector(`[data-pv="${p.id}"]`);
+      if (v) v.textContent = known ? (off ? 'Off' : 'On') : '';
+    });
+    // a setting that only matters while another is on is only shown then
+    dep('start_full_row', on('fullscreen_button'));
+    dep(root.getElementById('resize_btn_spin')?.closest('.toggle-item'), on('fullscreen_button'));
+    dep('pdf-wrap', on('pdf_enabled'));
+    dep('nearby-wrap', on('people_nearby'));
+    dep('people-details-wrap', on('show_people_map'));
+    dep('dash-people', !on('dash_everyone'));
+    if (known) {
+      const n = on('n_enabled');
+      ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action'].forEach(id => dep(root.getElementById(id)?.closest('.toggle-item'), n));
+      dep(root.querySelector('[data-sec="notifBtnGrp"]'), n);
+      dep(root.querySelector('[data-sec="emailnotify"]'), n);
+      // Email's AI settings while both are on
+      dep(root.querySelector('[data-sec="emailai"]'), on('f_email'));
+    }
+    const nv = root.querySelector('[data-pv="notif"]');
+    if (nv) nv.textContent = known ? (on('n_enabled') ? 'On' : 'Off') : '';
+  }
+
+  // Search: matching settings from every page, tap one to go to it
+  _searchWire() {
+    const root = this.shadowRoot;
+    const old = root.getElementById('editor-search');
+    if (!old) return;
+    const input = old.cloneNode(true);   // a fresh box, without the old filter's listeners
+    input.placeholder = 'Search Settings';
+    old.replaceWith(input);
+    root.getElementById('editor-search-empty')?.remove();
+    const res = document.createElement('div');
+    res.id = 'ed-results';
+    res.className = 'ed-results';
+    res.hidden = true;
+    root.getElementById('ed-home').before(res);
+    const norm = s => String(s || '').toLowerCase().replace(/[‘’]/g, "'").replace(/\s+/g, ' ');
+    const ROWS = '.toggle-item, .select-row, .seg-wrap, .ab-row, .field, label.cb-row';
+    // shown unless a switch above it is off (or it's a hidden note)
+    const showing = (e, page) => {
+      for (let n = e; n && n !== page;) {
+        if (n.hidden || n.classList?.contains('ed-dephide') || (n.style && n.style.display === 'none')) return false;
+        n = n.parentElement || n.getRootNode()?.host;
+      }
+      return !page.classList.contains('is-off') || !!e.closest?.('.ed-master');
+    };
+    const labelOf = r => (r.querySelector('.toggle-label, label, .seg-title, .lbl') || r.querySelector('div > div, div'))?.textContent?.trim() || r.textContent.trim();
+    const items = () => {
+      const out = [];
+      root.querySelectorAll('.ed-page').forEach(page => {
+        const p = ED_PAGES.find(x => x.id === page.dataset.page);
+        // the small heading above a setting (Distances, Glass…)
+        const subOf = r => {
+          for (let n = r; n && !n.dataset?.sec && !n.classList?.contains('body'); n = n.parentElement) {
+            for (let p = n.previousElementSibling; p; p = p.previousElementSibling) if (p.classList.contains('grp-sub')) return p.textContent.trim();
+          }
+          return '';
+        };
+        const add = (r, where) => {
+          const sub = subOf(r);
+          if (sub && norm(sub) !== norm(where)) where = where ? where + ' › ' + sub.replace(/\b\w+/g, w => w[0] + w.slice(1).toLowerCase()) : sub;
+          const label = labelOf(r).replace(/\s+/g, ' ');
+          if (!label || label.length > 80) return;
+          out.push({ r, page, p, label, where, text: norm(label + ' ' + r.textContent + ' ' + where + ' ' + p.title) });
+        };
+        page.querySelectorAll('[data-sec], .ed-master').forEach(s => {
+          const title = s.querySelector('.ed-sechead')?.dataset.title || '';
+          s.querySelectorAll(ROWS).forEach(r => {
+            if (r.parentElement?.closest(ROWS)) return;
+            // the segmented choices are a row of their own
+            add(r, title);
+          });
+          s.querySelectorAll('.segmented').forEach(sg => { const w = sg.parentElement; if (!w.matches(ROWS)) add(w, title); });
+          s.querySelectorAll('crow-messenger-email-editor').forEach(ed => {
+            ed.shadowRoot?.querySelectorAll('[data-grp]').forEach(g => {
+              const t = g.querySelector('.hdr .t')?.textContent?.trim() || 'Email';
+              g.querySelectorAll(ROWS).forEach(r => { if (!r.parentElement?.closest(ROWS)) add(r, t); });
+            });
+          });
+        });
+      });
+      return out;
+    };
+    const go = (it) => {
+      input.value = '';
+      this._pageOpen(it.p.id, true);
+      res.hidden = true;
+      // open a More, in this editor or in Email's
+      for (let n = it.r; n; n = n.parentElement || n.getRootNode()?.host) if (n.tagName === 'DETAILS') n.open = true;
+      requestAnimationFrame(() => {
+        it.r.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        it.r.classList.remove('es-hit'); void it.r.offsetWidth; it.r.classList.add('es-hit');
+        if (!it.r.getRootNode()?.host) return;
+        it.r.style.transition = 'background .2s'; it.r.style.background = 'rgba(10,132,255,0.18)'; it.r.style.borderRadius = '8px';
+        setTimeout(() => { it.r.style.background = ''; }, 1300);
+      });
+    };
+    const apply = () => {
+      const q = norm(input.value).trim();
+      const words = q.split(' ').filter(Boolean);
+      if (!words.length) { res.hidden = true; this._pageOpen(this._page, true); return; }
+      root.getElementById('ed-home').hidden = true;
+      root.querySelectorAll('.ed-page').forEach(p => { p.hidden = true; });
+      res.hidden = false;
+      const found = items().filter(it => words.every(w => it.text.includes(w)) && showing(it.r, it.page));
+      // names that match come before ones that only match in their description
+      const score = it => (words.every(w => norm(it.label).includes(w)) ? 0 : 1);
+      found.sort((a, b) => score(a) - score(b));
+      res.innerHTML = found.length
+        ? `<div class="ed-list">${found.slice(0, 40).map((it, i) => `<button type="button" class="ed-row" data-hit="${i}">${`<span class="ed-tile" style="background:rgb(${it.p.colour})"><ha-icon icon="${it.p.icon}"></ha-icon></span>`}<span class="ed-row-t"><b>${esc(it.label)}</b><small>${esc(it.p.title)}${it.where && it.where !== it.p.title ? ' › ' + esc(it.where) : ''}</small></span><svg class="ed-row-c" viewBox="0 0 24 24">${ED_CHEVRON}</svg></button>`).join('')}</div>`
+        : `<div class="ed-none">No settings match “${esc(input.value.trim())}”.</div>`;
+      res.querySelectorAll('[data-hit]').forEach(b => b.addEventListener('click', () => go(found[+b.dataset.hit])));
+    };
+    input.addEventListener('input', apply);
+    input.addEventListener('keydown', e => {
+      if (e.key === 'Escape') { input.value = ''; apply(); }
+      if (e.key === 'Enter') res.querySelector('[data-hit]')?.click();
+    });
   }
 
   _toggle(id, label, desc, extraAttr = '') {
@@ -12354,7 +13218,6 @@ ${this._segmented('storage-segmented', 'storage_age', 'Delete Photos & Files fro
 </div>`;
 
     const aiBody = `
-<div style="font-size:11px;color:#888;margin:2px 0 6px;line-height:1.45;">Turn AI on or off under Features. These choices are used when it’s on.</div>
 <div id="ai-wrap">
 <div class="grp-sub">Home Assistant AI</div>
 <div class="select-row" style="padding:10px 0;">
@@ -12377,6 +13240,7 @@ ${this._toggle('ai_f_translate', 'Translate', 'Press and hold a message → Tran
 ${this._toggle('ai_f_actions', 'Add to Calendar & Reminders', 'Press and hold a message → Add to Calendar or Add Reminder. The details are filled in for you to check, then added to a Home Assistant calendar or to-do list.')}
 ${this._toggle('ai_f_ask', 'Ask This Chat', 'Search in a conversation also answers questions about it, like “When is the plumber coming?”, and shows the messages the answer came from. Type a question, or tap Ask. Press and hold ⋯ in a conversation to go straight there.')}
 ${this._toggle('ai_f_photos', 'Photo Descriptions', 'A button in the photo viewer describes the picture. Needs an AI Task that can read images.')}
+${this._toggle('ai_f_links', 'Link Safety', 'Links shared in chats and the Feed are checked, and one that looks like a scam (a fake bank or courier site, look-alike letters…) gets a warning, and a question before it opens. Only the link and its page’s title go to the AI, never the message. Well-known sites aren’t sent at all.')}
 ${this._note('ai-photo-warn', 'The chosen AI Task can’t read images, so Photo Descriptions won’t appear.', '128,128,128')}
 <div class="grp-sub">Feed</div>
 ${this._toggle('ai_f_feed_writing', 'Writing Tools', 'A ✨ button in the composer and comment box: Proofread, Make Friendlier, Shorter, More Formal or More Casual.')}
@@ -12392,6 +13256,7 @@ ${this._toggle('ai_f_feed_search', 'Photo Search', 'Off until you switch it on. 
 ${this._toggle('ai_f_feed_memories', 'Memory Captions', 'A ✨ on On This Day memories writes a short caption, and posts waiting for review get a suggested caption.')}
 ${this._toggle('ai_f_feed_kindness', 'Kindness Check', 'Before a post or comment goes out, a quick check for anything that could come across as harsh — with Edit or Post Anyway. If the AI is slow it posts anyway.')}
 ${this._toggle('ai_f_feed_ask', 'Ask the Feed', 'Feed ••• → Ask the Feed answers questions like “When is the BBQ?” from posts shared with you, with links to them.')}
+${this._toggle('ai_f_feed_make_album', 'Make an Album', 'After a busy few days of photos (a weekend away, a birthday), the top of the Feed offers to gather them into an album, with a name from the AI. Your own photos go in, and everyone else who posted is asked whether to add theirs. Only photos shared with everyone are used.')}
 <div style="font-size:11px;color:#888;margin:10px 0 2px;line-height:1.5;">
   <ha-icon icon="mdi:shield-lock-outline" style="--mdc-icon-size:14px;width:14px;height:14px;display:inline-flex;vertical-align:-3px;margin-right:4px;"></ha-icon>Messages only go to the AI when someone uses a feature (Suggested Replies runs when a chat with a new message is opened). If your AI is a cloud service, those messages — including other people’s in a group chat — are sent to it.
 </div>
@@ -12451,7 +13316,7 @@ ${this._toggle('people_nearby', 'Find Nearby', 'Look for toilets, cafés, cash m
 ${this._toggle('resume', 'Return to Where You Left Off', 'Leave the dashboard or the app and come back to the same screen — the chat, profile, post or Contacts you had open, scrolled to where you were. After 12 hours away (or with this off) the card opens on the Startup Screen. A notification you tap still opens what it’s about.')}
 ${this._toggle('feed_nav', 'Feed Navigation Bar', 'A bar along the bottom of the Feed, like Facebook’s: Home, Videos, Groups, Events, Notifications and Menu. It’s frosted glass when Bars Liquid Glass is on, and a solid bar when it’s off or a skin is chosen.')}
 <div class="grp-sub">App Bar</div>
-<div style="font-size:11px;color:#888;margin:4px 0 6px;line-height:1.45;">The capsule at the top left of Messages, Contacts and the Feed. Turn places on or off and move them up or down. One you turn off still shows on its own screen, so you can see where you are.</div>
+<div style="font-size:11px;color:#888;margin:4px 0 6px;line-height:1.45;">The capsule at the top left of Messages, Contacts and the Feed. Turn places on or off, and drag them by the handle to change the order. One you turn off still shows on its own screen, so you can see where you are.</div>
 <div id="appbar-items"></div>
 ${this._toggle('app_bar_filter', 'Filter Button on Messages', 'Filter chats by Unread, Groups, Pinned and more.')}
 ${this._toggle('app_bar_dots', 'Red Dots', 'A red dot on Messages when a chat is unread (muted chats aren’t counted), and on the Feed for new posts or notifications.')}
@@ -12498,6 +13363,7 @@ ${this._toggle('effect_words', 'Effects From Words', 'Some words send a screen e
 <div id="feat-wrap">
 ${this._toggle('f_link_previews', 'Link Previews', 'Shows a card with the page’s title and picture under a link. Home Assistant fetches the page — never people’s phones — and won’t open addresses on your own network. Household setting.')}
 ${this._toggle('f_feed', 'Feed (Social Media)', 'A private, Facebook-style feed for the household: posts, photos, videos, stories, groups, albums, events and more. Each post is only seen by the people it’s shared with, and posts are kept for as long as Keep Messages says. Household setting.')}
+${this._toggle('f_email', 'Email', 'Each person adds their own email accounts (iCloud, Gmail, Yahoo, Outlook and Microsoft 365, or any other IMAP account) and reads and writes email in the card, with an Email button in the app bar. Contacts are the same contacts book as Messages, and unread email is added to the App Icon Badge. Home Assistant stays connected to each account for notifications, sensors and automations. Off until you turn it on; it starts or stops when you press Save.')}
 ${this._toggle('f_share_sheet', 'Share to Crow Messenger', 'When someone shares a link to the Home Assistant app from their phone’s share sheet, they get a “Send link to…” notification that opens a list of chats to send it to. Nothing is sent until a chat is chosen. Household setting.')}
 ${this._toggle('f_zones', 'Everyone Can Add Zones', 'Lets everyone add Home Assistant zones from the People map, Check In, Send Later and shared locations, not just administrators. The zones are the same as ones made in Settings → Areas, labels & zones. Household setting.')}
 </div>
@@ -12506,7 +13372,7 @@ ${this._toggle('f_zones', 'Everyone Can Add Zones', 'Lets everyone add Home Assi
 ${this._toggle('hs_typing', 'Typing Sensor', 'On while someone is typing in any chat.')}
 ${this._toggle('hs_viewing', 'Viewing Sensor', 'Which part of the card someone has open: Messages, a chat, the Feed or Contacts.')}
 <div class="grp-sub">AI</div>
-${this._toggle('ai_enabled', 'AI Features', 'Turns on the AI features (set up under AI) for everyone in the home. They use the AI you’ve already set up in Home Assistant (Settings → Voice assistants, and an AI Task). When this is off, nothing is ever sent to an AI.')}
+${this._toggle('ai_enabled', 'AI Features', 'Turns on the AI features below for everyone in the home. They use the AI you’ve already set up in Home Assistant (Settings → Voice assistants, and an AI Task). When this is off, nothing is ever sent to an AI.')}
 `;
     const cardFeedBody = `
 <div class="grp-sub" style="margin-top:2px;">Feed on This Card</div>
@@ -12595,6 +13461,47 @@ ${this._toggle('contact_blur', 'Contact Card Blur', 'Contact cards get a blurred
 
     this.shadowRoot.innerHTML = `
       <style>
+        .ed-list { border-radius: 14px; overflow: hidden; background: var(--ed-panel, rgba(128,128,128,0.10)); }
+        .ed-row { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; background: transparent; color: var(--primary-text-color, #111); font: inherit; text-align: left; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+        .ed-row + .ed-row { border-top: .5px solid var(--divider-color, rgba(128,128,128,0.25)); }
+        .ed-row:hover { background: rgba(128,128,128,0.08); }
+        .ed-tile { width: 30px; height: 30px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+        .ed-tile ha-icon { --mdc-icon-size: 19px; color: #fff; display: inline-flex; }
+        .ed-row-t { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+        .ed-row-t b { font-size: 14.5px; font-weight: 600; }
+        .ed-row-t small { font-size: 11.5px; color: var(--secondary-text-color, #888); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .ed-row-v { font-size: 13px; color: var(--secondary-text-color, #888); }
+        .ed-row-c { width: 18px; height: 18px; fill: var(--secondary-text-color, #888); opacity: .6; flex-shrink: 0; }
+        .ed-foot { font-size: 11.5px; color: var(--secondary-text-color, #888); line-height: 1.5; margin: 10px 4px 0; }
+        .ed-home #admin-note { margin-top: 10px; }
+        .ed-page { display: flex; flex-direction: column; gap: 10px; }
+        .ed-page[hidden], .ed-home[hidden], .ed-results[hidden] { display: none !important; }
+        .ed-phead { display: flex; flex-direction: column; gap: 6px; margin: -2px 0 2px; }
+        .ed-back { align-self: flex-start; display: inline-flex; align-items: center; gap: 0; padding: 4px 10px 4px 2px; border: 0; border-radius: 9px; background: transparent; color: var(--primary-color, #0a84ff); font: inherit; font-size: 14.5px; cursor: pointer; }
+        .ed-back svg { width: 22px; height: 22px; fill: currentColor; transform: rotate(180deg); }
+        .ed-ptitle { display: flex; align-items: center; gap: 10px; font-size: 22px; font-weight: 700; letter-spacing: -.01em; padding: 0 2px; }
+        .ed-grp { display: flex; flex-direction: column; gap: 10px; }
+        .ed-grp + .ed-grp { margin-top: 10px; }
+        .ed-dep { display: flex; flex-direction: column; }
+        .ed-h { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--secondary-text-color, #888); margin: 6px 4px -6px; }
+        .ed-h span { text-transform: none; font-weight: 500; letter-spacing: 0; }
+        .ed-hnote { font-size: 11.5px; color: var(--secondary-text-color, #888); line-height: 1.45; margin: 0 4px; }
+        .ed-master + .ed-hnote { margin-top: -4px; }
+        .ed-offnote { display: none; font-size: 13px; color: var(--secondary-text-color, #888); text-align: center; padding: 18px 10px; }
+        .ed-page.is-off .ed-dep { display: none; }
+        .ed-page.is-off .ed-offnote { display: block; }
+        .ed-sechead { cursor: default !important; pointer-events: none; }
+        .ed-dephide { display: none !important; }
+        .ed-bare > .card-block { background: transparent !important; border: 0 !important; padding: 0 !important; overflow: visible; }
+        .ed-more { margin-top: 6px; border-top: .5px solid var(--divider-color, rgba(128,128,128,0.25)); }
+        .ed-more > summary { list-style: none; display: flex; align-items: center; justify-content: space-between; padding: 12px 0 6px; cursor: pointer; font-size: 13.5px; font-weight: 600; color: var(--primary-color, #0a84ff); -webkit-tap-highlight-color: transparent; }
+        .ed-more > summary::-webkit-details-marker { display: none; }
+        .ed-more > summary svg { width: 18px; height: 18px; fill: currentColor; transition: transform .2s; }
+        .ed-more[open] > summary svg { transform: rotate(90deg); }
+        .ed-more-in { display: flex; flex-direction: column; }
+        .ed-results { margin-bottom: 10px; }
+        .ed-none { font-size: 13px; color: var(--secondary-text-color, #888); padding: 14px 4px; }
+        .container.paged .sec-chip { display: none !important; }
         .ed-tabs { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: rgba(128,128,128,0.14); margin: 2px 0 8px; }
         .ed-tabs button { flex: 1; padding: 8px; border: 0; border-radius: 9px; background: transparent; color: var(--primary-text-color, #111); font: inherit; font-size: 13.5px; font-weight: 600; cursor: pointer; }
         .ed-tabs button.on { background: var(--card-background-color, #fff); box-shadow: 0 1px 4px rgba(0,0,0,0.18); }
@@ -12609,9 +13516,16 @@ ${this._toggle('contact_blur', 'Contact Card Blur', 'Contact cards get a blurred
         .ab-row { display: flex; align-items: center; gap: 10px; padding: 8px 2px; border-bottom: 1px solid var(--divider-color, rgba(128,128,128,0.2)); }
         .ab-row ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color, #888); display: inline-flex; }
         .ab-row .ab-n { flex: 1; font-size: 13.5px; }
-        .ab-row button { width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(128,128,128,0.25); background: transparent; color: var(--primary-text-color, #111); cursor: pointer; font-size: 14px; line-height: 1; }
-        .ab-row button:disabled { opacity: .3; cursor: default; }
-        .ab-row input { width: 18px; height: 18px; accent-color: var(--primary-color, #0a84ff); }
+        .ab-row { position: relative; background: var(--card-background-color, #fff); }
+        .ab-drag { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 34px; margin: -4px 0 -4px -6px; cursor: grab; touch-action: none; user-select: none; -webkit-user-select: none; border-radius: 8px; flex-shrink: 0; }
+        .ab-drag svg { width: 20px; height: 20px; fill: var(--secondary-text-color, #888); pointer-events: none; }
+        .ab-drag:active { cursor: grabbing; }
+        .ab-drag:focus-visible { outline: 2px solid var(--primary-color, #0a84ff); }
+        .ab-row .toggle-switch { flex-shrink: 0; }
+        .ab-row.ab-dragging { opacity: .35; }
+        .ab-row.ab-over { box-shadow: inset 0 2px 0 var(--primary-color, #0a84ff); }
+        .ab-row.ab-under { box-shadow: inset 0 -2px 0 var(--primary-color, #0a84ff); }
+        .ab-ghost { border-radius: 10px; border-bottom: 0 !important; padding: 8px 10px !important; box-shadow: 0 8px 24px rgba(0,0,0,.28); opacity: .96; }
         .rs-ov { position: fixed; inset: 0; z-index: 100; background: rgba(0,0,0,.45); display: flex; align-items: flex-end; justify-content: center; font-family: inherit; }
         .rs-sh { width: min(520px, 100%); max-height: 88vh; overflow: auto; background: var(--card-background-color, #1c1c1e); color: var(--primary-text-color, #fff); border-radius: 22px 22px 0 0; padding: 16px 16px 22px; box-shadow: 0 -10px 40px rgba(0,0,0,.35); animation: rs-up .28s cubic-bezier(.2,.9,.3,1) both; }
         @keyframes rs-up { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -12823,12 +13737,20 @@ ${this._section('colours', '99,179,237', 'mdi:palette-outline', 'Appearance', 'S
 ${this._section('sizeGrp', '94,92,230', 'mdi:page-layout-body', 'Size &amp; Motion', 'Card height · Animations · Effects from words', sizeBody)}
 ${this._section('cardMsgsGrp', '90,200,250', 'mdi:message-text-outline', 'Messages', 'Return key', cardMsgsBody)}
 ${this._section('cardFeedGrp', '24,119,242', 'mdi:newspaper-variant-outline', 'Feed', 'Opening tab · Videos · Stories row · On This Day', cardFeedBody)}
+${this._section('cardEmailGrp', '10,132,255', 'mdi:email-outline', 'Email', 'Mail skin · Mail list · Inbox tools · Calendar', '<div id="email-ed-card"></div>')}
 ${this._section('contactsGrp', '191,90,242', 'mdi:account-box-outline', 'Contacts &amp; People', 'Sort · Display · My Card · People Map · Distances', contactsBody)}
 ${this._section('pdfGrp', '255,69,58', 'mdi:file-pdf-box', 'PDF Exports', 'Conversations · Contact cards · Address book', pdfBody)}
 ${this._section('resetGrp', '255,149,0', 'mdi:restore', 'Reset This Card', 'Put this card’s settings back to how they started', resetBody)}
-${this._section('featuresGrp', '48,209,88', 'mdi:toggle-switch-outline', 'Features', 'Feed · Share to Crow Messenger · Link previews · Zones · AI', featuresBody)}
+${this._section('featuresGrp', '48,209,88', 'mdi:toggle-switch-outline', 'Features', 'Feed · Email · Share to Crow Messenger · Link previews · Zones · AI', featuresBody)}
 ${this._section('msgsGrp', '90,200,250', 'mdi:message-text-outline', 'Messages', 'Keep Messages · Largest attachment', msgsBody)}
 ${this._section('houseFeedGrp', '24,119,242', 'mdi:newspaper-variant-outline', 'Feed', 'Post types · Stories · Cover photos · Profiles · Sharing · Quiet Mode · Keep Posts', houseFeedBody)}
+${this._section('houseEmailGrp', '10,132,255', 'mdi:email-outline', 'Email', 'Household notices · Notifications · Microsoft sign-in · AI · Automations', `
+<div class="grp-sub" style="margin-top:2px;">Household Notices</div>
+<div style="font-size:11px;color:#888;margin:4px 0 4px;line-height:1.4;">When someone’s email says one of these, Home Assistant posts it in the Feed for everyone. Each is off until you turn it on, and needs the Feed and the matching Email AI feature (Parcel Tracker, Supermarket Deliveries or Council and Local).</div>
+${this._toggle('hn_parcels', 'Parcels Out for Delivery', '“📦 A parcel from Amazon for James is out for delivery today.”')}
+${this._toggle('hn_groceries', 'Supermarket Deliveries', 'When one is booked (with its slot) and when it’s on its way.')}
+${this._toggle('hn_council', 'Bin Collection Changes', 'News from the council about bins and recycling.')}
+<div id="email-ed-house"></div>`)}
 ${this._section('notifGrp', '255,159,10', 'mdi:bell-outline', 'Phone Notifications', 'iPhone &amp; Android · Previews · Sound · Reply · Badge', notifBody)}
 ${this._section('notifBtnGrp', '255,159,10', 'mdi:gesture-tap-button', 'Notification Buttons', 'Messages · Feed', notifBtnBody)}
 ${this._section('notifPeopleGrp', '255,159,10', 'mdi:cellphone-message', 'People &amp; Phones', 'Who gets notifications, on which phones', notifPeopleBody)}
@@ -12839,6 +13761,7 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
       </div>`;
 
     this._setupListeners();
+    this._pagesBuild();
     this.updateUI();
     this._loadIntegration();
   }
@@ -12938,17 +13861,7 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     setTab(firstTab === 'house' ? 'house' : 'card');
 
     // the app bar's places: on or off, and their order
-    root.getElementById('appbar-items')?.addEventListener('click', (e) => {
-      const b = e.target.closest('[data-abmv]');
-      if (!b) return;
-      const order = this._abOrder();
-      const i = order.findIndex(x => x.id === b.dataset.id), j = i + (+b.dataset.abmv);
-      if (j < 0 || j >= order.length) return;
-      [order[i], order[j]] = [order[j], order[i]];
-      this._abOrderAll = order.map(x => x.id);
-      this._updateConfig('app_bar_items', order.filter(x => x.on).map(x => x.id));
-      this._renderAppBarItems();
-    });
+    this._abDragWire();
     root.getElementById('appbar-items')?.addEventListener('change', (e) => {
       const cb = e.target.closest('[data-abon]');
       if (!cb) return;
@@ -13012,7 +13925,8 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     RETENTION.forEach(([v]) => root.getElementById('retention_' + v)?.addEventListener('change', () => this._onRetention(v)));
     UPLOAD_SIZES.forEach(([v]) => root.getElementById('upload_' + v)?.addEventListener('change', () => this._saveSettings({ max_upload_mb: v })));
     STORAGE_AGES.forEach(([v]) => root.getElementById('storage_age_' + v)?.addEventListener('change', () => { this._storageAge = v; root.getElementById('storage-confirm').style.display = 'none'; }));
-    ['link_previews', 'zones', 'share_sheet', 'feed'].forEach(k => root.getElementById('f_' + k)?.addEventListener('change', (e) => this._saveSettings({ features: { [k]: e.target.checked } })));
+    ['link_previews', 'zones', 'share_sheet', 'feed', 'email'].forEach(k => root.getElementById('f_' + k)?.addEventListener('change', (e) => this._saveSettings({ features: { [k]: e.target.checked } })));
+    ['parcels', 'groceries', 'council'].forEach(k => root.getElementById('hn_' + k)?.addEventListener('change', (e) => this._saveSettings({ email_notices: { [k]: e.target.checked } })));
     root.getElementById('ai_enabled')?.addEventListener('change', (e) => this._saveSettings({ ai: { enabled: e.target.checked } }));
     root.getElementById('ai_agent')?.addEventListener('change', (e) => this._saveSettings({ ai: { agent_id: e.target.value } }));
     root.getElementById('ai_task')?.addEventListener('change', (e) => this._saveSettings({ ai: { task_entity: e.target.value } }));
@@ -13268,6 +14182,7 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     const pick = this.shadowRoot.getElementById('dash_pick');
     if (pick) pick.innerHTML = '<option value="">Choose…</option>' + this._pathOptions.filter(o => o.value !== 'auto').map(o => `<option value="${esc2(o.value)}">${esc2(o.label)}</option>`).join('');
     this._updateDashUI();
+    this._pagesSync?.();
   }
 
   _updateDashUI() {
@@ -13329,6 +14244,10 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     ['reactions', 'comment', 'save', 'events', 'polls', 'claim', 'birthday', 'leave', 'hide'].forEach(k => chk('fnb_' + k, k === 'hide' ? fnb[k] === true : fnb[k] !== false));
     const f = st?.features || {};
     ['link_previews', 'zones', 'share_sheet', 'feed'].forEach(k => chk('f_' + k, f[k] !== false));
+    chk('f_email', f.email === true);
+    const hn = st?.email_notices || {};
+    ['parcels', 'groceries', 'council'].forEach(k => chk('hn_' + k, hn[k] === true));
+    this._emailEditors();
     const fnbw = r.getElementById('fnb-wrap');
     if (fnbw) fnbw.hidden = f.feed === false;
     const fw = r.getElementById('feat-wrap');
@@ -13341,6 +14260,7 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
       const row = r.getElementById(id)?.closest('.toggle-item');
       if (row) row.style.opacity = n.enabled === false ? '0.4' : '1';
     });
+    this._pagesSync();
   }
 
   _updateAiUI(admin) {
@@ -13489,8 +14409,8 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
 
   // the app bar's places, in this card's order, with whether each is shown
   _abOrder() {
-    const NAMES = { messages: ['Messages', 'mdi:message-outline'], contacts: ['Contacts', 'mdi:account-circle-outline'], feed: ['Feed', 'mdi:newspaper-variant-outline'] };
-    const on = Array.isArray(this._config.app_bar_items) ? this._config.app_bar_items : ['messages', 'contacts', 'feed'];
+    const NAMES = { messages: ['Messages', 'mdi:message-outline'], contacts: ['Contacts', 'mdi:account-circle-outline'], feed: ['Feed', 'mdi:newspaper-variant-outline'], email: ['Email', 'mdi:email-outline'], maps: ['Maps', 'mdi:map-marker-outline'] };
+    const on = Array.isArray(this._config.app_bar_items) ? this._config.app_bar_items : CM_DEFAULTS.app_bar_items;
     const all = this._abOrderAll || [...on, ...Object.keys(NAMES).filter(k => !on.includes(k))];
     return all.filter(k => NAMES[k]).map(k => ({ id: k, name: NAMES[k][0], icon: NAMES[k][1], on: on.includes(k) }));
   }
@@ -13499,10 +14419,81 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     const el = this.shadowRoot?.getElementById('appbar-items');
     if (!el) return;
     const order = this._abOrder();
-    el.innerHTML = order.map((x, i) => `<div class="ab-row"><ha-icon icon="${x.icon}"></ha-icon><span class="ab-n">${x.name}</span>
-      <button type="button" data-abmv="-1" data-id="${x.id}" aria-label="Move ${x.name} up"${i === 0 ? ' disabled' : ''}>▲</button>
-      <button type="button" data-abmv="1" data-id="${x.id}" aria-label="Move ${x.name} down"${i === order.length - 1 ? ' disabled' : ''}>▼</button>
-      <input type="checkbox" data-abon="${x.id}" aria-label="Show ${x.name}"${x.on ? ' checked' : ''}></div>`).join('');
+    el.innerHTML = order.map((x) => `<div class="ab-row" data-id="${x.id}"><span class="ab-drag" tabindex="0" role="button" aria-label="Drag to move ${x.name}" title="Drag to reorder"><svg viewBox="0 0 24 24"><path d="M9,3H11V5H9V3M13,3H15V5H13V3M9,7H11V9H9V7M13,7H15V9H13V7M9,11H11V13H9V11M13,11H15V13H13V11M9,15H11V17H9V15M13,15H15V17H13V15M9,19H11V21H9V19M13,19H15V21H13V19Z"/></svg></span><ha-icon icon="${x.icon}"></ha-icon><span class="ab-n">${x.name}</span>
+      <label class="toggle-switch"><input type="checkbox" data-abon="${x.id}" aria-label="Show ${x.name}"${x.on ? ' checked' : ''}><span class="toggle-track"></span></label></div>`).join('');
+  }
+
+  // the app bar's places: drag a row by its handle to move it (arrow keys on the handle work too)
+  _abDragWire() {
+    const list = this.shadowRoot.getElementById('appbar-items');
+    if (!list || list._dragWired) return;
+    list._dragWired = true;
+    const rows = () => [...list.querySelectorAll('.ab-row:not(.ab-ghost)')];
+    const save = () => {
+      const order = this._abOrder();
+      const ids = rows().map(r => r.dataset.id);
+      order.sort((a, b) => ids.indexOf(a.id) - ids.indexOf(b.id));
+      this._abOrderAll = order.map(x => x.id);
+      this._updateConfig('app_bar_items', order.filter(x => x.on).map(x => x.id));
+      this._renderAppBarItems();
+    };
+    let row = null, ghost = null, line = null, offY = 0, startY = 0, moved = false, pid = null;
+    const target = (y) => rows().filter(r => r !== row).find(r => { const b = r.getBoundingClientRect(); return y < b.top + b.height / 2; }) || null;
+    const end = (drop) => {
+      if (!row) return;
+      ghost?.remove(); ghost = null;
+      if (line) line.classList.remove('ab-over');
+      row.classList.remove('ab-dragging');
+      list.style.touchAction = '';
+      try { list.releasePointerCapture(pid); } catch (e) { /* */ }
+      const r = row;
+      row = null;
+      if (!drop || !moved) { line = null; return; }
+      if (line) list.insertBefore(r, line); else list.appendChild(r);
+      line = null;
+      save();
+    };
+    list.addEventListener('pointerdown', (e) => {
+      const h = e.target.closest('.ab-drag');
+      if (!h) return;
+      e.preventDefault();
+      row = h.closest('.ab-row');
+      pid = e.pointerId;
+      try { list.setPointerCapture(pid); } catch (err) { /* */ }
+      const b = row.getBoundingClientRect();
+      offY = e.clientY - b.top; startY = e.clientY; moved = false;
+      list.style.touchAction = 'none';
+      // a copy of the row follows the finger; the row itself stays put, faded, until it's dropped
+      ghost = row.cloneNode(true);
+      ghost.classList.add('ab-ghost');
+      ghost.style.cssText = `position:fixed;left:${b.left}px;top:${b.top}px;width:${b.width}px;height:${b.height}px;box-sizing:border-box;z-index:9999;pointer-events:none;`;
+      list.appendChild(ghost);
+      row.classList.add('ab-dragging');
+    }, { passive: false });
+    list.addEventListener('pointermove', (e) => {
+      if (!row) return;
+      if (Math.abs(e.clientY - startY) > 3) moved = true;
+      ghost.style.top = (e.clientY - offY) + 'px';
+      const t = target(e.clientY);
+      if (t !== line) { line?.classList.remove('ab-over'); line = t; }
+      line?.classList.add('ab-over');
+      const last = rows().filter(r => r !== row).pop();
+      rows().forEach(r => r.classList.toggle('ab-under', !line && r === last));
+    });
+    const clear = () => rows().forEach(r => r.classList.remove('ab-under'));
+    list.addEventListener('pointerup', () => { clear(); end(true); });
+    list.addEventListener('pointercancel', () => { clear(); end(false); });
+    list.addEventListener('keydown', (e) => {
+      const h = e.target.closest('.ab-drag');
+      if (!h || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+      e.preventDefault();
+      const r = h.closest('.ab-row'), sib = e.key === 'ArrowUp' ? r.previousElementSibling : r.nextElementSibling;
+      if (!sib) return;
+      if (e.key === 'ArrowUp') list.insertBefore(r, sib); else list.insertBefore(sib, r);
+      const id = r.dataset.id;
+      save();
+      list.querySelector(`.ab-row[data-id="${id}"] .ab-drag`)?.focus();
+    });
   }
 
   _renderStorage(done) {
@@ -13569,7 +14560,7 @@ window.__crowMessengerBuild = window.__crowMessengerBuild || CM_BUILD;
 // fetched the first time they're needed, so the card itself opens faster. Until a file arrives, a
 // screen shows "Loading…", a game in a chat shows a placeholder, and a Live Wallpaper starts a
 // moment later. Each file adds its methods to this card class; these stand-ins are what's here before.
-const LAZY_NAMES = { pdf: 'crow-pdf.js', games: 'crow-games.js', live: 'crow-live.js', people: 'crow-people.js', feed: 'crow-feed.js' };
+const LAZY_NAMES = { pdf: 'crow-pdf.js', games: 'crow-games.js', live: 'crow-live.js', people: 'crow-people.js', feed: 'crow-feed.js', email: 'crow-email.js' };
 CrowMessengerCard.lazyReady = CrowMessengerCard.lazyReady || {};
 CrowMessengerCard.lazyCss = CrowMessengerCard.lazyCss || {};
 CrowMessengerCard.instances = CrowMessengerCard.instances || new Set();
@@ -13672,6 +14663,8 @@ Object.assign(CrowMessengerCard.prototype, LAZY_STUBS, {
       el.replaceWith(real.el);
       const keep = { type: page.type, data: page.data };
       Object.assign(page, real, keep, { real: true });
+      // its app bar (Maps) and the full screen button
+      this._rsSync?.();
       page.refresh?.('all');
       if (this._stack[this._stack.length - 1] === page) page.onShow?.();
     }).catch((err) => { const msg = el.querySelector('.lazy-msg'); if (msg) msg.textContent = err.message || 'Couldn’t load that.'; });
