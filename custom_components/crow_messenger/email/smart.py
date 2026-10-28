@@ -215,25 +215,54 @@ class Smart:
             return min(max(exp, upd) + PARCEL_PROBABLY_AFTER + keep, upd + max(PARCEL_DATED_MAX, keep))
         return upd + max(PARCEL_UNDATED_ABROAD if p.get("abroad") or _abroad(p) else PARCEL_UNDATED, keep)
 
-    def _same(self, p: dict, old: dict) -> bool:
-        """The same parcel: the same tracking number, or (without one) the same shop and item."""
-        if p.get("tracking") and old.get("tracking") == p["tracking"]:
-            return True
-        if not p.get("tracking") or not old.get("tracking"):
-            same_shop = (p.get("retailer") or p.get("courier") or "").lower() == (old.get("retailer") or old.get("courier") or "").lower()
-            item = (old.get("ai_item") or old.get("item") or "").lower()   # a renamed parcel still matches what the AI calls it
-            return bool(p.get("item")) and same_shop and p["item"].lower() == item
-        return False
+    def _same(self, p: dict, old: dict, loose: bool = True) -> bool:
+        """The same parcel. Two different tracking numbers are two parcels (an order sent in two boxes);
+        otherwise the same tracking number, the same order number, or the same shop and item
+        ("2 Magnesium Supplements" and "Magnesium supplement" are one item)."""
+        t_new, t_old = p.get("tracking"), old.get("tracking")
+        if t_new and t_old:
+            return t_new.upper() == t_old.upper()
+        o_new, o_old = _order_key(p.get("order")), _order_key(old.get("order"))
+        if o_new and o_old:
+            return o_new == o_old
+        if not _shop_key(p) or _shop_key(p) != _shop_key(old):
+            return False
+        if not loose:   # the exact name, as the AI gave it
+            item = (old.get("ai_item") or old.get("item") or "").lower()
+            return bool(p.get("item")) and p["item"].lower() == item
+        new_items = _item_words(p.get("item"))
+        return bool(new_items) and any(_items_match(new_items, _item_words(old.get(k)))
+                                       for k in ("ai_item", "item") if old.get(k))   # a renamed parcel still matches what the AI calls it
+
+    def _merge_same(self, lst: list[dict]) -> bool:
+        """Parcels found twice for one order (say its order confirmation and its dispatch email, before
+        the order number was read) become one. Answers whether anything changed."""
+        changed = False
+        i = 0
+        while i < len(lst):
+            keep = lst[i]
+            j = i + 1
+            while j < len(lst):
+                dup = lst[j]
+                if self._same(dup, keep) or self._same(keep, dup):
+                    _absorb(keep, dup)
+                    del lst[j]
+                    changed = True
+                else:
+                    j += 1
+            i += 1
+        return changed
 
     def was_removed(self, a: Account, p: dict, message_id: str = "") -> dict | None:
-        """A parcel deleted from Parcels in the last 60 days (by its emails or its tracking number)."""
+        """A parcel deleted from Parcels in the last 60 days (by its emails, its tracking or order number,
+        or exactly the same shop and item: never a looser match, which could hide a parcel still on its way)."""
         now = now_ms()
         mem = self.data["parcels_removed"].setdefault(a.id, [])
         mem[:] = [r for r in mem if now - r.get("at", now) < PARCEL_FORGET_REMOVED]
         for r in mem:
             if message_id and message_id in (r.get("message_ids") or []):
                 return r
-            if self._same(p, r.get("parcel") or {}):
+            if self._same(p, r.get("parcel") or {}, loose=False):
                 return r
         return None
 
@@ -241,7 +270,10 @@ class Smart:
         """Add a parcel, or update the one it's about. One you deleted isn't added again unless you ask (force)."""
         lst = self.data["parcels"].setdefault(a.id, [])
         self._tidy(lst)
-        gone = self.was_removed(a, p, it.get("message_id") or "")
+        # news about a parcel that's still in Parcels always reaches it, even when a parcel you deleted
+        # looks like it too (say a duplicate of it you removed): only otherwise does a deletion count
+        live = next((old for old in lst if self._same(p, old)), None)
+        gone = None if live else self.was_removed(a, p, it.get("message_id") or "")
         if gone:
             if not force:
                 return None
@@ -254,7 +286,7 @@ class Smart:
         if match:
             changed = (STATUS_ORDER.get(p["status"], 0) >= STATUS_ORDER.get(match["status"], 0) or p["status"] == "problem"
                        or bool(match.get("probable")))   # "probably delivered" was a guess: real news wins
-            for k in ("item", "retailer", "courier", "tracking", "tracking_url", "expected"):
+            for k in ("item", "retailer", "courier", "tracking", "tracking_url", "expected", "order"):
                 if p.get(k) and not (k == "item" and match.get("renamed")):   # your own name for it stays
                     match[k] = p[k]
             if changed:
@@ -274,6 +306,8 @@ class Smart:
             if p["status"] == "delivered":
                 item["delivered_at"] = now
             lst.append(item)
+        if self._merge_same(lst):   # this email may tie together two parcels already in the list
+            item = next((x for x in lst if x is item), None) or next((x for x in lst if self._same(p, x)), item)
         item["abroad"] = _abroad(item)
         self.mailer.save()
         self.hass.bus.async_fire(EVENT_PARCEL, {"account": a.acc["email"], "account_id": a.id, **{
@@ -290,10 +324,11 @@ class Smart:
     def _tidy(self, lst: list[dict]) -> tuple[list[dict], bool]:
         """Parcels past their expected day become "probably delivered", and expired ones go.
         Answers the parcels taken out, and whether anything changed."""
+        merged = self._merge_same(lst)
         if self.keep_ms() is None:
-            return [], False
+            return [], merged
         now = now_ms()
-        changed = False
+        changed = merged
         for p in lst:
             exp = _expected_end(p.get("expected"))
             start = max(exp, p.get("updated", now)) if exp else None
@@ -607,6 +642,75 @@ class Smart:
         for it in items:
             it["account"], it["folder"] = a.id, path
         return items
+
+
+_SHOP_TAIL = re.compile(r"(\.co\.uk|\.com|\.de|\.fr|\.it|\.es|\.ie|\.co|\.uk|\b(uk|ltd|limited|inc|plc|eu|europe|store|shop)\b)", re.I)
+_QTY = re.compile(r"\b(\d+\s*(x|×|pcs|pack|packs|items?|units?)?|x\s*\d+|pack\s+of\s+\d+|qty:?\s*\d+)\b", re.I)
+_FILLER = {"a", "an", "the", "of", "and", "for", "with", "your", "my", "item", "items", "order", "parcel", "package", "x"}
+
+
+def _order_key(order) -> str:
+    """An order number to compare: letters and digits only, in capitals ("#123-456 7" is 1234567)."""
+    k = re.sub(r"[^A-Z0-9]", "", str(order or "").upper())
+    return k if len(k) >= 4 else ""
+
+
+def _shop_key(p: dict) -> str:
+    name = (p.get("retailer") or p.get("courier") or "").lower()
+    return re.sub(r"[^a-z0-9]", "", _SHOP_TAIL.sub("", name))
+
+
+def _item_words(item) -> set[str]:
+    """The words that say what an item is: no quantities, no filler, singular."""
+    text = _QTY.sub(" ", str(item or "").lower())
+    words = set()
+    for w in re.findall(r"[a-z0-9]+", text):
+        if w in _FILLER or w.isdigit():
+            continue
+        if len(w) > 3 and w.endswith("ies"):
+            w = w[:-3] + "y"
+        elif len(w) > 3 and w.endswith("s") and not w.endswith("ss"):
+            w = w[:-1]
+        words.add(w)
+    return words
+
+
+def _items_match(a: set[str], b: set[str]) -> bool:
+    """The same words, or one name a fuller version of the other (at least two words in common)."""
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    small, big = (a, b) if len(a) <= len(b) else (b, a)
+    return len(small) >= 2 and small <= big
+
+
+def _absorb(keep: dict, dup: dict) -> None:
+    """Fold a duplicate parcel into the one being kept: the furthest-on status, the newest news, every email."""
+    if (STATUS_ORDER.get(dup.get("status"), 0) > STATUS_ORDER.get(keep.get("status"), 0) and not dup.get("probable")) \
+            or (keep.get("probable") and not dup.get("probable")) or dup.get("status") == "problem":
+        keep["status"] = dup.get("status")
+        keep.pop("probable", None)
+        if dup.get("delivered_at"):
+            keep["delivered_at"] = dup["delivered_at"]
+        elif keep.get("status") != "delivered":
+            keep.pop("delivered_at", None)
+    for k in ("retailer", "courier", "tracking", "tracking_url", "expected", "order", "ai_item"):
+        if dup.get(k) and not keep.get(k):
+            keep[k] = dup[k]
+    if dup.get("renamed") and not keep.get("renamed"):
+        keep.update({"item": dup.get("item"), "renamed": True})
+    if dup.get("updated", 0) > keep.get("updated", 0):
+        for k in ("uid", "folder", "subject", "message_id", "updated"):
+            if dup.get(k) is not None:
+                keep[k] = dup[k]
+        if dup.get("expected"):
+            keep["expected"] = dup["expected"]
+        if dup.get("item") and not keep.get("renamed"):
+            keep["item"] = dup["item"]
+    keep["added"] = min(keep.get("added") or now_ms(), dup.get("added") or now_ms())
+    ids = [*(dup.get("message_ids") or []), *(keep.get("message_ids") or [])]
+    keep["message_ids"] = list(dict.fromkeys(x for x in ids if x))[-10:]
 
 
 def _expected_end(day: str | None) -> int | None:

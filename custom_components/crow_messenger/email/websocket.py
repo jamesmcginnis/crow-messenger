@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import secrets
+import time
 from collections.abc import Callable
 from functools import wraps
 
@@ -470,6 +472,7 @@ async def ws_phishing_report(hass, mailer, uid, msg):
     mailer.smart.drop_parcels(a, msg["folder"], [msg["uid"]])
     mailer.orders.drop(a, msg["folder"], [msg["uid"]])
     mailer.finds.drop(a, msg["folder"], [msg["uid"]])
+    mailer.aix.drop(a, msg["folder"], [msg["uid"]])
     return await mailer.spam.async_report_phishing(a, msg["folder"], msg["uid"], msg["places"])
 
 
@@ -544,23 +547,159 @@ async def ws_flag(hass, mailer, uid, msg):
     return None
 
 
+# ── Undo for Archive, Delete, Move and Junk ─────────────────────────────────
+# a move notes where the emails went; the card gets a token, and crow_email/undo puts them back.
+# Kept for a few minutes, and only the person who made the change can undo it.
+UNDO: dict[str, dict] = {}
+UNDO_KEEP = 600
+
+
+def _undo_token(uid: str, steps: list[dict]) -> str | None:
+    steps = [x for x in steps if x.get("uids") or x.get("mids")]
+    if not steps:
+        return None
+    now = time.monotonic()
+    for k in [k for k, v in UNDO.items() if now - v["at"] > UNDO_KEEP]:
+        UNDO.pop(k, None)
+    while len(UNDO) > 100:
+        UNDO.pop(next(iter(UNDO)))
+    token = secrets.token_urlsafe(12)
+    UNDO[token] = {"owner": uid, "steps": steps, "at": now}
+    return token
+
+
+def _drop_extras(mailer, a, folder: str, uids: list[int]) -> list[dict]:
+    """Junk: a fake delivery (or order) email's parcel goes too, and its bill or appointment."""
+    mailer.smart.drop_parcels(a, folder, uids)
+    mailer.orders.drop(a, folder, uids)
+    mailer.finds.drop(a, folder, uids)
+    return mailer.aix.drop(a, folder, uids)
+
+
+def _keep_for_undo(token: str | None, a, gone: list[dict]) -> None:
+    """Bills and appointments that left with their emails: Undo brings them back too."""
+    if token and gone and token in UNDO:
+        UNDO[token].setdefault("extras", []).append({"account": a.id, "items": gone})
+
+
 @command("move", {ACC: str, FOLDER: str, vol.Required("uids"): UIDS, vol.Optional("uid"): vol.Coerce(int), vol.Required("to"): str})
 async def ws_move(hass, mailer, uid, msg):
     a = mailer.account(uid, msg["account"])
-    await a.async_move(msg["folder"], msg["uids"], msg["to"])
-    return None
+    rec: list = []
+    await a.async_move(msg["folder"], msg["uids"], msg["to"], rec)
+    return {"undo": _undo_token(uid, rec)}
 
 
 @command("archive", {ACC: str, FOLDER: str, vol.Required("uids"): UIDS, vol.Optional("uid"): vol.Coerce(int)})
 async def ws_archive(hass, mailer, uid, msg):
     a = mailer.account(uid, msg["account"])
-    return {"to": await a.async_archive(msg["folder"], msg["uids"])}
+    rec: list = []
+    to = await a.async_archive(msg["folder"], msg["uids"], rec)
+    return {"to": to, "undo": _undo_token(uid, rec)}
 
 
 @command("delete", {ACC: str, FOLDER: str, vol.Required("uids"): UIDS, vol.Optional("uid"): vol.Coerce(int)})
 async def ws_delete(hass, mailer, uid, msg):
     a = mailer.account(uid, msg["account"])
-    return {"result": await a.async_delete(msg["folder"], msg["uids"])}
+    rec: list = []
+    res = await a.async_delete(msg["folder"], msg["uids"], rec)
+    token = _undo_token(uid, rec)
+    _keep_for_undo(token, a, mailer.aix.drop(a, msg["folder"], msg["uids"]))   # its bill or appointment goes too
+    return {"result": res, "undo": token}
+
+
+@command("undo", {vol.Required("token"): vol.All(str, vol.Length(max=40))})
+async def ws_undo(hass, mailer, uid, msg):
+    entry = UNDO.get(msg["token"])
+    if not entry or entry["owner"] != uid:
+        raise MailError("not_found", "It’s too late to undo that.")
+    UNDO.pop(msg["token"], None)
+    count = 0
+    for step in reversed(entry["steps"]):
+        a = mailer.account(uid, step["account"])
+        count += await a.async_undo_move(step)
+    for ex in entry.get("extras") or []:
+        try:
+            mailer.aix.restore(mailer.account(uid, ex["account"]), ex["items"])
+        except MailError:
+            pass
+    return {"count": count}
+
+
+# ── Select All: every email in a mailbox, not just those loaded ─────────────
+ALL_FILTERS = ("all", "unread", "flagged", "vip", "today")
+SCOPE = {vol.Optional("account"): vol.Any(None, str), FOLDER: str,
+         vol.Optional("combined", default=False): bool,
+         vol.Optional("filter", default="all"): vol.In(ALL_FILTERS)}
+
+
+def _scope(mailer, uid: str, msg: dict) -> list[tuple]:
+    """The (account, folder) pairs a Select All covers: one folder, or every Inbox for All Inboxes."""
+    if msg.get("combined"):
+        return [(a, "INBOX") for a in mailer.accounts.values() if a.acc["owner"] == uid]
+    if not msg.get("account"):
+        raise MailError("invalid", "Choose a mailbox.")
+    return [(mailer.account(uid, msg["account"]), msg["folder"])]
+
+
+@command("select_all", SCOPE)
+async def ws_select_all(hass, mailer, uid, msg):
+    total, upto = 0, {}
+    for a, folder in _scope(mailer, uid, msg):
+        try:
+            r = await a.async_select_all(folder, msg["filter"])
+        except MailError:
+            continue
+        total += r["total"]
+        upto[a.id] = r["upto"]
+    return {"total": total, "upto": upto}
+
+
+@command("bulk_all", {**SCOPE,
+                      vol.Required("action"): vol.In(("read", "unread", "flag", "unflag", "archive", "trash", "junk", "move")),
+                      vol.Optional("to"): str,
+                      vol.Required("upto"): {str: vol.Coerce(int)},
+                      vol.Optional("except", default=[]): vol.All([vol.Schema({vol.Required("account"): str, vol.Required("folder"): str,
+                                                                                vol.Required("uid"): vol.Coerce(int)})], vol.Length(max=20000))})
+async def ws_bulk_all(hass, mailer, uid, msg):
+    """An action on every email Select All picked: all of them up to the newest it saw, less any unticked."""
+    action, scope = msg["action"], _scope(mailer, uid, msg)
+    work = []
+    for a, folder in scope:
+        skip = {x["uid"] for x in msg["except"] if x["account"] == a.id and x["folder"] == folder}
+        uids = await a.async_all_uids(folder, msg["filter"], msg["upto"].get(a.id, 0), skip)
+        if uids:
+            work.append((a, folder, uids))
+    if action == "move":
+        if not msg.get("to"):
+            raise MailError("invalid", "Choose a folder.")
+        if len({a.id for a, _, _ in work}) > 1:
+            raise MailError("invalid", "Choose emails from one account to move them.")
+    rec: list = []
+    count, to = 0, None
+    gone: list[tuple] = []
+    for a, folder, uids in work:
+        if action in ("read", "unread"):
+            await a.async_flag(folder, uids, "seen", action == "read")
+        elif action in ("flag", "unflag"):
+            await a.async_flag(folder, uids, "flagged", action == "flag")
+        elif action == "archive":
+            to = await a.async_archive(folder, uids, rec)
+        elif action == "trash":
+            to = await a.async_delete(folder, uids, rec)
+            gone.append((a, mailer.aix.drop(a, folder, uids)))
+        elif action == "junk":
+            gone.append((a, _drop_extras(mailer, a, folder, uids)))
+            to = await a.async_special("junk", create="Junk")
+            await a.async_move(folder, uids, to, rec)
+        elif action == "move":
+            to = msg["to"]
+            await a.async_move(folder, uids, to, rec)
+        count += len(uids)
+    token = _undo_token(uid, rec)
+    for a, items in gone:
+        _keep_for_undo(token, a, items)
+    return {"count": count, "to": to, "undo": token}
 
 
 @command("mark_all_read", {vol.Optional("account"): vol.Any(None, str), FOLDER: str,
@@ -601,12 +740,13 @@ async def ws_folder_empty(hass, mailer, uid, msg):
 @command("junk", {ACC: str, FOLDER: str, vol.Required("uids"): UIDS, vol.Optional("uid"): vol.Coerce(int)})
 async def ws_junk(hass, mailer, uid, msg):
     a = mailer.account(uid, msg["account"])
-    mailer.smart.drop_parcels(a, msg["folder"], msg["uids"])   # a fake delivery email: its parcel goes too
-    mailer.orders.drop(a, msg["folder"], msg["uids"])
-    mailer.finds.drop(a, msg["folder"], msg["uids"])
+    gone = _drop_extras(mailer, a, msg["folder"], msg["uids"])
     dest = await a.async_special("junk", create="Junk")
-    await a.async_move(msg["folder"], msg["uids"], dest)
-    return {"to": dest}
+    rec: list = []
+    await a.async_move(msg["folder"], msg["uids"], dest, rec)
+    token = _undo_token(uid, rec)
+    _keep_for_undo(token, a, gone)
+    return {"to": dest, "undo": token}
 
 
 # ── Snooze, Mute, the Screener, Subscriptions, Sweep ───────────────────────
@@ -634,21 +774,22 @@ async def ws_whois(hass, mailer, uid, msg):
                                    await mailer.known_people(uid))}
 
 
-@command("snooze/wake", {vol.Required("id"): str})
+# (an item's id travels as "item": Home Assistant's own "id" is the number of the message itself)
+@command("snooze/wake", {vol.Required("item"): str})
 async def ws_snooze_wake(hass, mailer, uid, msg):
     """Unsnooze: back to the Inbox now."""
-    return await mailer.features.async_wake(msg["id"], uid) or {}
+    return await mailer.features.async_wake(msg["item"], uid) or {}
 
 
-@command("snooze/locate", {vol.Required("id"): str})
+@command("snooze/locate", {vol.Required("item"): str})
 async def ws_snooze_locate(hass, mailer, uid, msg):
-    return await mailer.features.async_locate_snoozed(uid, msg["id"])
+    return await mailer.features.async_locate_snoozed(uid, msg["item"])
 
 
 @command("mute", {vol.Optional("account"): str, vol.Optional("folder"): str, vol.Optional("uid"): vol.Coerce(int),
-                  vol.Optional("id"): str, vol.Required("on"): bool})
+                  vol.Optional("item"): str, vol.Required("on"): bool})
 async def ws_mute(hass, mailer, uid, msg):
-    return await mailer.features.async_mute(uid, msg.get("account"), msg.get("folder"), msg.get("uid"), msg["on"], msg.get("id"))
+    return await mailer.features.async_mute(uid, msg.get("account"), msg.get("folder"), msg.get("uid"), msg["on"], msg.get("item"))
 
 
 @command("screener/set", {vol.Optional("on"): bool, vol.Optional("remove"): [str], vol.Optional("add"): [str],
@@ -783,14 +924,14 @@ async def ws_tidy(hass, mailer, uid, msg):
     return await mailer.aix.async_tidy(uid)
 
 
-@command("appointments/action", {ACC: str, vol.Required("id"): str, vol.Required("action"): vol.In(("remove", "added"))})
+@command("appointments/action", {ACC: str, vol.Required("item"): str, vol.Required("action"): vol.In(("remove", "added"))})
 def ws_appointments_action(hass, mailer, uid, msg):
-    return mailer.aix.appointment_action(uid, msg["account"], msg["id"], msg["action"])
+    return mailer.aix.appointment_action(uid, msg["account"], msg["item"], msg["action"])
 
 
-@command("bills/action", {ACC: str, vol.Required("id"): str, vol.Required("action"): vol.In(("paid", "unpaid", "remove"))})
+@command("bills/action", {ACC: str, vol.Required("item"): str, vol.Required("action"): vol.In(("paid", "unpaid", "remove"))})
 def ws_bills_action(hass, mailer, uid, msg):
-    return mailer.aix.bill_action(uid, msg["account"], msg["id"], msg["action"])
+    return mailer.aix.bill_action(uid, msg["account"], msg["item"], msg["action"])
 
 
 @command("briefing/save", {vol.Optional("on"): bool, vol.Optional("time"): vol.Match(r"^\d{2}:\d{2}$"), vol.Optional("notify"): bool,
@@ -1105,6 +1246,18 @@ def ws_parcels(hass, mailer, uid, msg):
     return mailer.smart.parcels_for(uid)
 
 
+@command("bills/locate", {ACC: str, vol.Required("item"): str})
+async def ws_bills_locate(hass, mailer, uid, msg):
+    """Where a bill's email is now; a bill whose email has been deleted leaves Bills."""
+    return await mailer.aix.async_locate(uid, msg["account"], "bills", msg["item"])
+
+
+@command("appointments/locate", {ACC: str, vol.Required("item"): str})
+async def ws_appointments_locate(hass, mailer, uid, msg):
+    """Where an appointment's email is now; one whose email has been deleted leaves Appointments."""
+    return await mailer.aix.async_locate(uid, msg["account"], "appointments", msg["item"])
+
+
 @command("parcels/locate", {ACC: str, vol.Required("item"): str})
 async def ws_parcels_locate(hass, mailer, uid, msg):
     """Where a parcel's email is now (it follows the email when it's archived or moved)."""
@@ -1242,9 +1395,9 @@ async def ws_finds_add(hass, mailer, uid, msg):
     return mailer.finds.list_for(uid, kind)
 
 
-@command("codes/done", {vol.Required("id"): str})
+@command("codes/done", {vol.Required("item"): str})
 def ws_codes_done(hass, mailer, uid, msg):
-    return mailer.finds.code_done(uid, msg["id"])
+    return mailer.finds.code_done(uid, msg["item"])
 
 
 @command("nudges", {vol.Optional("check", default=False): bool})

@@ -24,6 +24,9 @@ DAY_MS = 86400_000
 CODE_RE = re.compile(r"\b(verification|verify|sign[- ]?in|log[- ]?in|login|security|one[- ]time|passcode|otp|confirmation code|your code|access code|2fa|two[- ]factor)\b", re.I)
 ORDER_RE = re.compile(r"\b(order (confirm|confirmation|received|placed|#|number|no\.?)|thanks? (you )?for your order|your order\b|order is confirmed|we('ve| have) received your order|receipt for your)", re.I)
 BILL_SOON_DAYS = 3
+VERIFY_EVERY = 3 * 3600_000   # how often a bill's or appointment's email is checked for still being there
+VERIFY_PER_TICK = 8
+FOLLOWS = {"bills": ("bill", "Bills"), "appointments": ("appointment", "Appointments")}
 
 
 def _now() -> int:
@@ -129,6 +132,119 @@ class AiExtras:
         self._changed(a, "appointments")
         return self.appointments_for(uid)
 
+    # ── the email behind a bill or an appointment ──────────────────────────
+    async def _where(self, a: Account, x: dict) -> dict | None:
+        """Where its email is now ({"folder", "uid", "gone"}; gone: in Trash or Junk), or None when it's
+        nowhere. Raises MailError when the email server can't say, so nothing is removed by mistake."""
+        from .manager import MailError
+        mid = x.get("message_id") or ""
+        if not mid:
+            return {"folder": x.get("folder") or "INBOX", "uid": x.get("uid"), "gone": False}
+        binned = {a.special("trash"), a.special("junk")} - {None}
+        tried: list[str] = []
+        failed = False
+        for kind in (None, "inbox", "archive", "trash", "junk"):
+            path = (x.get("folder") or "INBOX") if kind is None else ("INBOX" if kind == "inbox" else a.special(kind))
+            if not path or path in tried:
+                continue
+            tried.append(path)
+            try:
+                found = await a.async_find(path, mid)
+            except MailError:
+                failed = True
+                continue
+            if found:
+                return {"folder": path, "uid": found, "gone": path in binned}
+        if failed:
+            raise MailError("unavailable", "Couldn’t reach the email server. Try again in a moment.")
+        return None
+
+    async def async_locate(self, uid: str, account_id: str, kind: str, item_id: str) -> dict:
+        """Where a bill's or appointment's email is now. One whose email has been deleted (or is in
+        Trash or Junk) is taken out of Bills or Appointments, and Today."""
+        from .manager import MailError
+        noun, title = FOLLOWS[kind]
+        a = self.mailer.account(uid, account_id)
+        lst = self.data[kind].get(a.id, [])
+        x = next((y for y in lst if y["id"] == item_id), None)
+        if not x:
+            raise MailError("not_found", f"That {noun} isn’t in {title} any more.")
+        where = await self._where(a, x)
+        if where is None or where["gone"]:
+            lst[:] = [y for y in lst if y is not x]
+            self.mailer.save()
+            self._changed(a, kind)
+            if where is None:
+                raise MailError("not_found", f"The email for this {noun} has been deleted, so it’s been taken out of {title}.")
+            return {"folder": where["folder"], "uid": where["uid"], "trash": True, "removed": True}
+        x["checked"] = _now()
+        if (where["folder"], where["uid"]) != (x.get("folder"), x.get("uid")):
+            x.update({"folder": where["folder"], "uid": where["uid"]})
+            self.mailer.save()
+        return {"folder": where["folder"], "uid": where["uid"]}
+
+    def drop(self, a: Account, folder: str, uids: list[int]) -> list[dict]:
+        """Emails deleted, emptied or reported as junk: their bills and appointments go too.
+        Answers what went, so Undo can put it back."""
+        want = {int(u) for u in uids}
+        out = []
+        for kind in FOLLOWS:
+            lst = self.data[kind].get(a.id) or []
+            hit = [x for x in lst if (x.get("folder") or "INBOX") == folder and int(x.get("uid") or 0) in want]
+            if hit:
+                lst[:] = [x for x in lst if x not in hit]
+                out += [{"kind": kind, "item": x} for x in hit]
+        if out:
+            self.mailer.save()
+            for kind in {o["kind"] for o in out}:
+                self._changed(a, kind)
+        return out
+
+    def restore(self, a: Account, items: list[dict]) -> None:
+        """Undo: bills and appointments taken out with their emails come back (found again by the email)."""
+        kinds = set()
+        for o in items:
+            lst = self.data[o["kind"]].setdefault(a.id, [])
+            if not any(y["id"] == o["item"]["id"] for y in lst):
+                lst.append({**o["item"], "checked": 0})
+                kinds.add(o["kind"])
+        if kinds:
+            self.mailer.save()
+            for kind in kinds:
+                self._changed(a, kind)
+
+    async def async_verify(self) -> None:
+        """Now and then: a bill or appointment whose email was deleted somewhere else (another app, the
+        web) leaves Bills, Appointments and Today. A few at a time, each every few hours."""
+        from .manager import MailError
+        now = _now()
+        todo = []
+        for kind in FOLLOWS:
+            for acc_id, lst in self.data[kind].items():
+                for x in lst:
+                    if kind == "bills" and x.get("paid"):
+                        continue
+                    if x.get("message_id") and now - (x.get("checked") or x.get("added") or 0) >= VERIFY_EVERY:
+                        todo.append((kind, acc_id, x))
+        for kind, acc_id, x in sorted(todo, key=lambda t: t[2].get("checked") or 0)[:VERIFY_PER_TICK]:
+            a = self.mailer.accounts.get(acc_id)
+            if not a:
+                continue
+            try:
+                where = await self._where(a, x)
+            except MailError:
+                continue   # the server didn't answer: try again later
+            except Exception:  # noqa: BLE001
+                _LOGGER.debug("Crow Messenger Email couldn't check a %s's email", kind, exc_info=True)
+                continue
+            lst = self.data[kind].get(acc_id, [])
+            if where is None or where["gone"]:
+                lst[:] = [y for y in lst if y is not x]
+                self._changed(a, kind)
+            else:
+                x.update({"folder": where["folder"], "uid": where["uid"], "checked": now})
+            self.mailer.save()
+
     # ── Bills ──────────────────────────────────────────────────────────────
     def bills_for(self, uid: str) -> list[dict]:
         out = []
@@ -222,6 +338,7 @@ class AiExtras:
                 self._changed(a, "bills")
         if changed:
             self.mailer.save()
+        await self.async_verify()
 
     async def _remind_bill(self, acc_id: str, x: dict, days: int) -> None:
         a = self.mailer.accounts.get(acc_id)

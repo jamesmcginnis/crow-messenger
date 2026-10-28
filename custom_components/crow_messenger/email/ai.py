@@ -330,7 +330,8 @@ async def analyse(hass: HomeAssistant, mailer: Mailer, msg: dict, want: set[str]
         asks.append('"parcel": null unless the email is about something being sent to the reader.' + not_these + ' Otherwise '
                     '{"item": "what it is, in a few words", "retailer": "", "courier": "", "status": one of '
                     + ", ".join(f'"{x}"' for x in PARCEL_STATUSES) +
-                    ', "expected": "YYYY-MM-DD" or "", "tracking": "tracking number" or "", "tracking_url": "" }')
+                    ', "expected": "YYYY-MM-DD" or "", "tracking": "tracking number" or "", "tracking_url": "", '
+                    '"order": "the shop\'s order number exactly as written, or \'\'" }')
     if "food" in want:
         asks.append('"food": null unless the email is about a takeaway or restaurant food order the reader placed (Just Eat, '
                     'Deliveroo, Uber Eats, Foodhub, Domino\'s, or a restaurant\'s own site), not groceries and not a table booking. '
@@ -392,6 +393,7 @@ async def analyse(hass: HomeAssistant, mailer: Mailer, msg: dict, want: set[str]
             "status": p.get("status") if p.get("status") in PARCEL_STATUSES else "in_transit",
             "expected": _date(p.get("expected")), "tracking": re.sub(r"\s+", "", str(p.get("tracking") or ""))[:60],
             "tracking_url": str(p.get("tracking_url") or "")[:500] if str(p.get("tracking_url") or "").startswith("https://") else "",
+            "order": re.sub(r"\s+", "", str(p.get("order") or ""))[:60],
         }
     out.update(read_finds(data, want))
     fd = data.get("food")

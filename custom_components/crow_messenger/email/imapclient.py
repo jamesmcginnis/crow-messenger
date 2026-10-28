@@ -102,6 +102,32 @@ def _uid_chunks(uids: list[int], limit: int = 6000) -> list[str]:
     return chunks
 
 
+def _uid_set(text: str) -> list[int]:
+    """1:3,7 → [1, 2, 3, 7] (a UID set from the server; either end of a range may come first)."""
+    out: list[int] = []
+    for part in text.split(","):
+        if ":" in part:
+            a, b = (int(x) for x in part.split(":", 1))
+            lo, hi = min(a, b), max(a, b)
+            if hi - lo > 200_000:
+                return []
+            out.extend(range(lo, hi + 1))
+        elif part.strip().isdigit():
+            out.append(int(part))
+    return out
+
+
+def _copyuid(code) -> dict[int, int]:
+    """A COPYUID response code (RFC 4315: validity, source UIDs, new UIDs) → {old UID: new UID}."""
+    try:
+        text = code.decode() if isinstance(code, bytes) else str(code)
+        _validity, src, dst = text.split()[:3]
+        a, b = _uid_set(src), _uid_set(dst)
+        return dict(zip(a, b)) if len(a) == len(b) else {}
+    except (ValueError, UnicodeDecodeError):
+        return {}
+
+
 class ImapConn:
     """One connection to an account's mail server."""
 
@@ -452,33 +478,67 @@ class ImapConn:
             return
         self.select(path)
         assert self.m is not None
-        typ, data = self.m.uid("STORE", ",".join(map(str, uids)), "+FLAGS.SILENT" if on else "-FLAGS.SILENT", f"({flag})")
-        _ok(typ, data, "change the email")
+        with self._patient():
+            for uidset in _uid_chunks(uids):
+                typ, data = self.m.uid("STORE", uidset, "+FLAGS.SILENT" if on else "-FLAGS.SILENT", f"({flag})")
+                _ok(typ, data, "change the email")
 
-    def move(self, path: str, uids: list[int], dest: str) -> None:
+    def move(self, path: str, uids: list[int], dest: str) -> dict[int, int]:
+        """Move emails to another folder. Answers where each one went (old UID → new UID in dest),
+        when the server says (UIDPLUS); an empty answer when it doesn't."""
         if not uids:
-            return
+            return {}
         self.select(path)
         assert self.m is not None
-        uidset = ",".join(map(str, uids))
-        if "MOVE" in self.caps:
-            typ, data = self.m.uid("MOVE", uidset, _q(dest))
-            _ok(typ, data, "move the email")
-            return
-        typ, data = self.m.uid("COPY", uidset, _q(dest))
-        _ok(typ, data, "move the email")
-        self.expunge(path, uids)
+        moved: dict[int, int] = {}
+        with self._patient():
+            for uidset in _uid_chunks(uids):
+                self.m.untagged_responses.pop("COPYUID", None)
+                if "MOVE" in self.caps:
+                    typ, data = self.m.uid("MOVE", uidset, _q(dest))
+                    _ok(typ, data, "move the email")
+                else:
+                    typ, data = self.m.uid("COPY", uidset, _q(dest))
+                    _ok(typ, data, "move the email")
+                for code in self.m.untagged_responses.pop("COPYUID", None) or []:
+                    moved.update(_copyuid(code))
+        if "MOVE" not in self.caps:
+            self.expunge(path, uids)
+        if self.selected == dest:
+            self.selected = None
+        return moved
 
     def expunge(self, path: str, uids: list[int]) -> None:
         self.select(path)
         assert self.m is not None
-        uidset = ",".join(map(str, uids))
-        typ, data = self.m.uid("STORE", uidset, "+FLAGS.SILENT", "(\\Deleted)")
-        _ok(typ, data, "delete the email")
-        if "UIDPLUS" in self.caps:
-            self.m.uid("EXPUNGE", uidset)
-        else:
-            self.m.expunge()
+        with self._patient():
+            for uidset in _uid_chunks(uids):
+                typ, data = self.m.uid("STORE", uidset, "+FLAGS.SILENT", "(\\Deleted)")
+                _ok(typ, data, "delete the email")
+                if "UIDPLUS" in self.caps:
+                    self.m.uid("EXPUNGE", uidset)
+            if "UIDPLUS" not in self.caps:
+                self.m.expunge()
+
+    def message_ids(self, path: str, uids: list[int]) -> dict[int, str]:
+        """The Message-ID of each email (to find them again after a move, when the server doesn't say where they went)."""
+        out: dict[int, str] = {}
+        if not uids:
+            return out
+        self.select(path)
+        assert self.m is not None
+        for i in range(0, len(uids), 500):
+            part = uids[i:i + 500]
+            typ, data = self.m.uid("FETCH", ",".join(str(u) for u in part), "(UID BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
+            if typ != "OK":
+                continue
+            for meta, lits, heads in self._group(data):
+                mu = re.search(rb"UID (\d+)", meta)
+                hdr = self._literal(lits, heads, b"HEADER.FIELDS") or b""
+                mm = re.search(rb"(?im)^message-id:\s*(<[^>\r\n]+>)", hdr)
+                if mu and mm:
+                    out[int(mu.group(1))] = mm.group(1).decode("ascii", "replace")
+        return out
 
     def light_headers(self, path: str, uids: list[int], fields: str = "FROM TO CC DATE") -> list[dict]:
         """Just a few headers of many emails (no previews): for the Subscriptions list and the Screener."""

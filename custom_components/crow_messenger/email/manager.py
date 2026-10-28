@@ -37,10 +37,12 @@ from .const import (
     SIGNAL_ACCOUNT_UPDATED, SIGNAL_ACCOUNTS_CHANGED, STORAGE_KEY, STORAGE_VERSION,
 )
 from .imapclient import ImapConn, ImapError, friendly
-from .mailparse import norm_subject, parse_message, sanitise_email_html, text_to_html, find_part
+from .mailparse import norm_subject, parse_message, preview_from, sanitise_email_html, text_to_html, find_part
 from .sendmail import SendError, build_message, clean_compose_html, quote_html, recipients, send
 
 _LOGGER = logging.getLogger(__name__)
+# without UIDPLUS the server won't say where moved emails went: Undo finds up to this many again by Message-ID
+UNDO_FIND_MAX = 2000
 
 
 def _plain_fallback(raw: bytes) -> dict:
@@ -544,25 +546,78 @@ class Account:
         if flag == "seen" and on and path == "INBOX":
             self.hass.async_create_task(self.mailer.badge.async_clear(self, uids))
 
-    async def async_move(self, path: str, uids: list[int], dest: str) -> None:
-        if dest == path:
+    async def async_move(self, path: str, uids: list[int], dest: str, record: list | None = None) -> None:
+        """Move emails. With record, notes where they went so the move can be undone."""
+        if dest == path or not uids:
             return
-        await self.job(self.cmd.move, path, uids, dest)
+        mids: dict[int, str] = {}
+        if record is not None and "UIDPLUS" not in self.cmd.caps and len(uids) <= UNDO_FIND_MAX:
+            # the server won't say where they went: remember each email's Message-ID to find it again
+            mids = await self.job(self.cmd.message_ids, path, uids)
+        moved = await self.job(self.cmd.move, path, uids, dest)
         for u in uids:
             self.raw_cache.pop((path, u), None)
         self.hass.async_create_task(self.async_counts())
+        if record is not None:
+            if moved:
+                record.append({"account": self.id, "src": path, "dest": dest, "uids": [moved[u] for u in uids if u in moved], "mids": []})
+            elif mids:
+                record.append({"account": self.id, "src": path, "dest": dest, "uids": [], "mids": list(mids.values())})
 
-    async def async_archive(self, path: str, uids: list[int]) -> str:
+    async def async_undo_move(self, step: dict) -> int:
+        """Put emails back where they were before a move (from a note made by async_move)."""
+        dest, src = step["dest"], step["src"]
+        uids = list(step.get("uids") or [])
+        if not uids and step.get("mids"):
+            def find():
+                self.cmd.selected = None
+                found = []
+                for mid in step["mids"]:
+                    u = self.cmd.find_message_id(dest, mid)
+                    if u:
+                        found.append(u)
+                return found
+            uids = await self.job(find)
+        if not uids:
+            return 0
+        await self.async_move(dest, uids, src)
+        return len(uids)
+
+    async def async_select_all(self, path: str, filt: str = "all") -> dict:
+        """Select All: how many emails there are, and the newest (so email that arrives afterwards isn't included)."""
+        crit = self._criteria(filt)
+        if not crit:
+            return {"total": 0, "upto": 0}
+
+        def run():
+            self.cmd.selected = None
+            uids = self.cmd.search(path, *crit)
+            return {"total": len(uids), "upto": max(uids) if uids else 0}
+        return await self.job(run)
+
+    async def async_all_uids(self, path: str, filt: str, upto: int, skip: set[int]) -> list[int]:
+        """Every email in a folder (matching the filter) up to the newest one Select All saw, less those left out."""
+        crit = self._criteria(filt)
+        if not crit or upto <= 0:
+            return []
+
+        def run():
+            self.cmd.selected = None
+            return self.cmd.search(path, *crit)
+        uids = await self.job(run)
+        return sorted(u for u in uids if u <= upto and u not in skip)
+
+    async def async_archive(self, path: str, uids: list[int], record: list | None = None) -> str:
         dest = await self.async_special("archive", create="Archive")
         if not dest or dest == path:
             raise MailError("invalid", "There's nowhere to archive to from here.")
-        await self.async_move(path, uids, dest)
+        await self.async_move(path, uids, dest, record)
         return dest
 
-    async def async_delete(self, path: str, uids: list[int]) -> str:
+    async def async_delete(self, path: str, uids: list[int], record: list | None = None) -> str:
         trash = await self.async_special("trash")
         if trash and path != trash:
-            await self.async_move(path, uids, trash)
+            await self.async_move(path, uids, trash, record)
             return "moved"
         await self.job(self.cmd.expunge, path, uids)
         self.hass.async_create_task(self.async_counts())
@@ -624,6 +679,7 @@ class Account:
                     self.mailer.smart.drop_parcels(self, path, gone)   # parcels from those emails go too
                     self.mailer.orders.drop(self, path, gone)
                     self.mailer.finds.drop(self, path, gone)
+                    self.mailer.aix.drop(self, path, gone)
                 except Exception:  # noqa: BLE001
                     _LOGGER.exception("Crow Messenger Email: couldn't tidy parcels after emptying %s", path)
             self._send_emptying(st)
@@ -1315,6 +1371,10 @@ class Mailer:
             # a vote on an email with voting buttons, or an email to Home Assistant: handled, no notification
             if await self.extras.async_new_mail(a, it):
                 return
+        # the preview is read from just the start of each email; a newsletter's start can be all page
+        # styling, leaving no words for its notification. Then the whole email is read, as Apple Mail does.
+        if not notify_preview(it.get("preview") or ""):
+            await self.async_fuller_preview(a, it)
         acc = a.acc
         owner = acc["owner"]
         frm = (it.get("from") or [{}])[0]
@@ -1412,6 +1472,18 @@ class Mailer:
         except Exception:  # noqa: BLE001
             path = self.data["here"].get(uid) or "/lovelace"
         return f"{path}{'&' if '?' in path else '?'}crow_email={query}"
+
+    async def async_fuller_preview(self, a: Account, it: dict) -> None:
+        """A preview from the whole email (remembered for the list too), when its start had no words."""
+        try:
+            raw = await a.async_raw(it.get("folder") or "INBOX", it["uid"])
+            p = await self.hass.async_add_executor_job(preview_from, raw)
+        except Exception as err:  # noqa: BLE001 - a preview is a nice-to-have
+            _LOGGER.debug("Crow Messenger Email couldn't read email %s for its preview: %s", it.get("uid"), err)
+            return
+        if p:
+            it["preview"] = p
+            a.previews.setdefault(it.get("folder") or "INBOX", {})[it["uid"]] = p
 
     async def async_notify_mail(self, a: Account, it: dict, vip: bool, quiet: bool = False) -> None:
         from . import notifyplus

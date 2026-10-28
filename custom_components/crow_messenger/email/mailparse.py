@@ -174,8 +174,12 @@ def preview_from(raw: bytes) -> str:
             plain = _part_text(part)
         elif ctype == "text/html" and not html:
             html = _part_text(part)
-    text = plain or html_to_text(html)
-    text = clean_preview(text)
+    text = clean_preview(plain)
+    # a plain-text part that's only a "view it in your browser" link (or empty): the HTML has the words
+    words = re.sub(r"(?:https?://|www\.)\S+|<[^>]*>", " ", text)
+    words = re.sub(r"(?i)\b(?:view|read|open)\b[^.!?\n]{0,40}?\bbrowser\b|having trouble (?:viewing|reading)[^.!?\n]{0,30}", " ", words)
+    if html and len(re.sub(r"[\W_]+", "", words)) < 20:
+        text = clean_preview(html_to_text(html)) or text
     # some senders put HTML codes (like &#8204;) in the plain text too, and invisible spacers
     # (zero-width characters) to pad the preview other mail apps show: neither is wanted here
     text = html_lib.unescape(text)
