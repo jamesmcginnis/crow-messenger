@@ -7,9 +7,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '0.1.2';
+const CM_VERSION = '0.1.3';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '26 Oct 2026 07:25';
+const CM_BUILD = '27 Oct 2026 05:10';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -95,6 +95,20 @@ const START_VIEWS = [
   ['messages', 'Messages'], ['contacts', 'Contacts'], ['feed', 'Feed'], ['email', 'Email'],
   ['feed_videos', 'Feed · Videos'], ['feed_groups', 'Feed · Groups'], ['feed_events', 'Feed · Events'], ['feed_alerts', 'Feed · Notifications'],
 ];
+// ── Side by side on a wide card: the conversations on the left, the open conversation on the right ──
+const SPLIT_CSS = `
+.sp-empty { display: none; }
+:host([data-split]) { --cm-spw: clamp(300px, 34%, 420px); }
+:host([data-split]) .page.sp-side { right: auto; width: var(--cm-spw); }
+:host([data-split]) .page.sp-main { left: var(--cm-spw); border-left: 0.5px solid var(--cm-sep); }
+:host([data-split]) .page.sp-first > .top > [data-a="back"] { visibility: hidden; pointer-events: none; }
+:host([data-split]) .cm-root.sp-none > .sp-empty { display: flex; position: absolute; top: 0; bottom: 0; right: 0; left: var(--cm-spw);
+  flex-direction: column; align-items: center; justify-content: center; gap: 12px; color: var(--cm-text3); font-size: 20px; font-weight: 600;
+  border-left: 0.5px solid var(--cm-sep); }
+:host([data-split]) .sp-empty svg { width: 54px; height: 54px; opacity: 0.7; }
+:host([data-split]) .page.sp-side .row.sp-sel > .row-inner::before { content: ''; position: absolute; inset: -8px -10px -8px -2px; border-radius: 12px; background: var(--cm-fill); z-index: -1; }
+`;
+
 const APP_DESTS = [
   // dot: the red dot when there's something new there (never on the screen you're on)
   { id: 'messages', label: 'Messages', icon: MSG_ICON, cls: 'msgbtn', page: 'list', show: (c) => !c._config.feed_only,
@@ -2380,7 +2394,7 @@ class CrowMessengerCard extends HTMLElement {
   // ── Build & theme ──────────────────────────────────────────────────────────
   _build() {
     this._built = true;
-    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${SKIN_CSS}${RS_CSS}${SIZE_CSS}${Object.values(CrowMessengerCard.lazyCss || {}).join('')}</style><ha-card><div class="cm-root"><div class="cm-pages"></div></div><button type="button" class="rs-win" data-rs>${RS_WIN_ICON}</button></ha-card>`;
+    this.shadowRoot.innerHTML = `<style>${CM_CSS}${CM_EXTRA_CSS}${CM_MORE_CSS}${SKIN_CSS}${RS_CSS}${SIZE_CSS}${SPLIT_CSS}${Object.values(CrowMessengerCard.lazyCss || {}).join('')}</style><ha-card><div class="cm-root"><div class="sp-empty">${ICON.bubble}<span>No Conversation Selected</span></div><div class="cm-pages"></div></div><button type="button" class="rs-win" data-rs>${RS_WIN_ICON}</button></ha-card>`;
     this._root = this.shadowRoot.querySelector('.cm-root');
     // the app bar's places work the same on every screen that has one
     this._root.addEventListener('click', (e) => { const b = e.target.closest('[data-app]'); if (b && this._root.contains(b)) { e.stopPropagation(); this._appGo(b.dataset.app); } });
@@ -2402,6 +2416,20 @@ class CrowMessengerCard extends HTMLElement {
       img.replaceWith(box);
     }, true);
     this._pagesEl.innerHTML = '';
+    this._split = false;
+    this.removeAttribute('data-split');
+    // on a wide card (full screen on a tablet or computer, or a Panel view): the conversations
+    // beside the open conversation, as Messages does on an iPad or Mac
+    try {
+      this._spRO?.disconnect();
+      this._spRO = new ResizeObserver(() => {
+        const wide = !this._config.feed_only && this._config.wide_layout !== 'off' && (this._root?.clientWidth || 0) >= 860;
+        if (wide === !!this._wide) return;
+        this._wide = wide;
+        this._relayout();
+      });
+      this._spRO.observe(this._root);
+    } catch (e) { /* older browsers: one screen at a time */ }
     this._nav(this._config.feed_only ? 'floading' : 'list', {}, { anim: false });
   }
 
@@ -2813,11 +2841,35 @@ class CrowMessengerCard extends HTMLElement {
     }
     // a Feed notification: the post (and the comment), or a group you were added to
     // a Copy Link of a photo or video opens the post with it showing
-    if (fpost) this._openFeed('fpost', { pid: fpost, cid: fcomment || null, media: fmedia || null });
-    else if (fgroup) this._openFeed('fgroup', { gid: fgroup });
-    else if (fprofile) this._openFeed('fprofile', { uid: fprofile });
-    else if (fstory) this._openFeed('feed', {}).then(() => this._fopenStory?.(fstory));
-    else if (ffeed) this._openFeed('feed', ffeed === 'alerts' ? { view: 'alerts' } : {});
+    // (the Feed sits underneath, so Back stays in the Feed; and what it was about counts as read)
+    if (fpost) {
+      this._openFeedLink('fpost', { pid: fpost, cid: fcomment || null, media: fmedia || null })
+        .then((pg) => { if (pg) this._ws('feed/notifications/read_post', { post_id: fpost, ...(fcomment ? { comment_id: fcomment } : {}) }).catch(() => {}); });
+    } else if (fgroup) {
+      this._openFeedLink('fgroup', { gid: fgroup })
+        .then((pg) => { if (pg) this._ws('feed/notifications/read', { keys: [`group:${fgroup}`] }).catch(() => {}); });
+    } else if (fprofile) this._openFeedLink('fprofile', { uid: fprofile });
+    else if (fstory) this._openFeedLink('feed', {}).then(() => this._fopenStory?.(fstory));
+    else if (ffeed) this._openFeedLink('feed', ffeed === 'alerts' ? { view: 'alerts' } : {});
+  }
+
+  // A Feed notification (or a link into the Feed): opened with the Feed itself underneath, so Back
+  // goes to the Feed rather than to whatever was open before (Email, a chat, Contacts…)
+  async _openFeedLink(type, data = {}) {
+    if (!this._s.feed?.enabled) { this._toast('The Feed is switched off'); return null; }
+    if (this._config.feed_only) await this._feedOnlyStart?.();
+    else {
+      try { await this._loadFeed(); } catch (err) { return this._openFeed(type, data); }
+      const at = this._stack.findIndex(p => p.type === 'feed');
+      if (at >= 0) { while (this._stack.length > at + 1) this._back(false); }
+      else {
+        while (this._stack.length > 1) this._back(false);
+        if (!(await this._openFeed('feed', {}, { anim: false }))) return null;
+      }
+    }
+    const top = this._stack[this._stack.length - 1];
+    if (type === 'feed' && !data.view && top?.type === 'feed') return top;
+    return this._openFeed(type, data);
   }
 
   // ── The Feed (its screens are a separate file, loaded the first time it's opened) ──
@@ -3141,7 +3193,15 @@ class CrowMessengerCard extends HTMLElement {
   }
   _userPic(uid) {
     if (uid === HA_ID) return null;
-    return this._contactForUser(uid)?.photo || this._s.users.get(uid)?.picture || null;
+    return this._pickPic(this._contactForUser(uid), this._s.users.get(uid));
+  }
+  // Someone in the household: the photo on your contact card for them, or the picture they share of
+  // themselves, whichever is newer. So a new profile picture reaches everyone (even people who saved an
+  // older copy on a contact card), and a photo you put on their card afterwards still shows for you.
+  _pickPic(contact, user) {
+    const own = user?.photo_at || 0;
+    if (contact?.photo && (!own || (contact.photo_at || 0) > own)) return contact.photo;
+    return user?.picture || contact?.photo || null;
   }
   _picUrl(pic) { return !pic ? '' : /^(data:|https?:)/.test(pic) ? pic : this._hass.hassUrl(pic); }
 
@@ -3214,22 +3274,66 @@ class CrowMessengerCard extends HTMLElement {
     const page = this[`_pg_${type}`](data);
     page.type = type; page.data = data;
     page.el.classList.add('page');
+    // the conversation list keeps showing which conversation is open beside it
+    if (type === 'list' && page.refresh) { const r = page.refresh; page.refresh = (...a) => { const out = r(...a); this._splitMark(); return out; }; }
     const prev = this._stack[this._stack.length - 1];
     this._pagesEl.appendChild(page.el);
     this._stack.push(page);
-    const animate = anim && prev && this._config.animations !== false;
-    if (prev) {
+    // side by side: the list stays where it is and the conversation appears beside it
+    const besideList = this._wide && prev && this._stack.length === 2 && this._splitFor(this._stack);
+    const animate = anim && prev && this._config.animations !== false && !besideList;
+    if (besideList) {
+      prev.onHide?.();
+      this._relayout();
+    } else if (prev) {
       prev.onHide?.();
       if (animate) {
         prev.el.classList.add('anim-out'); page.el.classList.add('anim-in');
         setTimeout(() => { prev.el.classList.remove('anim-out'); page.el.classList.remove('anim-in'); if (this._stack.includes(prev) && this._stack[this._stack.length - 1] !== prev) prev.el.style.display = 'none'; }, 400);
       } else prev.el.style.display = 'none';
+      if (this._wide || this._split) this._relayout(true);
     }
     page.refresh?.('all');
     page.onShow?.();
     this._reportFocus();
     this._rsSync();
     return page;
+  }
+
+  // ── Side by side (a wide card) ─────────────────────────────────────────────
+  // side by side while the front screen is Messages and what's open over it belongs to Messages
+  // (a conversation, its details…), not another place in the app bar (Contacts, Maps, the Feed, Email)
+  _splitFor(st) {
+    if (!this._wide || st[0]?.type !== 'list') return false;
+    return !st[1] || !APP_DESTS.some(d => d.page === st[1].type && d.page !== 'list');
+  }
+
+  // keep: leave the page under the top one alone while it's still sliding away
+  _relayout(keep = false) {
+    const st = this._stack, top = st.length - 1;
+    if (!this._root || !st.length) return;
+    const split = this._splitFor(st);
+    this._split = split;
+    this.toggleAttribute('data-split', split);
+    this._root.classList.toggle('sp-none', split && st.length === 1);
+    st.forEach((p, i) => {
+      p.el.classList.toggle('sp-side', split && i === 0);
+      p.el.classList.toggle('sp-main', split && i > 0);
+      p.el.classList.toggle('sp-first', split && i === 1);
+      if (split && i === 0) { p.el.classList.remove('anim-out', 'anim-back-in'); p.el.style.display = ''; }
+      else if (i === top) p.el.style.display = '';
+      else if (!(keep && i === top - 1)) p.el.style.display = 'none';
+    });
+    this._splitMark();
+    this._barFit?.();
+  }
+
+  // the open conversation, highlighted in the list beside it
+  _splitMark() {
+    const list = this._stack?.[0];
+    if (!list || list.type !== 'list') return;
+    const open = this._split ? this._stack.find(p => p.type === 'thread')?.data?.tid : null;
+    list.el.querySelectorAll('.row[data-tid]').forEach(r => r.classList.toggle('sp-sel', !!open && r.dataset.tid === open && !r.dataset.mid));
   }
 
   // ── The app bar (Messages, Feed, and more later) ──────────────────────────
@@ -3341,6 +3445,7 @@ class CrowMessengerCard extends HTMLElement {
     if (!d) return;
     const top = this._stack[this._stack.length - 1];
     const at = this._stack.findIndex(p => p.type === d.page);
+    if (this._split && at === 0) { this._stack[0].el.querySelector('.scroll')?.scrollTo({ top: 0, behavior: 'smooth' }); return; }
     if (top && at === this._stack.length - 1) {
       if (top.mail) top.mail._hostHome?.(); else top.el.querySelector('.scroll')?.scrollTo({ top: 0, behavior: 'smooth' });
       return;
@@ -3354,16 +3459,19 @@ class CrowMessengerCard extends HTMLElement {
 
   _back(anim = true) {
     if (this._stack.length <= 1) return;
+    const wasSplit = this._split;
     const cur = this._stack.pop();
     const prev = this._stack[this._stack.length - 1];
     cur.onHide?.();
     prev.el.style.display = '';
-    const animate = anim && this._config.animations !== false;
+    // side by side, closing the conversation beside the list leaves the list where it is
+    const animate = anim && this._config.animations !== false && !(wasSplit && this._stack.length === 1);
     if (animate) {
       cur.el.classList.add('anim-back-out'); prev.el.classList.add('anim-back-in');
       setTimeout(() => { cur.el.remove(); prev.el.classList.remove('anim-back-in'); }, 360);
     } else cur.el.remove();
     cur.destroy?.();
+    if (this._wide || wasSplit) this._relayout();
     prev.refresh?.('all');
     prev.onShow?.();
     this._reportFocus();
@@ -3613,6 +3721,12 @@ class CrowMessengerCard extends HTMLElement {
   _openThread(tid, opts = {}) {
     const top = this._stack[this._stack.length - 1];
     if (top?.type === 'thread' && top.data.tid === tid) return;
+    // side by side: another conversation takes the place of the one beside the list
+    if (this._split) {
+      while (this._stack.length > 1) this._back(false);
+      this._nav('thread', { tid }, { ...opts, anim: false, reset: false });
+      return;
+    }
     this._nav('thread', { tid }, opts);
   }
 
@@ -10973,8 +11087,8 @@ Object.assign(CrowMessengerCard.prototype, {
 
   // A contact's photo, or the linked Home Assistant user's picture when it has none.
   _contactPic(c) {
-    if (c.photo) return c.photo;
-    return c.ha_user ? this._s.users.get(c.ha_user)?.picture || null : null;
+    if (c.ha_user) return this._pickPic(c, this._s.users.get(c.ha_user));
+    return c.photo || null;
   },
 
   async _picToDataUrl(pic) {
@@ -12103,7 +12217,7 @@ Object.assign(CrowMessengerCard.prototype, {
       out.push({
         eid, uid, me: uid && uid === s.me, contact,
         name: contact ? contactName(contact, this._config.contact_display) : (uid && s.users.get(uid) ? this._userName(uid) : st.attributes.friendly_name || eid),
-        pic: contact?.photo || (uid && s.users.get(uid)?.picture) || st.attributes.entity_picture || null,
+        pic: (uid ? this._pickPic(contact, s.users.get(uid)) : contact?.photo) || st.attributes.entity_picture || null,
         lat, lon, has, ts, stale, state: st.state, source: st.attributes.source,
         fav: !!contact?.favourite,
       });

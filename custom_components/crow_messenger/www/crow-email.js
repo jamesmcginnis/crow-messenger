@@ -15,8 +15,8 @@
 const Card = window.__crowMessengerCard || customElements.get('crow-messenger-card');
 if (!Card || Card.lazyReady?.email) return;
 
-const CE_VERSION = '0.1.2';
-const CE_BUILD = '25 Oct 2026';
+const CE_VERSION = '0.1.3';
+const CE_BUILD = '27 Oct 2026';
 const DOMAIN = 'crow_messenger_email';
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -96,6 +96,9 @@ const ICON = {
   people: _s('<circle cx="9" cy="8.5" r="3.3"/><path d="M3 19c.9-3 3.1-4.6 6-4.6s5.1 1.6 6 4.6M15.5 5.5a3.2 3.2 0 010 6.2M18 14.8c1.5.6 2.6 2 3 4.2"/>'),
   today: _s('<rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/><path d="M3.5 10h17M8 3v4M16 3v4"/><circle cx="12" cy="15" r="1.6" fill="currentColor"/>'),
   catchup: _s('<rect x="3" y="9" width="18" height="12" rx="2.5"/><path d="M3.5 10.5l8.5 6 8.5-6M6 6h12M8.5 3h7"/>'),
+  selAll: _s('<path d="M3.8 7.4l2.3 2.3 3.9-4.1"/><path d="M3.8 16.4l2.3 2.3 3.9-4.1"/><path d="M13.5 7.6h6.7M13.5 16.6h6.7"/>'),
+  selNone: _s('<circle cx="6.6" cy="7.6" r="2.6"/><circle cx="6.6" cy="16.6" r="2.6"/><path d="M13.5 7.6h6.7M13.5 16.6h6.7"/>'),
+  selcircle: _s('<circle cx="12" cy="12" r="8.6"/><path d="M8.2 12.3l2.6 2.6 5-5.2"/>'),
   todo: _s('<rect x="4" y="4" width="16" height="16" rx="3.5"/><path d="M8.5 12.2l2.4 2.4 4.6-5"/>'),
   mail: _s('<rect x="3" y="5" width="18" height="14" rx="2.5"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/>'),
   mailOpen: _s('<path d="M3 10l9-6 9 6v8.5a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3.5 10.5l8.5 5.5 8.5-5.5"/>'),
@@ -825,10 +828,22 @@ a { color: var(--ce-accent); }
 .erow::after { content: ''; position: absolute; bottom: 0; left: 28px; right: 0; height: 0.5px; background: var(--ce-sep); z-index: 2; }
 .erow.av-on::after { left: 78px; }
 .erow:active .inner { background: var(--ce-fill2); }
-.erow.selected .inner { background: color-mix(in srgb, var(--ce-accent) 14%, transparent); }
+.erow.selected .inner { background: color-mix(in srgb, var(--ce-text) 11%, var(--ce-bg)); }
+:host([data-style="glass"]) .erow.selected .inner { background: color-mix(in srgb, var(--ce-text) 11%, transparent); }
 .erow .selc { width: 24px; height: 24px; border-radius: 50%; border: 1.5px solid var(--ce-text3); flex-shrink: 0; display: none; align-items: center; justify-content: center; color: #fff; align-self: center; margin-left: 8px; }
-.editing .erow .selc { display: flex; }
+.editing .erow .selc { display: flex; margin-left: 0; }
 .editing .erow .lead { display: none; }
+.erow .selz { display: none; }
+.editing .erow .selz { display: flex; order: -1; align-self: stretch; align-items: center; justify-content: center; width: 40px; margin: -11px -4px -11px -6px; padding-left: 4px; flex-shrink: 0; touch-action: none; cursor: ns-resize; }
+.mlist.editing .erow .inner { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.mlist.editing .c-chk { touch-action: none; }
+.top.compact.selecting .ttl { text-align: center; padding-left: 56px; }
+.top.compact.selecting .tt { font-size: 18px; }
+.top.compact.selecting .ts { display: none; }
+.editbar .cb[data-e="more"] { width: 48px; height: 48px; }
+/* Done: a glass button like the others at the top, with the tick in the accent colour */
+.top .cb.sel-done { color: var(--ce-accent); }
+.top .cb.sel-done svg { stroke-width: 2.8; }
 .erow .selc.on { background: var(--ce-accent); border-color: var(--ce-accent); }
 .erow .selc svg { width: 14px; height: 14px; }
 .erow .acts { position: absolute; top: 0; bottom: 0; display: flex; z-index: 0; visibility: hidden; }
@@ -1051,12 +1066,20 @@ a { color: var(--ce-accent); }
 .crow-ios-msg { font-size: 15px; line-height: 1.42; margin-top: 6px; padding: 0 8px; color: var(--crow-ios-sub); white-space: pre-line; word-break: break-word; }
 .crow-ios-input { margin: 14px 4px 0; width: calc(100% - 8px); height: 44px; border-radius: 14px; border: none; outline: none; padding: 0 14px; font-size: 16px;
   background: var(--crow-ios-pill); color: var(--crow-ios-text); user-select: text; -webkit-user-select: text; }
-.crow-ios-btns { display: flex; flex-direction: column; gap: 9px; margin-top: 22px; }
-.crow-ios-btns button { display: block; width: 100%; padding: 14px 16px; border-radius: 999px; font-size: 17px; font-weight: 600; transition: transform 0.12s ease; }
-.crow-ios-btns button:active { transform: scale(0.97); }
+/* two pill buttons side by side, Cancel on the left, as in Messages and the Feed (stacked when there are more) */
+.crow-ios-btns { display: flex; flex-direction: row; gap: 8px; margin-top: 20px; }
+.crow-ios-btns.stack { flex-direction: column; }
+.crow-ios-btns button { display: flex; align-items: center; justify-content: center; box-sizing: border-box; text-align: center; line-height: 1.2;
+  flex: 1 1 0; min-width: 0; min-height: 44px; padding: 11px 14px; margin: 0; border: none; border-radius: 999px;
+  font-size: 17px; font-weight: 500; font-family: inherit; cursor: pointer; -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, filter 0.12s ease; }
+.crow-ios-btns button:active { transform: scale(0.97); filter: brightness(1.15); }
+/* every button is a grey pill; the action is told apart by its colour: red to delete, the accent otherwise */
 .crow-ios-btns .crow-ios-cancel { background: var(--crow-ios-pill); color: var(--crow-ios-text); }
-.crow-ios-btns .crow-ios-ok { background: #4AA8F5; color: #fff; }
-.crow-ios-btns .crow-ios-ok.destructive { background: #FF3B30; }
+.crow-ios-btns .crow-ios-ok { background: var(--crow-ios-pill); color: var(--ce-accent, #0A84FF); font-weight: 600; }
+.crow-ios-btns .crow-ios-ok.destructive { color: #FF453A; font-weight: 500; }
+:host([data-mode="light"]) .crow-ios-btns .crow-ios-ok.destructive { color: #FF3B30; }
+:host([data-mode="dark"]) .crow-ios-btns .crow-ios-ok:not(.destructive) { color: color-mix(in srgb, var(--ce-accent, #0A84FF) 78%, #fff); }
 .menu-wrap { position: absolute; inset: 0; z-index: 50; }
 .menu { position: absolute; min-width: 230px; max-width: calc(100% - 28px); border-radius: 22px; padding: 6px 0; overflow: hidden;
   background: var(--ce-glass-strong); backdrop-filter: blur(34px) saturate(1.8); -webkit-backdrop-filter: blur(34px) saturate(1.8);
@@ -1121,19 +1144,10 @@ a { color: var(--ce-accent); }
 }
 :host([data-style="glass"]) .crow-ios-alert > * { position: relative; }
 :host([data-style="glass"]) .crow-ios-msg { color: rgba(235,235,245,0.72) !important; }
-:host([data-style="glass"]) .crow-ios-btns .crow-ios-cancel {
+:host([data-style="glass"]) .crow-ios-btns .crow-ios-cancel, :host([data-style="glass"]) .crow-ios-btns .crow-ios-ok {
   background: rgba(255,255,255,0.12); border: 0.5px solid rgba(255,255,255,0.2);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.25);
   backdrop-filter: blur(12px) saturate(1.6); -webkit-backdrop-filter: blur(12px) saturate(1.6);
-}
-:host([data-style="glass"]) .crow-ios-btns .crow-ios-ok {
-  background: linear-gradient(180deg, color-mix(in srgb, var(--ce-accent, #007AFF) 95%, transparent), color-mix(in srgb, var(--ce-accent, #007AFF) 78%, transparent));
-  box-shadow: 0 8px 22px color-mix(in srgb, var(--ce-accent, #007AFF) 35%, transparent), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.12);
-}
-/* a destructive button (e.g. Delete) keeps its red, as tinted glass */
-:host([data-style="glass"]) .crow-ios-btns .crow-ios-ok.destructive {
-  background: linear-gradient(180deg, rgba(255,69,58,0.92), rgba(220,40,30,0.85)) !important;
-  box-shadow: 0 8px 22px rgba(255,59,48,0.35), inset 0 1px 0 rgba(255,255,255,0.45), inset 0 -1px 0 rgba(0,0,0,0.12);
 }
 :host([data-style="glass"]) .crow-ios-input { background: rgba(255,255,255,0.12); border: 0.5px solid rgba(255,255,255,0.2); box-shadow: inset 0 1px 0 rgba(255,255,255,0.25); }
 /* light panels */
@@ -1149,6 +1163,9 @@ a { color: var(--ce-accent); }
 :host([data-style="glass"][data-mode="light"]) .crow-ios-btns .crow-ios-cancel, :host([data-style="glass"][data-mode="light"]) .crow-ios-input {
   background: rgba(255,255,255,0.62); border-color: rgba(0,0,0,0.07);
   box-shadow: inset 0 1px 0 #ffffff, 0 1px 3px rgba(0,0,0,0.08); color: #000;
+}
+:host([data-style="glass"][data-mode="light"]) .crow-ios-btns .crow-ios-ok {
+  background: rgba(255,255,255,0.62); border-color: rgba(0,0,0,0.07); box-shadow: inset 0 1px 0 #ffffff, 0 1px 3px rgba(0,0,0,0.08);
 }
 
 /* menus: the same Liquid Glass panel */
@@ -1283,7 +1300,9 @@ const WIDE_CSS = `
 :host([data-wide]) .page.col-a { right: auto; width: var(--ce-ca); }
 :host([data-wide]) .page.col-b { left: var(--ce-ca); right: auto; width: var(--ce-cb); border-left: 0.5px solid var(--ce-sep); }
 :host([data-wide]) .page.col-c { left: calc(var(--ce-ca) + var(--ce-cb)); border-left: 0.5px solid var(--ce-sep); }
-:host([data-wide]) .page.col-b .top [data-a="back"], :host([data-wide]) .page.col-c .top [data-a="back"] { display: none; }
+:host([data-wide]) .page.col-b .top [data-a="back"], :host([data-wide]) .page.col-c:not(.col-solo) .top [data-a="back"] { display: none; }
+:host([data-wide]) .page.col-ab { right: auto; width: calc(var(--ce-ca) + var(--ce-cb)); }
+:host([data-wide]) .page.col-ab.col-a-only { width: var(--ce-ca); }
 :host([data-wide]) .page.col-a .large-title { font-size: 28px; }
 `;
 
@@ -1568,11 +1587,19 @@ class CrowMessengerEmail extends HTMLElement {
     }
     let lastNon = -1;
     st.forEach((p, i) => { if (!this._isCol(p) && p.type !== 'loading') lastNon = i; });
+    // an email opened from a screen like Bills, Parcels or Appointments: that screen stays on the left,
+    // where the mailboxes and the list would be, so there's always a way back
+    const after = st.slice(lastNon + 1).map(p => p.type);
+    const host = lastNon >= 0 && after.length && !after.includes('mailboxes') ? lastNon : -1;
     st.forEach((p, i) => {
-      p.el.classList.remove('col-a', 'col-b', 'col-c', 'anim-in', 'anim-out', 'anim-back-in');
+      p.el.classList.remove('col-a', 'col-b', 'col-c', 'col-ab', 'col-a-only', 'col-solo', 'anim-in', 'anim-out', 'anim-back-in');
       if (this._isCol(p) && i > lastNon) { p.el.classList.add({ mailboxes: 'col-a', list: 'col-b', reader: 'col-c' }[p.type]); p.el.style.display = ''; }
+      else if (i === host) { p.el.classList.add('col-ab'); if (after.includes('list')) p.el.classList.add('col-a-only'); p.el.style.display = ''; }
       else p.el.style.display = i === top ? '' : 'none';
     });
+    // an email with nothing beside it keeps its Back button
+    const reader = st[top]?.type === 'reader' ? st[top] : null;
+    if (reader && !st.some(p => p !== reader && p.el.style.display !== 'none')) reader.el.classList.add('col-solo');
     // wide: there's always a list showing beside the mailboxes
     // (a moment later, so code that steps back to the start can finish first)
     clearTimeout(this._autoList);
@@ -1743,14 +1770,16 @@ class CrowMessengerEmail extends HTMLElement {
 
   // ── Small UI pieces: alert, menu, toast, sheet ─────────────────────────
   _alert({ title, message, input, buttons }) {
-    // Cancel always sits at the bottom, under the action
-    buttons = [...buttons.filter(b => b.style !== 'cancel'), ...buttons.filter(b => b.style === 'cancel')];
+    // two buttons sit side by side with Cancel on the left, as on an iPhone; more are stacked with Cancel last
+    const stack = buttons.length > 2;
+    buttons = stack ? [...buttons.filter(b => b.style !== 'cancel'), ...buttons.filter(b => b.style === 'cancel')]
+      : [...buttons.filter(b => b.style === 'cancel'), ...buttons.filter(b => b.style !== 'cancel')];
     return new Promise((resolve) => {
       const back = this._el(`<div class="crow-ios-backdrop"><div class="crow-ios-alert" role="alertdialog">
         ${title ? `<div class="crow-ios-title">${esc(title)}</div>` : ''}
         ${message ? `<div class="crow-ios-msg">${esc(message)}</div>` : ''}
         ${input ? `<input class="crow-ios-input" type="${input.type || 'text'}" value="${esc(input.value || '')}" placeholder="${esc(input.placeholder || '')}">` : ''}
-        <div class="crow-ios-btns">${buttons.map((b, i) => `<button data-i="${i}" class="${b.style === 'cancel' ? 'crow-ios-cancel' : `crow-ios-ok${b.style === 'destructive' ? ' destructive' : ''}`}">${esc(b.text)}</button>`).join('')}</div>
+        <div class="crow-ios-btns${stack ? ' stack' : ''}">${buttons.map((b, i) => `<button data-i="${i}" class="${b.style === 'cancel' ? 'crow-ios-cancel' : `crow-ios-ok${b.style === 'destructive' ? ' destructive' : ''}`}">${esc(b.text)}</button>`).join('')}</div>
       </div></div>`);
       this._root.appendChild(back);
       this._root.classList.add('alerting');
@@ -2153,7 +2182,7 @@ Object.assign(CrowMessengerEmail.prototype, {
         </div>
         <span class="dwhen">${esc(date)}</span>
         <button class="starc${it.flagged ? ' on' : ''}" data-star="1" aria-label="Star">${it.flagged ? ICON.starF : ICON.star}</button>
-        <div class="selc${selected ? ' on' : ''}">${selected ? ICON.check : ''}</div>
+        <span class="selz"><span class="selc${selected ? ' on' : ''}">${selected ? ICON.check : ''}</span></span>
       </div></div>`;
   },
 
@@ -2172,15 +2201,23 @@ Object.assign(CrowMessengerEmail.prototype, {
   async _bulk(items, action, extra) {
     const groups = new Map();
     items.forEach(it => { const k = `${it.account}|${it.folder}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(it); });
+    const undo = [];   // where the server can put them back: one token per batch
     for (const list of groups.values()) {
       const { account, folder } = list[0];
-      const uids = list.map(i => i.uid);
-      if (action === 'archive') await this._call('archive', { account, folder, uids });
-      else if (action === 'trash') await this._call('delete', { account, folder, uids });
-      else if (action === 'junk') await this._call('junk', { account, folder, uids });
-      else if (action === 'move') await this._call('move', { account, folder, uids, to: extra });
-      else if (action === 'seen' || action === 'flagged') await this._call('flag', { account, folder, uids, flag: action, on: extra });
+      const all = list.map(i => i.uid);
+      // the server takes 500 at a time
+      for (let i = 0; i < all.length; i += 500) {
+        const uids = all.slice(i, i + 500);
+        let r = null;
+        if (action === 'archive') r = await this._call('archive', { account, folder, uids });
+        else if (action === 'trash') r = await this._call('delete', { account, folder, uids });
+        else if (action === 'junk') r = await this._call('junk', { account, folder, uids });
+        else if (action === 'move') r = await this._call('move', { account, folder, uids, to: extra });
+        else if (action === 'seen' || action === 'flagged') await this._call('flag', { account, folder, uids, flag: action, on: extra });
+        if (r?.undo) undo.push(r.undo);
+      }
     }
+    return undo;
   },
 
   async _pickFolder(account, current, title = 'Move to…') {
@@ -2217,7 +2254,7 @@ Object.assign(CrowMessengerEmail.prototype, {
     const acc = combined ? null : this._acc(data.account);
     const baseTitle = combined ? (SMART[data.kind]?.name || 'Inbox') + (data.kind === 'inbox' && !this._multi() ? '' : '') : this._folderName(data.account, data.folder);
     const title = combined && data.kind === 'inbox' && !this._multi() ? 'Inbox' : baseTitle;
-    const st = { items: [], total: 0, offset: 0, cursor: {}, filter: 'all', loading: false, done: false, editing: false, selected: new Set(), query: '', searching: false, errors: {}, cat: 'all', ai: false, explain: '', suggestAi: false };
+    const st = { items: [], total: 0, offset: 0, cursor: {}, filter: 'all', loading: false, done: false, editing: false, selected: new Set(), all: null, query: '', searching: false, errors: {}, cat: 'all', ai: false, explain: '', suggestAi: false };
     const isSent = () => !combined && (this._isSpecial(data.account, data.folder, 'sent'));
     const isDrafts = () => !combined && (this._isSpecial(data.account, data.folder, 'drafts'));
     const isInbox = () => combined ? data.kind === 'inbox' : data.folder === 'INBOX';
@@ -2253,7 +2290,7 @@ Object.assign(CrowMessengerEmail.prototype, {
 
     const el = this._el(`<div class="listpg">
       <div class="top compact"><button class="cb g" data-a="back" aria-label="Back">${ICON.back}</button><div class="ttl"><div class="tt">${esc(title)}</div><div class="ts"></div></div>
-        <div class="right"><button class="pill g" data-a="select" hidden>Done</button><div class="capsule g fs-host top-cap"><button class="refresh" data-a="refresh" aria-label="Check for New Mail" title="Check for New Mail">${ICON.refresh}</button><button data-a="contacts" aria-label="Contacts" title="Contacts">${ICON.contacts}</button><button data-a="more" aria-label="More" title="More">${ICON.more}</button></div></div></div>
+        <div class="right"><button class="cb g sel-done" data-a="select" aria-label="Done" title="Done" hidden>${ICON.check}</button><div class="capsule g fs-host top-cap"><button class="refresh" data-a="refresh" aria-label="Check for New Mail" title="Check for New Mail">${ICON.refresh}</button><button data-a="contacts" aria-label="Contacts" title="Contacts">${ICON.contacts}</button><button data-a="more" aria-label="More" title="More">${ICON.more}</button></div></div></div>
       <div class="edge top tall"></div>
       <div class="tabs"><button data-tab="focused" class="on">Focused</button><button data-tab="other">Other</button></div>
       <div class="skinbar"></div>
@@ -2266,9 +2303,9 @@ Object.assign(CrowMessengerEmail.prototype, {
       </div>
       <button class="fab" data-a="compose">${ICON.pen}<span>Compose</span></button>
       <div class="bottom editbar" hidden>
-        <div class="capsule g"><button data-e="mark" aria-label="Mark">${ICON.mailOpen}</button><button data-e="move" aria-label="Move">${ICON.folderMove}</button><button data-e="copy" aria-label="Copy">${ICON.copy}</button></div>
+        <div class="capsule g"><button data-e="mark" aria-label="Mark" title="Mark">${ICON.mailOpen}</button><button data-e="move" aria-label="Move" title="Move">${ICON.folderMove}</button><button data-e="archive" aria-label="Archive" title="Archive">${ICON.archive}</button><button data-e="trash" class="red" aria-label="Delete" title="Delete">${ICON.trash}</button></div>
         <div class="spacer"></div>
-        <div class="capsule g"><button data-e="archive" aria-label="Archive">${ICON.archive}</button><button data-e="trash" class="red" aria-label="Delete">${ICON.trash}</button></div>
+        <button class="cb g" data-e="more" aria-label="More" title="More">${ICON.more}</button>
       </div></div>`);
     const scroll = el.querySelector('.scroll'), list = el.querySelector('.mlist'), more = el.querySelector('.loadmore');
     el.querySelector('.pnote-box').addEventListener('click', (e) => this._parcelNoteClick(e, el.querySelector('.pnote-box')));
@@ -2277,12 +2314,71 @@ Object.assign(CrowMessengerEmail.prototype, {
     st.tab = 'focused';
     const input = el.querySelector('.searchbar input');
     scroll.addEventListener('scroll', () => {
-      if (!st.searching && !st.done && !st.loading && scroll.scrollTop + scroll.clientHeight > scroll.scrollHeight - 400) load(false);
+      if (!st.paint && !st.searching && !st.done && !st.loading && scroll.scrollTop + scroll.clientHeight > scroll.scrollHeight - 400) load(false);
       if (!st.searching && st.items.length) save();
     }, { passive: true });
 
     const shown = () => st.searching ? st.results : st.items;
     const find = (key) => shown().find(i => this._itemKey(i) === key) || st.items.find(i => this._itemKey(i) === key);
+
+    // ── what's selected ──────────────────────────────────────────────────
+    // Either a set of emails, or (after Select All on a long mailbox) "everything up to the newest
+    // email when Select All was tapped", less any unticked: st.all = { total, upto, except }.
+    const isSel = (it) => {
+      if (!it) return false;
+      const key = this._itemKey(it);
+      if (st.all) return it.uid <= (st.all.upto[it.account] || 0) && !st.all.except.has(key);
+      return st.selected.has(key);
+    };
+    const selCount = () => st.all ? Math.max(0, st.all.total - st.all.except.size) : st.selected.size;
+    const selItems = () => shown().filter(isSel);
+    const setSel = (it, on) => {
+      const key = this._itemKey(it);
+      if (st.all) { if (on) st.all.except.delete(key); else st.all.except.add(key); } else if (on) st.selected.add(key); else st.selected.delete(key);
+    };
+    const clearSel = () => { st.selected.clear(); st.all = null; st.anchor = null; };
+    const paintRow = (row, on) => {
+      row.classList.toggle('selected', on);
+      const sc = row.querySelector('.selc');
+      if (sc) { sc.classList.toggle('on', on); sc.innerHTML = on ? ICON.check : ''; }
+      const cb = row.querySelector('.c-chk input');
+      if (cb) cb.checked = on;
+    };
+    // the emails on screen, in the order they're shown (what Select All and dragging work on)
+    const onScreen = () => (st.lastShow || shown());
+    const allPicked = () => st.all ? st.all.except.size === 0 : (onScreen().length > 0 && onScreen().every(i => st.selected.has(this._itemKey(i))));
+    const startEditing = (it) => {
+      if (emptyingNow()) return;
+      closeOpen(); clearSel();
+      st.editing = true;
+      if (it) { st.selected.add(this._itemKey(it)); st.anchor = this._itemKey(it); }
+      draw();
+    };
+    const stopEditing = () => { st.editing = false; clearSel(); closeOpen(); draw(); };
+    // where Select All can reach every email in the mailbox (not just those loaded): not while
+    // searching, or on a tab, category or attachment filter (those are worked out on this device)
+    const wholeScope = () => {
+      if (st.searching || (this._skin().tabs && isInbox()) || (catsOn() && st.cat !== 'all')) return null;
+      const f = filterFor();
+      if (!['all', 'unread', 'flagged', 'vip', 'today'].includes(f)) return null;
+      return combined ? { combined: true, filter: f } : { account: data.account, folder: data.folder, filter: f };
+    };
+    const selectAll = async () => {
+      if (allPicked()) { clearSel(); draw(); return; }
+      clearSel();
+      onScreen().forEach(i => st.selected.add(this._itemKey(i)));
+      draw();
+      const scope = wholeScope();
+      if (!scope || st.done) return;
+      // more than has loaded: ask how many there are in all, and remember the newest so email arriving
+      // later isn't swept up too
+      const asked = st.selAsk = Date.now();
+      try {
+        const r = await this._call('select_all', scope);
+        if (st.selAsk !== asked || !st.editing || !allPicked()) return;
+        if (r.total > st.selected.size) { st.all = { total: r.total, upto: r.upto || {}, except: new Set(), scope }; st.selected.clear(); draw(); }
+      } catch (err) { /* the loaded emails stay selected */ }
+    };
 
     const drawHead = () => {
       const accs = combined ? this._s.accounts : [acc].filter(Boolean);
@@ -2340,16 +2436,19 @@ Object.assign(CrowMessengerEmail.prototype, {
       list.classList.toggle('editing', st.editing);
       drawEmptying();
       if (!items.length) {
+        st.lastShow = [];
+        drawEditBar();
         list.innerHTML = st.loading ? '<div class="spin"></div>' : `<div class="empty"><b>${st.searching ? 'No Results' : 'No Mail'}</b>${st.searching ? 'Nothing matched your search.' : st.filter !== 'all' ? 'No emails match this filter.' : ''}</div>`;
         more.textContent = '';
         return;
       }
       const opts = { showAcct: combined && this._multi(), sentView: isSent() };
       const sk = this._skin();
-      const row = (it, index) => this._rowHtml(it, { ...opts, index, sentView: opts.sentView || it.folder !== 'INBOX' && this._isSpecial(it.account, it.folder, 'sent'), selected: st.selected.has(this._itemKey(it)) });
+      const row = (it, index) => this._rowHtml(it, { ...opts, index, sentView: opts.sentView || it.folder !== 'INBOX' && this._isSpecial(it.account, it.folder, 'sent'), selected: isSel(it) });
       let show = pinKeys.size ? items.filter(it => !pinKeys.has(this._itemKey(it))) : items;
       if (sk.tabs && isInbox() && !st.searching) show = items.filter(it => (this._kindOf(it) === 'person') === (st.tab === 'focused'));
       if (catsOn() && st.cat !== 'all') show = items.filter(it => this._catOf(it) === st.cat);
+      st.lastShow = show;
       const grouped = this._groupsOn() && isInbox() && !st.searching;
       list.classList.toggle('grouped', grouped);
       if (grouped) {
@@ -2408,7 +2507,7 @@ Object.assign(CrowMessengerEmail.prototype, {
       rows.forEach((r, i) => { r.style.transitionDelay = `${Math.min(i, 12) * 25}ms`; r.classList.add('gone'); });
       setTimeout(() => {
         st.items = []; st.total = 0; st.done = true; if (st.results) st.results = [];
-        st.selected.clear(); save(); draw();
+        clearSel(); save(); draw();
       }, rows.length ? 420 + Math.min(rows.length, 12) * 25 : 0);
     };
 
@@ -2429,9 +2528,15 @@ Object.assign(CrowMessengerEmail.prototype, {
       el.querySelector('.top [data-a="refresh"]').hidden = st.editing;
       el.querySelector('.top .top-cap').hidden = st.editing;
       el.querySelector('[data-a="more"]').hidden = st.editing;
-      const n = st.selected.size;
-      el.querySelectorAll('.editbar button').forEach(b => { b.disabled = !n; });
-      titleEl.textContent = st.editing ? (n ? `${n} Selected` : 'Select Emails') : title;
+      el.querySelector('.top [data-a="back"]').hidden = st.editing;
+      el.querySelector('.top').classList.toggle('selecting', st.editing);
+      const n = selCount();
+      // ⋯ always works (it has Select All); the rest need something selected
+      el.querySelectorAll('.editbar button').forEach(b => { b.disabled = b.dataset.e === 'more' ? !onScreen().length : !n; });
+      titleEl.textContent = st.editing ? (n ? `${n.toLocaleString(locale(this._hass))} Selected` : 'Select Emails') : title;
+      // the large title (the Inbox inside Crow Messenger) says the same
+      const lt = el.querySelector(':scope > .scroll > .ce-lt');
+      if (lt) lt.textContent = titleEl.textContent;
     };
 
     const load = async (reset) => {
@@ -2553,13 +2658,15 @@ Object.assign(CrowMessengerEmail.prototype, {
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { clearTimeout(searchTimer); runSearch(); input.blur(); } });
 
     // optimistic changes to the list
-    const patch = (keys, fn) => { [st.items, st.results || []].forEach(arr => arr.forEach(i => { if (keys.includes(this._itemKey(i))) fn(i); })); save(); };
-    const drop = (keys) => {
-      keys.forEach(k => { const r = list.querySelector(`.erow[data-key="${CSS.escape(k)}"]`); if (r) { r.style.height = `${r.offsetHeight}px`; requestAnimationFrame(() => { r.classList.add('gone'); r.style.height = '0px'; }); } });
+    const patch = (keys, fn) => { const ks = new Set(keys); [st.items, st.results || []].forEach(arr => arr.forEach(i => { if (ks.has(this._itemKey(i))) fn(i); })); save(); };
+    const drop = (keys, { total = keys.length } = {}) => {
+      const ks = new Set(keys);
+      // only the rows on screen slide away (a few hundred at most); the rest just go
+      list.querySelectorAll('.erow').forEach(r => { if (ks.has(r.dataset.key)) { r.style.height = `${r.offsetHeight}px`; requestAnimationFrame(() => { r.classList.add('gone'); r.style.height = '0px'; }); } });
       setTimeout(() => {
-        st.items = st.items.filter(i => !keys.includes(this._itemKey(i)));
-        if (st.results) st.results = st.results.filter(i => !keys.includes(this._itemKey(i)));
-        st.total = Math.max(0, st.total - keys.length);
+        st.items = st.items.filter(i => !ks.has(this._itemKey(i)));
+        if (st.results) st.results = st.results.filter(i => !ks.has(this._itemKey(i)));
+        st.total = Math.max(0, st.total - total);
         draw();
         save();
       }, 260);
@@ -2578,19 +2685,114 @@ Object.assign(CrowMessengerEmail.prototype, {
           if (action === 'trash' && this._config.confirm_delete && !(await this._confirm(items.length > 1 ? `Delete ${items.length} Emails?` : 'Delete Email?', '', 'Delete', true))) { draw(); return; }
           if (action === 'archive' && this._config.confirm_archive && !(await this._confirm(items.length > 1 ? `Archive ${items.length} Emails?` : 'Archive Email?', '', 'Archive'))) { draw(); return; }
           drop(keys);
-          await this._bulk(items, action);
-          const msg = action === 'archive' ? (items.length > 1 ? `${items.length} emails archived` : 'Archived') : action === 'junk' ? 'Moved to Junk' : (items.length > 1 ? `${items.length} emails deleted` : 'Deleted');
-          if (action === 'trash') this._offerParcelRemoval(items, msg); else this._toast(msg);
+          const tokens = await this._bulk(items, action);
+          const n = items.length, word = this._spamWord(items[0].account).toLowerCase();
+          const msg = action === 'archive' ? (n > 1 ? `${n} emails archived` : 'Archived') : action === 'junk' ? (n > 1 ? `${n} emails reported as ${word}` : `Reported as ${word}`) : (n > 1 ? `${n} emails deleted` : 'Deleted');
+          // a delivery email with a parcel still on its way: offer to remove the parcel (as before);
+          // otherwise Undo, where the server can put them back
+          if (action === 'trash' && items.some(i => { const p = this._parcelFor(i); return p && p.status !== 'delivered'; })) this._offerParcelRemoval(items, msg);
+          else undoToast(msg, tokens, n);
         } else if (action === 'move') {
           const accs = [...new Set(items.map(i => i.account))];
           if (accs.length > 1) { this._toast('Choose emails from one account to move them.'); return; }
           const dest = await this._pickFolder(accs[0], items[0].folder);
           if (!dest) return;
           drop(keys);
-          await this._bulk(items, 'move', dest);
-          this._toast(`Moved to ${this._folderName(accs[0], dest)}`);
+          const tokens = await this._bulk(items, 'move', dest);
+          undoToast(items.length > 1 ? `${items.length} emails moved to ${this._folderName(accs[0], dest)}` : `Moved to ${this._folderName(accs[0], dest)}`, tokens, items.length);
         }
       } catch (err) { this._err(err); soft(); }
+    };
+
+    // "Archived · Undo": puts them back where they were, then brings the list up to date
+    const undoToast = (msg, tokens, n) => {
+      if (!tokens?.length) { this._toast(msg); return; }
+      this._toast(msg, async () => {
+        try {
+          let back = 0;
+          for (const token of tokens) back += (await this._call('undo', { token })).count || 0;
+          this._toast(back ? (back > 1 ? `${back.toLocaleString(locale(this._hass))} emails put back` : 'Put back') : 'Nothing to put back');
+          // they come back as new email: a quick update finds a few; lots, and the list loads afresh
+          if (back > 50 || !st.items.length) load(true); else { st.sig = ''; delta(); }
+        } catch (err) { this._err(err); }
+      });
+    };
+
+    // an action on everything Select All picked (including emails not loaded yet)
+    const actAll = async (action, anchor) => {
+      const sel = st.all;
+      if (!sel) return;
+      const n = selCount(), num = n.toLocaleString(locale(this._hass));
+      if (!n) return;
+      const loaded = selItems(), keys = loaded.map(i => this._itemKey(i));
+      let to = null;
+      if (action === 'trash' && this._config.confirm_delete && !(await this._confirm(`Delete ${num} Emails?`, '', 'Delete', true))) return;
+      if (action === 'archive' && this._config.confirm_archive && !(await this._confirm(`Archive ${num} Emails?`, '', 'Archive'))) return;
+      if (action === 'move') {
+        const accs = Object.entries(sel.upto).filter(([, u]) => u > 0).map(([id]) => id);
+        if (accs.length !== 1) { this._toast('Choose emails from one account to move them.'); return; }
+        to = await this._pickFolder(accs[0], combined ? 'INBOX' : data.folder);
+        if (!to) return;
+      }
+      const body = { ...sel.scope, action, upto: sel.upto, except: [...sel.except].map(k => { const a = k.split('|'); return { account: a[0], folder: a.slice(1, -1).join('|'), uid: +a[a.length - 1] }; }) };
+      if (to) body.to = to;
+      stopEditing();
+      const moving = ['archive', 'trash', 'junk', 'move'].includes(action);
+      if (moving) drop(keys, { total: n });
+      else patch(keys, i => { if (action === 'read' || action === 'unread') i.seen = action === 'read'; else i.flagged = action === 'flag'; });
+      draw();
+      if (n > 200) this._toast(`Working on ${num} emails…`);
+      try {
+        const r = await this._call('bulk_all', body);
+        const c = (r.count || 0).toLocaleString(locale(this._hass)), many = r.count !== 1;
+        const word = this._spamWord(loaded[0]?.account || data.account).toLowerCase();
+        const msg = { read: `${c} email${many ? 's' : ''} marked as read`, unread: `${c} email${many ? 's' : ''} marked as unread`,
+          flag: `${c} email${many ? 's' : ''} flagged`, unflag: `${c} email${many ? 's' : ''} unflagged`,
+          archive: `${c} email${many ? 's' : ''} archived`, trash: `${c} email${many ? 's' : ''} deleted`,
+          junk: `${c} email${many ? 's' : ''} reported as ${word}`,
+          move: `${c} email${many ? 's' : ''} moved to ${to ? this._folderName(Object.keys(sel.upto).find(id => sel.upto[id] > 0), to) : ''}` }[action];
+        undoToast(msg, r.undo ? [r.undo] : [], r.count);
+        if (moving) load(true);
+      } catch (err) { this._err(err); load(true); }
+    };
+
+    // the edit bar: Mark, Move, More, Archive, Delete (on what's selected)
+    const editAction = async (e2, anchor) => {
+      const items = selItems();
+      if (!selCount() && e2 !== 'more') return;
+      // Copy keeps the emails selected, like Copy in Select Messages (the loaded ones)
+      if (e2 === 'copy') { if (items.length) this._copyEmails(items, anchor); return; }
+      let action = e2;
+      const inJunk = items.length ? items.every(i => this._isJunk(i)) : (!combined && this._isSpecial(data.account, data.folder, 'junk'));
+      if (e2 === 'mark' || e2 === 'more') {
+        // after Select All, some emails aren't loaded: offer both ways round
+        const anyUnread = st.all || items.some(i => !i.seen), anyRead = st.all || items.some(i => i.seen);
+        const anyUnflag = st.all || items.some(i => !i.flagged), anyFlag = st.all || items.some(i => i.flagged);
+        const marks = [
+          ...(anyUnread ? [{ text: 'Mark as Read', value: 'read', icon: 'mailOpen' }] : []),
+          ...(anyRead ? [{ text: 'Mark as Unread', value: 'unread', icon: 'unreadF' }] : []),
+          ...(anyUnflag ? [{ text: 'Flag', value: 'flag', icon: 'flag' }] : []),
+          ...(anyFlag ? [{ text: 'Unflag', value: 'unflag', icon: 'flag' }] : []),
+        ];
+        const spam = st.all ? (inJunk ? [] : [{ text: `Report ${this._spamWord(data.account || items[0]?.account)}`, value: 'junk', icon: 'junk' }])
+          : this._spamItems(items).filter(x => ['junk', 'notjunk'].includes(x.value));
+        const n = selCount();
+        action = await this._menu(anchor, e2 === 'mark' ? [...marks, ...spam] : [
+          allPicked() ? { text: 'Deselect All', value: 'selall', icon: 'selNone' } : { text: 'Select All', value: 'selall', icon: 'selAll' },
+          ...(n ? [
+            { sep: true },
+            { text: 'Copy', value: 'copy', icon: 'copy', disabled: !items.length },
+            ...spam.map(x => ({ ...x })),
+          ] : []),
+        ], { align: e2 === 'mark' ? 'left' : 'right', above: true });
+        if (!action) return;
+        if (action === 'selall') { selectAll(); return; }
+        if (action === 'copy') { this._copyEmails(items, anchor); return; }
+      }
+      if (st.all) { actAll(action, anchor); return; }
+      stopEditing();
+      if (action === 'notjunk') { if (await this._spamAction(action, items)) drop(items.map(i => this._itemKey(i))); return; }
+      act(items, action);
     };
 
     // what a swipe button (or a long swipe) does
@@ -2610,6 +2812,8 @@ Object.assign(CrowMessengerEmail.prototype, {
 
     const rowMenu = async (anchor, it) => {
       const v = await this._menu(anchor, [
+        { text: 'Select', value: 'select', icon: 'selcircle' },
+        { sep: true },
         { text: 'Reply', value: 'reply', icon: 'reply' },
         { text: 'Reply All', value: 'replyall', icon: 'replyAll' },
         { text: 'Forward', value: 'forward', icon: 'forward' },
@@ -2628,6 +2832,7 @@ Object.assign(CrowMessengerEmail.prototype, {
       ]);
       if (!v) return;
       if (SPAM_VALUES.includes(v)) { if (await this._spamAction(v, [it], { anchor })) drop([this._itemKey(it)]); return; }
+      if (v === 'select') { startEditing(it); return; }
       if (['reply', 'replyall', 'forward'].includes(v)) { this._replyTo(it, v); return; }
       if (v === 'remind') { this._remindMe(it); return; }
       if (v === 'pdf') { this._exportRowPdf(it, anchor); return; }
@@ -2701,7 +2906,7 @@ Object.assign(CrowMessengerEmail.prototype, {
         } else if (v === 'parcels' || v === 'food' || v === 'groceries') {
           this._nav(v);
         } else if (v === 'select') {
-          st.editing = true; st.selected.clear(); closeOpen(); draw();
+          startEditing();
         } else if (v === 'refresh') {
           if (st.checking) return;
           st.checking = true; drawHead();
@@ -2722,7 +2927,7 @@ Object.assign(CrowMessengerEmail.prototype, {
           if (!(await this._confirm(junk ? `Delete All ${word}?` : 'Empty Trash?', `${what} in ${title} will be deleted for good. This can’t be undone.`, junk ? 'Delete All' : 'Empty Trash', true))) return;
           // show it's working straight away; Home Assistant carries on even if you leave this screen
           const started = Date.now(), em = (this._s.emptying = this._s.emptying || {});
-          st.editing = false; st.selected.clear(); closeOpen();
+          st.editing = false; clearSel(); closeOpen();
           em[emKey] = { account: data.account, folder: data.folder, total: n, done: 0, state: 'working', since: started };
           draw();
           let res;
@@ -2748,6 +2953,7 @@ Object.assign(CrowMessengerEmail.prototype, {
       const row = e.target.closest('.erow');
       // an open row can be pushed back from its buttons too (a tap on a button still works)
       const onActs = !!e.target.closest('.acts');
+      if (!e.isPrimary || st.paint) { clearTimeout(pressTimer); if (drag) { drag.row.classList.remove('dragging'); if (!drag.on || drag.row !== openRow) drag.row.querySelector('.inner').style.transform = ''; drag = null; } return; }
       if (!row || st.editing || emptyingNow() || e.button > 0 || (onActs && row !== openRow)) return;
       if (openRow && openRow !== row) closeOpen();
       const wl = row.querySelectorAll('.acts.l button').length * 80, wr = row.querySelectorAll('.acts.r button').length * 80;
@@ -2801,6 +3007,125 @@ Object.assign(CrowMessengerEmail.prototype, {
     };
     list.addEventListener('pointerup', end);
     list.addEventListener('pointercancel', end);
+
+    // ── drag to select ───────────────────────────────────────────────────
+    // Like Apple Mail: while selecting, drag a finger down the circles; or put two fingers on the
+    // list and drag (that starts selecting too); or drag with the mouse. The first email decides
+    // whether the drag ticks or unticks, and dragging back puts emails back as they were.
+    const rowIndexAt = (rows, y) => {   // the row at a height on screen (rows run down the screen)
+      if (!rows.length) return -1;
+      let lo = 0, hi = rows.length - 1;
+      while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (rows[mid].getBoundingClientRect().top <= y) lo = mid; else hi = mid - 1; }
+      return lo;
+    };
+    const paintTo = (j) => {
+      const p = st.paint;
+      if (!p || j < 0 || j === p.at) return;
+      const lo = Math.min(p.from, j), hi = Math.max(p.from, j);
+      const a = Math.min(lo, p.at < 0 ? lo : p.at), b = Math.max(hi, p.at < 0 ? hi : p.at);
+      for (let k = a; k <= b; k++) {
+        const it = p.its[k];
+        if (!it) continue;
+        const want = k >= lo && k <= hi ? p.on : p.before[k];
+        if (isSel(it) !== want) { setSel(it, want); paintRow(p.rows[k], want); }
+      }
+      p.at = j;
+      st.anchor = p.rows[j].dataset.key;
+      drawEditBar();
+    };
+    const paintStart = (y, how, id) => {
+      const rows = [...list.querySelectorAll('.erow')];
+      const i = rowIndexAt(rows, y);
+      if (i < 0) return;
+      const its = rows.map(r => find(r.dataset.key));
+      if (!its[i]) return;
+      clearTimeout(pressTimer); drag = null; closeOpen();
+      const sr = scroll.getBoundingClientRect(), bar = el.querySelector('.bottom.editbar');
+      const bottom = bar && !bar.hidden ? bar.getBoundingClientRect().top : sr.bottom;
+      st.paint = { rows, its, from: i, at: -1, on: !isSel(its[i]), before: its.map(isSel), y, how, id,
+        top: sr.top + (parseFloat(getComputedStyle(scroll).paddingTop) || 0), bottom, raf: 0 };
+      try { navigator.vibrate?.(8); } catch (err) { /* */ }
+      paintTo(i);
+      st.paint.raf = requestAnimationFrame(autoScroll);
+    };
+    const paintMove = (y) => { const p = st.paint; if (!p) return; p.y = y; paintTo(rowIndexAt(p.rows, y)); };
+    const paintEnd = () => {
+      const p = st.paint;
+      if (!p) return;
+      cancelAnimationFrame(p.raf);
+      st.paint = null;
+      suppressUntil = Date.now() + 350;   // the lift isn't a tap
+      if (p.redraw) draw();
+      if (!st.searching && !st.done && !st.loading && scroll.scrollTop + scroll.clientHeight > scroll.scrollHeight - 400) load(false);
+    };
+    // held near the top or bottom: the list scrolls by itself, faster nearer the edge
+    const autoScroll = () => {
+      const p = st.paint;
+      if (!p) return;
+      const zone = 64;
+      let v = 0;
+      if (p.y < p.top + zone) v = -((p.top + zone - p.y) / zone) * 18;
+      else if (p.y > p.bottom - zone) v = ((p.y - (p.bottom - zone)) / zone) * 18;
+      v = clamp(Math.round(v), -26, 26);
+      if (v) { const was = scroll.scrollTop; scroll.scrollTop = was + v; if (scroll.scrollTop !== was) paintTo(rowIndexAt(p.rows, p.y)); }
+      p.raf = requestAnimationFrame(autoScroll);
+    };
+    // a finger on the circles, or the mouse anywhere on a row
+    let pend = null;
+    list.addEventListener('pointerdown', (e) => {
+      if (!st.editing || st.paint || e.button > 0 || !e.isPrimary) return;
+      const row = e.target.closest('.erow');
+      if (!row) return;
+      if (e.pointerType !== 'mouse' && !e.target.closest('.selz, .c-chk')) return;   // a finger elsewhere scrolls the list
+      pend = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    });
+    list.addEventListener('pointermove', (e) => {
+      const p = st.paint;
+      if (p && p.how === 'pointer' && e.pointerId === p.id) { paintMove(e.clientY); return; }
+      if (!pend || e.pointerId !== pend.id) return;
+      if (Math.abs(e.clientY - pend.y) < 6 && Math.abs(e.clientX - pend.x) < 6) return;
+      try { list.setPointerCapture(e.pointerId); } catch (err) { /* */ }
+      paintStart(pend.y, 'pointer', e.pointerId);
+      pend = null;
+      paintMove(e.clientY);
+    });
+    const pointerDone = (e) => { if (pend?.id === e.pointerId) pend = null; if (st.paint?.how === 'pointer' && e.pointerId === st.paint.id) paintEnd(); };
+    list.addEventListener('pointerup', pointerDone);
+    list.addEventListener('pointercancel', pointerDone);
+    // (capture moving from the row to the list fires this on the row too: only the list's own counts)
+    list.addEventListener('lostpointercapture', (e) => { if (e.target === list) pointerDone(e); });
+    // two fingers down the list (selecting or not)
+    let two = null;
+    const mid = (t) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+    list.addEventListener('touchstart', (e) => {
+      if (e.touches.length !== 2 || st.paint || emptyingNow() || st.searching && !st.results?.length) { two = null; return; }
+      if (Math.abs(e.touches[0].clientY - e.touches[1].clientY) > 140) { two = null; return; }   // fingers far apart: a pinch, not a drag
+      clearTimeout(pressTimer);
+      two = mid(e.touches);
+    }, { passive: true });
+    list.addEventListener('touchmove', (e) => {
+      if (st.paint?.how === 'two') {
+        if (e.cancelable) e.preventDefault();
+        if (e.touches.length >= 2) paintMove(mid(e.touches).y);
+        return;
+      }
+      if (!two || e.touches.length !== 2) return;
+      if (!e.cancelable) { two = null; return; }   // the list is already scrolling
+      e.preventDefault();
+      const m = mid(e.touches);
+      if (Math.abs(m.y - two.y) < 8) return;
+      // start selecting without redrawing the rows: the fingers are on them, and a redrawn row
+      // stops passing on the touch (the full redraw comes when the fingers lift)
+      let redraw = false;
+      if (!st.editing) { closeOpen(); clearSel(); st.editing = true; list.classList.add('editing'); drawEditBar(); redraw = true; }
+      paintStart(two.y, 'two');
+      two = null;
+      if (st.paint) st.paint.redraw = redraw; else if (redraw) draw();
+      paintMove(m.y);
+    }, { passive: false });
+    const touchDone = (e) => { if (e.touches.length < 2) { two = null; if (st.paint?.how === 'two') paintEnd(); } };
+    list.addEventListener('touchend', touchDone);
+    list.addEventListener('touchcancel', touchDone);
     list.addEventListener('contextmenu', (e) => {
       const row = e.target.closest('.erow');
       if (!row || st.editing) return;
@@ -2841,28 +3166,9 @@ Object.assign(CrowMessengerEmail.prototype, {
         return;
       }
       if (a === 'parcels') { this._nav('parcels'); return; }
-      if (a === 'select') { if (emptyingNow() && !st.editing) return; st.editing = !st.editing; st.selected.clear(); closeOpen(); draw(); return; }
+      if (a === 'select') { if (st.editing) stopEditing(); else startEditing(); return; }
       const e2 = e.target.closest('[data-e]')?.dataset.e;
-      if (e2) {
-        const items = shown().filter(i => st.selected.has(this._itemKey(i)));
-        if (!items.length) return;
-        let action = e2;
-        // Copy keeps the emails selected, like Copy in Select Messages
-        if (e2 === 'copy') { this._copyEmails(items, e.target.closest('button')); return; }
-        if (e2 === 'mark') {
-          const anyUnread = items.some(i => !i.seen), anyUnflag = items.some(i => !i.flagged);
-          action = await this._menu(e.target.closest('button'), [
-            { text: anyUnread ? 'Mark as Read' : 'Mark as Unread', value: anyUnread ? 'read' : 'unread', icon: 'mailOpen' },
-            { text: anyUnflag ? 'Flag' : 'Unflag', value: anyUnflag ? 'flag' : 'unflag', icon: 'flag' },
-            ...this._spamItems(items).filter(x => ['junk', 'notjunk'].includes(x.value)),
-          ], { align: 'left', above: true });
-          if (!action) return;
-        }
-        st.editing = false; st.selected.clear(); draw();
-        if (SPAM_VALUES.includes(action)) { if (await this._spamAction(action, items)) drop(items.map(i => this._itemKey(i))); return; }
-        act(items, action);
-        return;
-      }
+      if (e2) { editAction(e2, e.target.closest('button')); return; }
       const sw = e.target.closest('[data-sw]');
       if (sw) {
         const row = sw.closest('.erow'), it = find(row.dataset.key);
@@ -2878,14 +3184,19 @@ Object.assign(CrowMessengerEmail.prototype, {
       if (openRow) { closeOpen(); return; }
       const key = row.dataset.key, it = find(key);
       if (!it) return;
-      if (e.target.closest('.c-chk') && !st.editing) { st.editing = true; st.selected.clear(); }
+      if ((e.target.closest('.c-chk') || e.shiftKey) && !st.editing) { startEditing(it); return; }
       if (st.editing) {
-        const cb = row.querySelector('.c-chk input');
-        if (st.selected.has(key)) st.selected.delete(key); else st.selected.add(key);
-        row.classList.toggle('selected', st.selected.has(key));
-        const sc = row.querySelector('.selc'); sc.classList.toggle('on', st.selected.has(key)); sc.innerHTML = st.selected.has(key) ? ICON.check : '';
-        if (cb) cb.checked = st.selected.has(key);
-        list.classList.toggle('editing', true);
+        const rows = [...list.querySelectorAll('.erow')];
+        const from = e.shiftKey && st.anchor ? rows.findIndex(r => r.dataset.key === st.anchor) : -1;
+        if (from >= 0) {
+          // Shift-click: everything from the last one picked to this one
+          const to = rows.indexOf(row);
+          for (let i = Math.min(from, to); i <= Math.max(from, to); i++) { const x = find(rows[i].dataset.key); if (x) { setSel(x, true); paintRow(rows[i], true); } }
+        } else {
+          setSel(it, !isSel(it));
+          paintRow(row, isSel(it));
+          st.anchor = key;
+        }
         drawEditBar();
         return;
       }
@@ -2932,6 +3243,7 @@ Object.assign(CrowMessengerEmail.prototype, {
       remove: (key) => drop([key]),
       // keyboard shortcuts in a mailbox: j/k to move, Enter to open, e/#/s… on the email picked
       kb: (k) => {
+        if (k === 'Escape' && st.editing) { stopEditing(); return true; }
         if (k === '/') { input.focus(); return true; }
         const items = shown();
         if (!items.length) return false;
@@ -2941,7 +3253,7 @@ Object.assign(CrowMessengerEmail.prototype, {
         const it = items[i];
         if (!it) return false;
         if (k === 'Enter' || k === 'o') { kbRow(it)?.click(); return true; }
-        if (k === 'x') { const key = this._itemKey(it); st.editing = true; if (st.selected.has(key)) st.selected.delete(key); else st.selected.add(key); draw(); return true; }
+        if (k === 'x') { if (!st.editing) { startEditing(it); return true; } setSel(it, !isSel(it)); st.anchor = this._itemKey(it); draw(); return true; }
         const map = { e: 'archive', '#': 'trash', Delete: 'trash', s: 'flag', I: 'read', U: 'unread' };
         if (k === 'b' && this._feat('snooze')) { swAct(it, 'snooze', kbRow(it)); return true; }
         if (k === 'm' && this._feat('mute')) { swAct(it, 'mute', kbRow(it)); return true; }
@@ -11899,7 +12211,7 @@ Object.assign(CrowMessengerEmail.prototype, {
   },
 
   async _openSnoozed(sid) {
-    try { const at = await this._call('snooze/locate', { id: sid }); this._nav('reader', { ...at }); } catch (err) { this._err(err); }
+    try { const at = await this._call('snooze/locate', { item: sid }); this._nav('reader', { ...at }); } catch (err) { this._err(err); }
   },
 
   _pg_snoozed() {
@@ -11921,10 +12233,10 @@ Object.assign(CrowMessengerEmail.prototype, {
       const v = await this._menu(row, [{ text: 'Open Email', value: 'open', icon: 'mailOpen' }, { text: 'Change Time', value: 'time', icon: 'clock' }, { text: 'Unsnooze Now', value: 'wake', icon: 'inbox' }]);
       try {
         if (v === 'open') this._openSnoozed(s.id);
-        if (v === 'wake') { await this._call('snooze/wake', { id: s.id }); this._toast('Back in your Inbox'); }
+        if (v === 'wake') { await this._call('snooze/wake', { item: s.id }); this._toast('Back in your Inbox'); }
         if (v === 'time') {
           const ts = await this._pickTime('Snooze Until', 'Snooze');
-          if (ts) { const at = await this._call('snooze/locate', { id: s.id }); await this._call('snooze', { ...at, until: ts }); }
+          if (ts) { const at = await this._call('snooze/locate', { item: s.id }); await this._call('snooze', { ...at, until: ts }); }
         }
       } catch (err) { this._err(err); }
     });
@@ -11954,7 +12266,7 @@ Object.assign(CrowMessengerEmail.prototype, {
     el.addEventListener('click', async (e) => {
       if (e.target.closest('[data-a="back"]')) { this._back(); return; }
       const b = e.target.closest('[data-un]');
-      if (b) { try { await this._call('mute', { id: b.dataset.un, on: false }); this._toast('Conversation unmuted'); } catch (err) { this._err(err); } }
+      if (b) { try { await this._call('mute', { item: b.dataset.un, on: false }); this._toast('Conversation unmuted'); } catch (err) { this._err(err); } }
     });
     draw();
     return { el, refresh: (what) => { if (['all', 'muted', 'back'].includes(what)) draw(); } };
@@ -12413,14 +12725,36 @@ Object.assign(CrowMessengerEmail.prototype, {
       const x = this._upcomingAppointments()[+row.dataset.i];
       const v = await this._menu(row, [{ header: x.title }, { text: 'Add to Calendar', value: 'cal', icon: 'calendar' }, { text: 'Show Email', value: 'open', icon: 'mail' }, { text: 'Remove', value: 'remove', icon: 'trash', red: true }]);
       try {
-        if (v === 'open') this._nav('reader', { account: x.account, folder: x.folder, uid: x.uid });
-        if (v === 'remove') this._s.appointments = await this._call('appointments/action', { account: x.account, id: x.id, action: 'remove' });
+        if (v === 'open') { await this._openFollowEmail('appointments', x); draw(); return; }
+        if (v === 'remove') this._s.appointments = await this._call('appointments/action', { account: x.account, item: x.id, action: 'remove' });
         if (v === 'cal') this._addFound({ kind: 'event', title: x.title, start: x.start, end: x.end, location: x.location });
         draw();
       } catch (err) { this._err(err); }
     });
     draw();
     return { el, refresh: (what) => { if (['all', 'appointments', 'back'].includes(what)) draw(); } };
+  },
+
+  // a bill's or appointment's email, wherever it is now. One whose email has been deleted leaves the list
+  // (Home Assistant takes it out, and Today with it).
+  async _openFollowEmail(kind, x) {
+    if (this._followOpening) return;
+    this._followOpening = true;
+    const slow = setTimeout(() => this._toast('Finding the email…'), 600);
+    try {
+      const at = await ceQuick(this._call(`${kind}/locate`, { account: x.account, item: x.id }), 20000, { folder: x.folder || 'INBOX', uid: x.uid });
+      clearTimeout(slow); this._root.querySelector('.toast')?.remove();
+      if (at.removed) this._s[kind] = (this._s[kind] || []).filter(y => y.id !== x.id);
+      this._nav('reader', { account: x.account, folder: at.folder, uid: at.uid });
+      if (at.removed) this._toast(`This email is in Trash, so it’s been taken out of ${kind === 'bills' ? 'Bills' : 'Appointments'}`);
+    } catch (err) {
+      clearTimeout(slow);
+      if (err?.code === 'not_found') {
+        this._s[kind] = (this._s[kind] || []).filter(y => y.id !== x.id);
+        this._refresh(kind);
+        this._toast(err.message || 'That email has been deleted.');
+      } else this._toast(err?.message || 'Couldn’t find the email.');
+    } finally { this._followOpening = false; }
   },
 
   // ── Bills ───────────────────────────────────────────────────────────
@@ -12448,8 +12782,8 @@ Object.assign(CrowMessengerEmail.prototype, {
       const x = (this._s.bills || [])[+r.dataset.i];
       const v = await this._menu(r, [{ header: `${x.payee || 'Bill'} ${this._money(x)}` }, { text: x.paid ? 'Mark as Not Paid' : 'Mark as Paid', value: x.paid ? 'unpaid' : 'paid', icon: 'check' }, { text: 'Show Email', value: 'open', icon: 'mail' }, { text: 'Remove', value: 'remove', icon: 'trash', red: true }]);
       try {
-        if (v === 'open') this._nav('reader', { account: x.account, folder: x.folder, uid: x.uid });
-        else if (v) { this._s.bills = await this._call('bills/action', { account: x.account, id: x.id, action: v }); draw(); }
+        if (v === 'open') { await this._openFollowEmail('bills', x); draw(); }
+        else if (v) { this._s.bills = await this._call('bills/action', { account: x.account, item: x.id, action: v }); draw(); }
       } catch (err) { this._err(err); }
     });
     draw();
@@ -13748,7 +14082,7 @@ Object.assign(CrowMessengerEmail.prototype, {
     if (!c) return;
     if (!b) { this._nav('reader', { account: c.account, folder: 'INBOX', uid: c.uid }); return; }
     if (b.dataset.cs === 'copy') { this._toast(await copyText(c.code.replace(/[ -]/g, '')) ? 'Code copied' : 'Copy not available here'); return; }
-    try { this._s.codes = await this._call('codes/done', { id: c.id }); } catch (err) { this._s.codes = (this._s.codes || []).filter(x => x.id !== c.id); }
+    try { this._s.codes = await this._call('codes/done', { item: c.id }); } catch (err) { this._s.codes = (this._s.codes || []).filter(x => x.id !== c.id); }
     this._refresh('codes');
   },
   _codesTick() {
