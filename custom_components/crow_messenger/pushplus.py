@@ -176,10 +176,23 @@ def _data_url_bytes(url: str) -> tuple[bytes, str] | None:
         return None
 
 
-def sender_photo(messenger: "Messenger", viewer: str, sender: str, users: dict) -> str | None:
-    """The sender's picture as the viewer sees it: their contact photo, or the photo the sender shares."""
+def _contact_photo(messenger: "Messenger", viewer: str, sender: str) -> dict | None:
+    """The viewer's contact for the sender, when its photo is the one to show: the photo on the contact
+    and the picture the sender shares of themselves are compared, and the newer one wins (so a new
+    profile picture reaches everyone, while a photo put on the contact afterwards still shows)."""
     book = messenger.cdata.get("contacts", {}).get(viewer, {}) or {}
     contact = next((c for c in book.values() if c.get("ha_user") == sender and c.get("photo")), None)
+    if not contact:
+        return None
+    prof = messenger.cdata.get("profiles", {}).get(sender) or {}
+    if prof.get("share") and prof.get("photo") and (contact.get("photo_at") or 0) <= (prof.get("photo_at") or 1):
+        return None
+    return contact
+
+
+def sender_photo(messenger: "Messenger", viewer: str, sender: str, users: dict) -> str | None:
+    """The sender's picture as the viewer sees it: their contact photo or the photo the sender shares (the newer)."""
+    contact = _contact_photo(messenger, viewer, sender)
     if contact:
         return signed(messenger, "avatar", f"{viewer}.{sender}")
     pic = (users.get(sender) or {}).get("picture")
@@ -194,8 +207,7 @@ def image_bytes(messenger: "Messenger", kind: str, key: str) -> tuple[bytes, str
     """What a signed picture link serves."""
     if kind == "avatar":
         viewer, _, sender = key.partition(".")
-        book = messenger.cdata.get("contacts", {}).get(viewer, {}) or {}
-        contact = next((c for c in book.values() if c.get("ha_user") == sender and c.get("photo")), None)
+        contact = _contact_photo(messenger, viewer, sender)
         if contact:
             return _data_url_bytes(contact["photo"])
         prof = messenger.cdata.get("profiles", {}).get(sender) or {}

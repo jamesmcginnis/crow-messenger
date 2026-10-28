@@ -250,15 +250,20 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             profile = self.cdata["profiles"].get(user.id, {})
             name = user.name or "User"
             picture = pictures.get(user.id)
+            photo_at = 0
             if profile.get("share"):
                 name = profile.get("name") or name
                 picture = profile.get("photo") or picture
+                if profile.get("photo"):
+                    photo_at = profile.get("photo_at") or 1   # (shared before pictures were dated: still newer than an undated contact photo)
             cover = profile.get("cover") if covers else None
             out.append({
                 "id": user.id,
                 "name": name,
                 "ha_name": user.name or "",
                 "picture": picture,
+                # when the picture they share of themselves last changed (0: they don't share one)
+                "photo_at": photo_at,
                 "is_admin": user.is_admin,
                 "cover": cover if cover and cover.get("id") in self.data["attachments"] else None,
             })
@@ -1112,6 +1117,11 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
                 raise MessengerError("invalid_format", "Too many contacts")
             contact["id"] = cid
             contact["updated"] = now_ms()
+            # when the photo itself last changed (not the phone number or anything else): it decides
+            # whether this photo or the one a household member shares of themselves is shown (the newer)
+            old = book.get(cid) or {}
+            if contact.get("photo"):
+                contact["photo_at"] = old.get("photo_at", 0) if old.get("photo") == contact["photo"] else now_ms()
             book[cid] = contact
             saved.append(contact)
         self._save_contacts()
@@ -1232,6 +1242,9 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             photo = patch["photo"]
             if photo and (not str(photo).startswith("data:image/") or len(photo) > MAX_PHOTO_DATA_URL):
                 raise MessengerError("invalid_format", "Photo is too large")
+            if (photo or None) != profile.get("photo"):
+                # a new picture is newer than any copy of the old one in other people's contacts
+                profile["photo_at"] = now_ms() if photo else 0
             profile["photo"] = photo or None
         if "my_card" in patch:
             profile["my_card"] = patch["my_card"] or None

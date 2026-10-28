@@ -801,6 +801,15 @@ class Feed(FeedMoreMixin):
                 st["read"].pop(k, None)
         self._n_changed(uid)
 
+    def notif_read_post(self, uid: str, pid: str) -> None:
+        """A post opened from a notification: everything in the bell about it counts as read, and the
+        post as seen."""
+        st = self._nstate(uid)
+        keys = [x["key"] for x in self._notif_all(uid) if x.get("post_id") == pid and self._n_unread(st, x)]
+        if keys:
+            self.notif_read(uid, keys)
+        self.mark_post_seen(uid, pid)
+
     def notif_read_all(self, uid: str) -> None:
         st = self._nstate(uid)
         st["all_read"] = _now()

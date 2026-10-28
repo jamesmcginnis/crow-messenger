@@ -886,6 +886,22 @@ def _feed(name: str, schema: dict, handler: Callable) -> Callable:
     return command
 
 
+async def _read_post(f, u, d) -> dict:
+    """A Feed notification was opened (its post on screen): its notifications are read, and the phone
+    notification goes from this person's other devices too."""
+    from . import feedpush
+    pid = d["post_id"]
+    f.notif_read_post(u.id, pid)
+    post = f.data["posts"].get(pid)
+    if post and f.can_see(u.id, post):
+        tags = {feedpush.tag_for(post)}
+        if d.get("comment_id"):
+            tags.add(feedpush.tag_for(post, d["comment_id"]))
+        for tag in tags:
+            await feedpush._async_clear(f.m.hass, f.m, u.id, tag)
+    return {"unread": f.notif_unread(u.id)}
+
+
 def _first_page(f, u, d):
     out = f.list_posts(u.id, before=d.get("before"), limit=d.get("limit", 20), author=d.get("author"),
                        group=d.get("group"), album=d.get("album"), kind=d.get("kind"), collection=d.get("collection"))
@@ -956,6 +972,7 @@ FEED_COMMANDS = (
     _feed("notifications/read", {vol.Required("keys"): [str], vol.Optional("read", default=True): bool},
           lambda f, u, d: (f.notif_read(u.id, d["keys"], d["read"]), {})[1]),
     _feed("notifications/read_all", {}, lambda f, u, d: (f.notif_read_all(u.id), {})[1]),
+    _feed("notifications/read_post", {**_POST, vol.Optional("comment_id"): str}, lambda f, u, d: _read_post(f, u, d)),
     _feed("notifications/remove", {vol.Required("key"): str}, lambda f, u, d: (f.notif_remove(u.id, d["key"]), {})[1]),
     _feed("notifications/restore", {vol.Required("key"): str}, lambda f, u, d: (f.notif_restore(u.id, d["key"]), {})[1]),
     _feed("notifications/clear", {}, lambda f, u, d: (f.notif_clear(u.id), {})[1]),
