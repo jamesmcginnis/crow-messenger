@@ -144,6 +144,8 @@ class Feed(FeedMoreMixin):
         from .const import DEFAULT_SETTINGS
         o = {**DEFAULT_SETTINGS["feed"], **(self.m.settings.get("feed") or {})}
         o["kinds"] = {**DEFAULT_SETTINGS["feed"]["kinds"], **(o.get("kinds") or {})}
+        # GIFs from GIPHY: only whether they're available (the key itself stays here)
+        o["gifs"] = bool(str(self.m.settings.get("giphy_key") or "").strip())
         return o
 
     def kind_on(self, kind: str) -> bool:

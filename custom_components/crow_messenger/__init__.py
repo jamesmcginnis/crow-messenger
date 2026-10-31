@@ -151,6 +151,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         websocket.async_register(hass)
         hass.data[f"{DOMAIN}_views_registered"] = True
 
+    # Making photos and videos smaller, one at a time in the background
+    entry.async_on_unload(messenger.store.start())
+
     # Keep Messages: tidy up now and every hour.
     await messenger.async_cleanup()
 
@@ -389,10 +392,10 @@ async def _async_import_file(hass: HomeAssistant, messenger: Messenger, sender: 
     dest = os.path.join(messenger.media_dir, file_name)
     await hass.async_add_executor_job(shutil.copyfile, path, dest)
     size = await hass.async_add_executor_job(os.path.getsize, dest)
-    messenger.register_upload(sender, thread_id, {
-        "id": aid, "name": name, "file": file_name, "size": size,
-        "mime": mimetypes.guess_type(name)[0] or "application/octet-stream",
-    })
+    info = {"id": aid, "name": name, "file": file_name, "size": size,
+            "mime": mimetypes.guess_type(name)[0] or "application/octet-stream"}
+    await messenger.store.async_ingest(info, None, dest, None)   # stored once (and made smaller)
+    messenger.register_upload(sender, thread_id, info)
     return aid
 
 

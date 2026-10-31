@@ -193,6 +193,12 @@ async def async_reset(hass: HomeAssistant, m: "Messenger", uid: str, parts: list
         return removed
 
     files = await hass.async_add_executor_job(_wipe)
+    # the shared files: forgotten with the folder, or (a partial reset) the ones nothing uses any more go
+    if "media" in parts:
+        m.data["blobs"] = {}
+    m.store.rebuild()
+    if "media" not in parts:
+        files += (await m.store.async_sweep(min_age=60))["files"]
     _LOGGER.warning("Crow Messenger was %s by %s (%s)%s. %s file(s) deleted.", "erased completely" if everything else "reset",
                     who, uid, "" if everything else f": {', '.join(parts)}", files)
     hass.bus.async_fire(EVENT_RESET, {"user_id": uid, "parts": reset["parts"], "reset_id": reset["id"]})

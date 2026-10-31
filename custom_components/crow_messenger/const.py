@@ -82,6 +82,9 @@ DEFAULT_SETTINGS = {
     # Keep Messages (and the Feed): forever unless an administrator chooses a time
     "retention_days": 0,
     "max_upload_mb": 300,
+    # saving space: videos re-encoded to 720p (or 1080p, or kept as sent), photos stored as WebP, and old
+    # photos and videos made smaller instead of deleted after this many days (0: never)
+    "storage": {"video": "720", "webp": True, "shrink_days": 0},
     "notifications": {
         "enabled": True,
         "show_text": True,

@@ -183,6 +183,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self.entities = EntityHub(self)  # each person's sensors (started by __init__)
         from .feed import Feed
         self.feed = Feed(self)  # the household Feed (its own storage file)
+        from .storage import MediaStore
+        self.store = MediaStore(self)  # one copy of each file, made smaller, kept tidy
 
     # ── Persistence ─────────────────────────────────────────────────────────
     async def async_load(self) -> None:
@@ -212,6 +214,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self.stickers = bstored.get("stickers", {})
         await self.hass.async_add_executor_job(os.makedirs, self.media_dir, 0o700, True)
         await self.feed.async_load()
+        self.store.rebuild()
 
     @callback
     def _save(self) -> None:
@@ -879,11 +882,11 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         return {"removed": removed, "freed_bytes": freed, **self.storage_stats()}
 
     async def _async_take_off_server(self, att: dict) -> int:
-        """Delete an attachment's files but keep its place in the message (shown as a question mark)."""
-        paths = [p for p in (self.attachment_path(att), self.attachment_path(att, True)) if p]
-        await self.hass.async_add_executor_job(self._remove_files, paths)
-        att.update({"removed": True, "file": None, "thumb": None})
-        return int(att.get("size") or 0)
+        """Delete an attachment's files but keep its place in the message (shown as a question mark).
+        A file another message or post still uses stays for them. Answers the bytes freed."""
+        freed = await self.store.async_release(att)
+        att.update({"removed": True, "file": None, "thumb": None, "blob": None})
+        return freed
 
     async def async_remove_from_server(self, uid: str, is_admin: bool, thread_id: str, aid: str) -> None:
         """One photo, video or file deleted from the server for everyone in the chat.
@@ -922,10 +925,11 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
             "thread_id": thread_id,
             "status": "pending",
             "ts": now_ms(),
-            **{k: info.get(k) for k in ("name", "mime", "size", "file", "thumb", "width", "height", "duration")},
+            **{k: info.get(k) for k in ("name", "mime", "size", "file", "thumb", "width", "height", "duration", "blob")},
         }
         self._save()
         att = self.data["attachments"][aid]
+        self.store.add_user(att)
         return {k: att.get(k) for k in ("id", "name", "mime", "size", "width", "height", "duration")} | {
             "has_thumb": bool(att.get("thumb"))}
 
@@ -966,6 +970,12 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         if not att or att.get("removed") or not att.get("file"):
             raise MessengerError("not_found", "That photo or video has gone")
         new = new_id()
+        # the same file, not a copy of it (a file from before fingerprinting is fingerprinted first)
+        await self.store.async_adopt(att)
+        shared = self.store.share(att)
+        if shared:
+            self.register_upload(uid, None, {"id": new, **shared})
+            return new
         src, tsrc = self.attachment_path(att), self.attachment_path(att, True)
         name = f"{new}_{os.path.basename(att['file']).split('_', 1)[-1]}"
         tname = f"{new}_thumb.jpg" if tsrc else None
@@ -989,18 +999,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         att = self.data["attachments"].pop(aid, None)
         if not att:
             return
-        paths = [p for p in (self.attachment_path(att), self.attachment_path(att, True)) if p]
-
-        def _rm() -> None:
-            for path in paths:
-                try:
-                    os.remove(path)
-                except FileNotFoundError:
-                    pass
-                except OSError as err:
-                    _LOGGER.warning("Could not delete attachment %s: %s", path, err)
-
-        await self.hass.async_add_executor_job(_rm)
+        # the file goes when nothing else uses it
+        await self.store.async_release(att)
 
     async def async_discard_upload(self, uid: str, aid: str) -> None:
         att = self.data["attachments"].get(aid)
@@ -1060,6 +1060,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         # the Feed follows Keep Messages too (stories always go after a day)
         await self.feed.async_cleanup(days)
         self._gc_stickers()
+        # files nothing uses (weekly), and old photos and videos made smaller (if chosen)
+        await self.store.async_maybe_sweep()
         if changed:
             self._save()
 
@@ -1068,6 +1070,8 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         if "retention_days" in patch and int(patch["retention_days"]) not in RETENTION_CHOICES:
             raise MessengerError("invalid_format", "Unsupported Keep Messages value")
         users_patch = patch.get("users")
+        if "storage" in patch:
+            self.store.wake()   # old photos and videos to make smaller, now or no longer
         self.data["settings"] = _deep_merge(self.settings, {k: v for k, v in patch.items() if k != "users"})
         if users_patch:
             users = dict(self.settings.get("users", {}))
@@ -1080,7 +1084,7 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self._save()
         if "retention_days" in patch or "keep_days" in (patch.get("feed") or {}):
             await self.async_cleanup()
-        if "feed" in patch or "feed" in (patch.get("features") or {}):
+        if "feed" in patch or "giphy_key" in patch or "feed" in (patch.get("features") or {}):
             # open cards follow the household's Feed settings straight away
             for sub in list(self._subs.values()):
                 try:
@@ -1151,15 +1155,18 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
                 _LOGGER.debug("Crow Messenger couldn't tell Email about a contacts change", exc_info=True)
 
     # ── Chat backgrounds (private to each person) ───────────────────────────
-    # key "*" is the background for every conversation; a thread id overrides it.
+    # key "*" is the background for every conversation; a thread id overrides it;
+    # "feed" is the one behind the Feed.
     def backgrounds_for(self, uid: str) -> dict:
         return dict(self.backgrounds.get(uid, {}))
 
     def _check_key(self, uid: str, key: str) -> None:
-        if key != "*" and key not in self.data["threads"]:
+        # "feed" is the background behind the Feed (each person's own)
+        if key in ("*", "feed"):
+            return
+        if key not in self.data["threads"]:
             raise MessengerError("not_found", "Conversation not found")
-        if key != "*":
-            self._thread(uid, key)
+        self._thread(uid, key)
 
     @callback
     def _save_backgrounds(self) -> None:

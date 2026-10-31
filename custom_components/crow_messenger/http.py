@@ -11,6 +11,7 @@ logging in. They are only ever served:
 """
 from __future__ import annotations
 
+import hashlib
 import logging
 import mimetypes
 import os
@@ -80,7 +81,10 @@ class UploadView(HomeAssistantView):
         info: dict = {"id": new_id()}
         written: list[str] = []
 
-        async def _stream(field, dest: str, max_bytes: int) -> int:
+        sha = hashlib.sha256()   # the file's fingerprint, worked out as it arrives
+        paths: dict[str, str] = {}
+
+        async def _stream(field, dest: str, max_bytes: int, digest=None) -> int:
             size = 0
             fh = await self.hass.async_add_executor_job(open, dest, "wb")
             try:
@@ -88,6 +92,8 @@ class UploadView(HomeAssistantView):
                     size += len(chunk)
                     if size > max_bytes:
                         raise MessengerError("too_large", f"File too large (max {max_bytes // 1048576} MB)")
+                    if digest is not None:
+                        digest.update(chunk)
                     await self.hass.async_add_executor_job(fh.write, chunk)
             finally:
                 await self.hass.async_add_executor_job(fh.close)
@@ -100,7 +106,8 @@ class UploadView(HomeAssistantView):
                     file_name = f"{info['id']}_{_safe_filename(original)}"
                     dest = os.path.join(messenger.media_dir, file_name)
                     written.append(dest)
-                    info["size"] = await _stream(field, dest, limit)
+                    paths["file"] = dest
+                    info["size"] = await _stream(field, dest, limit, sha)
                     info["file"] = file_name
                     info["name"] = original[:200]
                     mime = (field.headers.get("Content-Type") or "").split(";")[0].strip().lower()
@@ -111,6 +118,7 @@ class UploadView(HomeAssistantView):
                     thumb_name = f"{info['id']}_thumb.jpg"
                     dest = os.path.join(messenger.media_dir, thumb_name)
                     written.append(dest)
+                    paths["thumb"] = dest
                     await _stream(field, dest, 2 * 1024 * 1024)
                     info["thumb"] = thumb_name
                 else:
@@ -124,6 +132,8 @@ class UploadView(HomeAssistantView):
                 info["duration"] = round(float(fields.get("duration", "")), 1)
             except ValueError:
                 pass
+            # stored once: the same bytes already here are used instead of a second copy
+            await messenger.store.async_ingest(info, sha.hexdigest(), paths["file"], paths.get("thumb"))
             result = messenger.register_upload(user.id, fields.get("thread_id") or None, info)
         except MessengerError as err:
             await self.hass.async_add_executor_job(_remove_all, written)

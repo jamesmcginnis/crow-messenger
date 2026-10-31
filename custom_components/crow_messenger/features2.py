@@ -358,6 +358,12 @@ class MoreFeaturesMixin:
 
     async def _async_copy_attachment(self: Messenger, uid: str, thread_id: str, att: dict) -> str:
         aid = _id()
+        # the same file, not a copy of it (a file from before fingerprinting is fingerprinted first)
+        await self.store.async_adopt(att)
+        shared = self.store.share(att)
+        if shared:
+            self.register_upload(uid, thread_id, {"id": aid, **shared})
+            return aid
 
         def _copy() -> tuple[str, str | None]:
             src = self.attachment_path(att)

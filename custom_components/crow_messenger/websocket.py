@@ -557,7 +557,17 @@ async def ws_backup(hass, connection, msg) -> None:
 @websocket_api.async_response
 @_errors
 async def ws_storage_get(hass, connection, msg) -> None:
-    connection.send_result(msg["id"], _m(hass).storage_stats())
+    m = _m(hass)
+    connection.send_result(msg["id"], {**m.storage_stats(), **await m.store.async_report()})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "crow_messenger/storage/tidy", vol.Required("apply"): bool})
+@websocket_api.require_admin
+@websocket_api.async_response
+@_errors
+async def ws_storage_tidy(hass, connection, msg) -> None:
+    """Duplicates already on the server: a dry run (what it would free) or merging them."""
+    connection.send_result(msg["id"], _m(hass).store.start_tidy(msg["apply"]))
 
 
 @websocket_api.websocket_command({
@@ -752,6 +762,8 @@ async def ws_settings_get(hass, connection, msg) -> None:
 
 SETTINGS_SCHEMA = vol.Schema({
     vol.Optional("retention_days"): vol.All(int, vol.In(RETENTION_CHOICES)),
+    # GIFs in the Feed (kept out of the Feed's options, which every card is sent)
+    vol.Optional("giphy_key"): vol.Any(None, vol.All(str, vol.Strip, vol.Length(max=100))),
     vol.Optional("max_upload_mb"): vol.All(int, vol.Range(min=1, max=2000)),
     vol.Optional("notifications"): vol.Schema({
         vol.Optional("enabled"): bool,
@@ -767,6 +779,11 @@ SETTINGS_SCHEMA = vol.Schema({
                                                    "birthday", "leave", "hide")}),
     }),
     vol.Optional("sensors"): vol.Schema({vol.Optional("typing"): bool, vol.Optional("viewing"): bool}),
+    vol.Optional("storage"): vol.Schema({
+        vol.Optional("video"): vol.In(("720", "1080", "off")),
+        vol.Optional("webp"): bool,
+        vol.Optional("shrink_days"): vol.In((0, 90, 180, 365)),
+    }),
     vol.Optional("feed"): vol.Schema({
         vol.Optional("page_posts"): bool,
         vol.Optional("default_audience"): vol.In(("everyone", "me")),
@@ -911,7 +928,19 @@ def _first_page(f, u, d):
     return out
 
 
+async def _gif_search(f, u, d) -> dict:
+    from . import gifs
+    return await gifs.async_search(f.m.hass, f.m, d.get("q") or "", d.get("offset") or 0)
+
+
+async def _gif_add(f, u, d) -> dict:
+    from . import gifs
+    return {"attachment": await gifs.async_add(f.m.hass, f.m, u.id, d["gif_id"])}
+
+
 FEED_COMMANDS = (
+    _feed("gif/search", {vol.Optional("q"): vol.All(str, vol.Length(max=100)), vol.Optional("offset"): vol.All(int, vol.Range(0, 5000))}, _gif_search),
+    _feed("gif/add", {vol.Required("gif_id"): vol.All(str, vol.Length(max=60))}, _gif_add),
     _feed("list", {vol.Optional("before"): int, vol.Optional("limit"): vol.All(int, vol.Range(1, 50)),
                    vol.Optional("author"): str, vol.Optional("group"): str, vol.Optional("album"): str,
                    vol.Optional("kind"): vol.In(("saved", "events", "archive")), vol.Optional("collection"): str}, _first_page),
@@ -1109,7 +1138,7 @@ async def _review(f, u, d) -> dict:
 COMMANDS = (
     ws_subscribe, ws_focus, ws_here, ws_bootstrap, ws_share_get, ws_share_done, ws_media_url, ws_threads, ws_messages, ws_create_thread, ws_send,
     ws_mark_read, ws_typing, ws_update_thread, ws_leave, ws_delete_thread, ws_discard_upload,
-    ws_delete_message, ws_unsend, ws_remove_attachment, ws_ai, ws_feed_ai, ws_feed_story_reply, ws_storage_get, ws_storage_clear,
+    ws_delete_message, ws_unsend, ws_remove_attachment, ws_ai, ws_feed_ai, ws_feed_story_reply, ws_storage_get, ws_storage_tidy, ws_storage_clear,
     ws_reset_summary, ws_reset, ws_backup,
     ws_react, ws_edit, ws_vote, ws_poll_add, ws_action, ws_checkin, ws_place_sticker,
     ws_remove_sticker, ws_disappear, ws_flag, ws_sched_list, ws_sched_cancel, ws_sched_now, ws_stickers_get,

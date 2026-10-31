@@ -218,7 +218,8 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
             if first and media_ok:
                 mime = first.get("mime") or ""
                 if mime.startswith("image/"):
-                    data["image"] = messenger.push_media_path(first["id"])
+                    # a WebP photo goes as its JPEG preview: phone notifications don't all show WebP
+                    data["image"] = messenger.push_media_path(first["id"], thumb=mime == "image/webp" and bool(first.get("thumb")))
                 elif mime.startswith("video/"):
                     if (first.get("size") or 0) <= 20 * 1024 * 1024:
                         data["video"] = messenger.push_media_path(first["id"])
