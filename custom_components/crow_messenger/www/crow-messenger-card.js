@@ -7,9 +7,9 @@
  */
 (() => {
 'use strict';
-const CM_VERSION = '0.1.3';
+const CM_VERSION = '0.1.4';
 // when this copy of the card was built (shown at the bottom of the visual editor)
-const CM_BUILD = '27 Oct 2026 05:10';
+const CM_BUILD = '31 Oct 2026 10:45';
 
 // ── Icons (24×24, stroke = currentColor unless noted) ─────────────────────────
 const _s = (d, extra = '') => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
@@ -3085,14 +3085,14 @@ class CrowMessengerCard extends HTMLElement {
   _saveResume() {
     if (!this._s?.ready || !this._s.me || !this._restoreTried || this._resuming || this._config.feed_only) return;
     if (this._config.resume === false) return;
-    const OK = new Set(['thread', 'info', 'media', 'starred', 'contacts', 'contact', 'profile', 'people', 'feed', 'fpost', 'fprofile', 'fgroup', 'falbum', 'flist', 'factivity', 'fsettings']);
+    const OK = new Set(['thread', 'info', 'media', 'starred', 'contacts', 'contact', 'profile', 'people', 'email', 'feed', 'fpost', 'fprofile', 'fgroup', 'falbum', 'flist', 'factivity', 'fsettings']);
     const DROP = ['focus', 'media', 'preset', 'edit', 'cid_scroll', 'startId'];
     const stack = [];
     for (const pg of this._stack.slice(1)) {
       if (!OK.has(pg.type)) break;
       const data = { ...(pg.data || {}), ...(pg.resumeData?.() || {}) };
       DROP.forEach(k => { if (k in data && !(pg.type === 'contact' && k === 'cid')) delete data[k]; });
-      if (pg.type === 'fpost') delete data.cid;
+      if (pg.type === 'fpost') { delete data.cid; delete data.reply; }
       let clean;
       try { clean = JSON.parse(JSON.stringify(data)); } catch (e) { break; }
       if (Object.values(data).some(v => typeof v === 'function')) break;
@@ -3105,7 +3105,7 @@ class CrowMessengerCard extends HTMLElement {
   _resumeState() {
     if (this._config.resume === false || this._config.feed_only) return null;
     const q = new URLSearchParams(window.location.search);
-    if (this._deepLinked || ['crow_thread', 'crow_share', 'crow_post', 'crow_group', 'crow_profile', 'crow_story', 'crow_feed'].some(k => q.has(k))) return null;
+    if (this._deepLinked || ['crow_thread', 'crow_share', 'crow_post', 'crow_group', 'crow_profile', 'crow_story', 'crow_feed', 'crow_email'].some(k => q.has(k))) return null;
     let st = null;
     try { st = JSON.parse(localStorage.getItem(this._resumeKey()) || 'null'); } catch (e) { st = null; }
     if (!st || Date.now() - (st.at || 0) > 12 * 3600000) return null;
@@ -3122,6 +3122,8 @@ class CrowMessengerCard extends HTMLElement {
         if (['thread', 'info', 'media'].includes(type) && !this._s.threads.has(data.tid)) break;
         if (type === 'contact' && !this._s.contacts.get(data.cid)) break;
         if (type.startsWith('f')) { if (!this._s.feed?.enabled || !(await this._openFeed(type, data, { anim: false }))) break; }
+        // Email puts back its own mailbox and the email you were reading once it's open
+        else if (type === 'email') { if (!this._s.email?.enabled || !(await this._openEmail({}, { anim: false }))) break; }
         else if (type === 'thread') this._openThread(data.tid, { anim: false });
         else this._nav(type, data, { anim: false });
       }
@@ -5822,7 +5824,7 @@ class CrowMessengerCard extends HTMLElement {
     return api;
   }
 
-  async _prepareAndUpload(file, item, threadId, onProgress) {
+  async _prepareAndUpload(file, item, threadId, onProgress, { feed = false } = {}) {
     const type = file.type || '';
     let body = file, thumb = null;
     try {
@@ -5850,6 +5852,8 @@ class CrowMessengerCard extends HTMLElement {
     if (type.startsWith('image/')) item.fullUrl = URL.createObjectURL(body);
     onProgress();
 
+    // the Feed: a GIF this big is better as a video
+    if (feed && body.type === 'image/gif' && body.size > 15 * 1048576) { item.status = 'error'; this._toast(`${file.name} is too big for a GIF (max 15 MB). Try it as a video.`); throw new Error('too large'); }
     const max = (this._s.limits.max_upload_mb || 300) * 1048576;
     if (body.size > max) { item.status = 'error'; this._toast(`${file.name} is too large (max ${this._s.limits.max_upload_mb} MB)`); throw new Error('too large'); }
     const fd = new FormData();
@@ -12808,6 +12812,8 @@ const AI_OFF_UNTIL_ON = ['feed_search'];
 // Household → Feed: the Facebook extras (each on until switched off)
 const FEED_EXTRAS = ['intro', 'highlights', 'badges', 'waves', 'shares', 'story_replies', 'story_stickers', 'home_cards', 'collections', 'quiet', 'friends', 'story_archive'];
 const STORAGE_AGES = [[30, '30 Days'], [90, '90 Days'], [365, '1 Year'], [0, 'All']];
+const ST_VIDEO = [['720', '720p'], ['1080', '1080p'], ['off', 'As Sent']];
+const ST_SHRINK = [[0, 'Never'], [90, '90 Days'], [180, '6 Months'], [365, '1 Year']];
 const HEIGHTS = [[500, '500 px'], [600, '600 px'], [700, '700 px (default)'], [800, '800 px'], [900, '900 px'], [1000, '1000 px'], ['fill', 'Fill the screen']];
 
 // Household settings changed in the editor wait in the browser until the
@@ -13318,7 +13324,20 @@ ${this._segmented('upload-segmented', 'upload', 'Largest Attachment', 'Photos ar
 ${this._toggle('enter_sends', 'Return Key Sends', 'On a computer keyboard, Return sends the message and Shift+Return starts a new line. Phones and tablets always use the send button.')}`;
 
     const storageBody = `
-<div class="grp-sub" style="margin-top:2px;">Photos &amp; Files</div>
+<div class="grp-sub" style="margin-top:2px;">On the Server</div>
+<div id="storage-report" style="font-size:12px;line-height:1.55;color:var(--secondary-text-color,#999);padding:4px 0 8px;">Checking…</div>
+<div class="grp-sub">Saving Space</div>
+${this._segmented('st-video-seg', 'st_video', 'Videos', 'Re-encoded in the background after they’re sent, one at a time at low priority, so they take a fraction of the space. Needs ffmpeg, which Home Assistant includes.', ST_VIDEO)}
+${this._toggle('st_webp', 'Store Photos as WebP', 'About a third smaller than JPEG at the same quality. Previews and phone notifications stay JPEG.')}
+${this._segmented('st-shrink-seg', 'st_shrink', 'Shrink Old Photos &amp; Videos', 'Instead of deleting them: once nothing newer has used them for this long, videos drop to 480p and photos to 1280 px. This can’t be undone.', ST_SHRINK)}
+<div class="grp-sub">Duplicates</div>
+<div style="font-size:11px;color:#888;line-height:1.4;margin:2px 0 8px;">New photos, videos and files are stored once, however many times they’re sent, forwarded or shared. This finds copies already on the server (and anything else that can be made smaller), and tells you what it would free before anything changes.</div>
+<div id="st-tidy-text" style="display:none;font-size:12px;line-height:1.5;margin:0 0 8px;padding:10px 12px;border-radius:10px;background:rgba(10,132,255,0.08);border:1px solid rgba(10,132,255,0.25);"></div>
+<div style="display:flex;gap:8px;margin-bottom:6px;">
+  <button id="st-check" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(10,132,255,0.45);background:rgba(10,132,255,0.12);color:#0a84ff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Check for Duplicates</button>
+  <button id="st-apply" hidden style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(10,132,255,0.45);background:rgba(10,132,255,0.12);color:#0a84ff;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Tidy Up Now</button>
+</div>
+<div class="grp-sub">Photos &amp; Files</div>
 <div id="storage-wrap">
 ${this._segmented('storage-segmented', 'storage_age', 'Delete Photos & Files from the Server', '<span id="storage-stats">Checking…</span><br>Deletes attachments sent in every conversation, for everyone. The messages stay, with a question mark where each one was. People can also remove one at a time in the card: open the photo and tap the bin → Remove from Server (files: press and hold).', STORAGE_AGES)}
 <button id="storage-btn" style="width:100%;margin:8px 0 4px;padding:8px;border-radius:8px;border:1px solid rgba(255,69,58,0.5);background:rgba(255,69,58,0.12);color:#ff453a;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Delete Attachments…</button>
@@ -13507,6 +13526,13 @@ ${this._toggle('hf_k_fund', 'Chip In', 'A pot for a shared present or treat.')}
 ${this._toggle('hf_k_grabs', 'Up for Grabs', 'Give something away, first come first served.')}
 ${this._toggle('hf_k_recs', 'Ask for Recommendations', 'Ask “Anyone know a good plumber?” — people reply with someone from their Contacts, everything recommended is gathered on the post, and anyone can save it to their own Contacts.')}
 ${this._toggle('hf_k_list', 'Lists', 'A checklist post, like “Packing for Cornwall”, that people tick off together. It can be kept in step with a Home Assistant to-do list, both ways.')}
+<div class="grp-sub">GIFs</div>
+<div style="padding:2px 0 10px;">
+  <div style="font-size:11px;color:#888;margin-bottom:6px;line-height:1.4;">Add a GIPHY API key and everyone can search for GIFs and add them to posts and comments. Searches go through Home Assistant, so the key stays here and isn’t shown to anyone else. GIFs are rated PG. Leave it empty to switch GIF search off; GIFs from people’s own photos still work.</div>
+  <div style="font-size:11px;color:#888;margin-bottom:4px;">GIPHY API Key</div>
+  <input type="text" id="hf_giphy" placeholder="Paste your GIPHY API key" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" style="width:100%;box-sizing:border-box;">
+  <div style="font-size:11px;color:#888;margin-top:6px;line-height:1.4;">Get a free key: sign in at <a href="https://developers.giphy.com/dashboard/?create=true" target="_blank" rel="noopener noreferrer" style="color:var(--primary-color,#03a9f4);">developers.giphy.com</a>, choose Create an API Key, pick API (not SDK), give the app a name, then copy the key into the box above.</div>
+</div>
 <div class="grp-sub">Extras</div>
 ${this._toggle('hf_stories', 'Stories', 'Photos, videos or words that disappear after 24 hours.')}
 ${this._toggle('hf_birthdays', 'Birthdays and Milestones', 'A birthday card post on the day for people who share their birthday, and milestones like “Moved into the house”.')}
@@ -13998,6 +14024,7 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     ['stories', 'birthdays', 'review', 'covers'].forEach(k => root.getElementById('hf_' + k)?.addEventListener('change', (e) => hf({ [k]: e.target.checked })));
     ['typing', 'viewing'].forEach(k => root.getElementById('hs_' + k)?.addEventListener('change', (e) => this._saveSettings({ sensors: { [k]: e.target.checked } })));
     root.getElementById('hf_keep')?.addEventListener('change', (e) => hf({ keep_days: e.target.value === '' ? null : +e.target.value }));
+    root.getElementById('hf_giphy')?.addEventListener('change', (e) => { const v = e.target.value.trim(); e.target.value = v; this._saveSettings({ giphy_key: v || null }); });
 
     // Card settings
     root.getElementById('cs_classic')?.addEventListener('change', () => { this._updateConfig('card_liquid_glass', false); this.updateUI(); });
@@ -14039,6 +14066,11 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     RETENTION.forEach(([v]) => root.getElementById('retention_' + v)?.addEventListener('change', () => this._onRetention(v)));
     UPLOAD_SIZES.forEach(([v]) => root.getElementById('upload_' + v)?.addEventListener('change', () => this._saveSettings({ max_upload_mb: v })));
     STORAGE_AGES.forEach(([v]) => root.getElementById('storage_age_' + v)?.addEventListener('change', () => { this._storageAge = v; root.getElementById('storage-confirm').style.display = 'none'; }));
+    ST_VIDEO.forEach(([v]) => root.getElementById('st_video_' + v)?.addEventListener('change', () => this._saveSettings({ storage: { video: v } })));
+    ST_SHRINK.forEach(([v]) => root.getElementById('st_shrink_' + v)?.addEventListener('change', () => this._saveSettings({ storage: { shrink_days: v } })));
+    root.getElementById('st_webp')?.addEventListener('change', (e) => this._saveSettings({ storage: { webp: e.target.checked } }));
+    root.getElementById('st-check')?.addEventListener('click', () => this._storageTidy(false));
+    root.getElementById('st-apply')?.addEventListener('click', () => this._storageTidy(true));
     ['link_previews', 'zones', 'share_sheet', 'feed', 'email'].forEach(k => root.getElementById('f_' + k)?.addEventListener('change', (e) => this._saveSettings({ features: { [k]: e.target.checked } })));
     ['parcels', 'groceries', 'council'].forEach(k => root.getElementById('hn_' + k)?.addEventListener('change', (e) => this._saveSettings({ email_notices: { [k]: e.target.checked } })));
     root.getElementById('ai_enabled')?.addEventListener('change', (e) => this._saveSettings({ ai: { enabled: e.target.checked } }));
@@ -14340,6 +14372,8 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
       ['stories', 'birthdays', 'review', 'covers'].forEach(k => ck('hf_' + k, fo[k] !== false));
       const keep = r.getElementById('hf_keep');
       if (keep) keep.value = fo.keep_days === null || fo.keep_days === undefined ? '' : String(fo.keep_days);
+      const gk = r.getElementById('hf_giphy');
+      if (gk && (r.activeElement !== gk)) gk.value = st?.giphy_key || '';
       const hw = r.getElementById('hfeed-wrap');
       if (hw) hw.style.opacity = (st?.features?.feed === false) ? '0.45' : '';
     }
@@ -14370,6 +14404,10 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
     RETENTION.forEach(([v]) => chk('retention_' + v, ret === v));
     const up = st?.max_upload_mb ?? 300;
     UPLOAD_SIZES.forEach(([v]) => chk('upload_' + v, up === v));
+    const so = st?.storage || {};
+    ST_VIDEO.forEach(([v]) => chk('st_video_' + v, (so.video ?? '720') === v));
+    ST_SHRINK.forEach(([v]) => chk('st_shrink_' + v, (so.shrink_days ?? 0) === v));
+    chk('st_webp', so.webp !== false);
     ['n_show_text', 'n_show_attachment', 'n_sound', 'n_reply_action', 'n_badge', 'nb_tapbacks', 'nb_mark_read', 'nb_mute', 'nb_home', ...FNB_IDS].forEach(id => {
       const row = r.getElementById(id)?.closest('.toggle-item');
       if (row) row.style.opacity = n.enabled === false ? '0.4' : '1';
@@ -14612,10 +14650,77 @@ ${this._section('eraseGrp', '255,69,58', 'mdi:delete-alert-outline', 'Erase Crow
 
   _renderStorage(done) {
     const el = this.shadowRoot.getElementById('storage-stats');
-    if (!el) return;
     const s = this._storage;
-    el.textContent = !s ? 'Only an administrator can see this.'
-      : (done ? done + ' ' : '') + (s.count ? `${s.count} ${s.count === 1 ? 'photo, video or file' : 'photos, videos and files'} using ${fmtBytes(s.bytes) || '0 B'}.` : 'No attachments are stored.');
+    if (el) el.textContent = !s ? 'Only an administrator can see this.'
+      : (done ? done + ' ' : '') + (s.count ? `${s.count} ${s.count === 1 ? 'photo, video or file' : 'photos, videos and files'} sent.` : 'No attachments are stored.');
+    const rep = this.shadowRoot.getElementById('storage-report');
+    if (rep) rep.innerHTML = this._storageReportHtml(s);
+    this._renderTidy();
+  }
+
+  // what's really on the server: by type and place, what's been saved, what's still being made smaller, the largest
+  _storageReportHtml(s) {
+    const e = (x) => String(x ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    if (!s) return 'Only an administrator can see this.';
+    if (s.disk_bytes == null) return 'Couldn’t check the server.';
+    const b = (n) => fmtBytes(n) || '0 B';
+    const k = s.kinds || {};
+    const parts = [['video', 'Videos'], ['photo', 'Photos'], ['audio', 'Voice'], ['file', 'Files']]
+      .filter(([x]) => k[x]?.count).map(([x, l]) => `${l} ${b(k[x].bytes)}`);
+    const day = (ts) => ts ? new Date(ts).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+    const lines = [`<b style="color:var(--primary-text-color)">${b(s.disk_bytes)}</b> on disk in ${s.disk_files} ${s.disk_files === 1 ? 'file' : 'files'}${parts.length ? ': ' + parts.join(' · ') : ''}.`];
+    if (s.areas && (s.areas.messages || s.areas.feed)) lines.push(`Messages ${b(s.areas.messages)} · Feed ${b(s.areas.feed)}${s.saved_duplicates ? ' (a file used in both counts in each)' : ''}.`);
+    if (s.saved_duplicates || s.saved_smaller) lines.push(`Saved so far: ${[s.saved_duplicates ? `${b(s.saved_duplicates)} by storing each file once` : '', s.saved_smaller ? `${b(s.saved_smaller)} by making files smaller` : ''].filter(Boolean).join(', ')}.`);
+    if (s.queued) lines.push(`${s.queued} ${s.queued === 1 ? 'file is' : 'files are'} waiting to be made smaller${s.working ? ' (one in progress)' : ''}.`);
+    if (s.ffmpeg === false) lines.push('<span style="color:#ff9f0a">ffmpeg isn’t available, so videos are kept as they were sent.</span>');
+    if (s.older_files) lines.push(`${s.older_files} older ${s.older_files === 1 ? 'file hasn’t' : 'files haven’t'} been checked for duplicates yet (Check for Duplicates, below).`);
+    if (s.sweep?.at) lines.push(`Files nothing uses are removed every week. Last time: ${day(s.sweep.at)}${s.sweep.files ? `, ${s.sweep.files} removed (${b(s.sweep.bytes)})` : ', none found'}.`);
+    const kind = { video: 'Video', photo: 'Photo', audio: 'Voice', file: 'File' };
+    const big = (s.largest || []).filter(x => x.size > 0).slice(0, 6);
+    const list = big.length ? `<div style="margin-top:8px;font-weight:600;color:var(--primary-text-color)">Largest</div>` + big.map(x =>
+      `<div style="display:flex;gap:8px;"><span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${e(x.name)}</span><span style="white-space:nowrap;">${b(x.size)} · ${kind[x.kind] || 'File'} · ${(x.where || []).map(w => w === 'feed' ? 'Feed' : 'Messages').join(' & ')}${x.uses > 1 ? ` · used ${x.uses}×` : ''}${x.ts ? ` · ${day(x.ts)}` : ''}</span></div>`).join('') : '';
+    return lines.map(l => `<div>${l}</div>`).join('') + list;
+  }
+
+  // Check for Duplicates (a dry run), then Tidy Up Now; the server works through the files and this follows along
+  async _storageTidy(apply) {
+    try {
+      const t = await this._hass.callWS({ type: 'crow_messenger/storage/tidy', apply });
+      this._storage = { ...(this._storage || {}), tidy: t };
+      this._renderTidy();
+      clearInterval(this._tidyTimer);
+      this._tidyTimer = setInterval(async () => {
+        if (!this.isConnected) { clearInterval(this._tidyTimer); return; }
+        try { this._storage = await this._hass.callWS({ type: 'crow_messenger/storage/get' }); } catch (e) { return; }
+        this._renderStorage();
+        if (this._storage?.tidy?.state !== 'running') clearInterval(this._tidyTimer);
+      }, 1500);
+    } catch (e) {
+      const err = this.shadowRoot.getElementById('int-error');
+      if (err) { err.textContent = `Couldn’t check for duplicates: ${e?.message || e}`; err.style.display = 'block'; }
+    }
+  }
+
+  _renderTidy() {
+    const box = this.shadowRoot.getElementById('st-tidy-text'), apply = this.shadowRoot.getElementById('st-apply'), check = this.shadowRoot.getElementById('st-check');
+    if (!box) return;
+    const t = this._storage?.tidy || {}, r = t.result || {}, b = (n) => fmtBytes(n) || '0 B';
+    box.style.display = t.state && t.state !== 'idle' ? 'block' : 'none';
+    if (apply) apply.hidden = !(t.state === 'done' && !t.apply);
+    if (check) { check.disabled = t.state === 'running'; check.style.opacity = t.state === 'running' ? '0.5' : '1'; }
+    if (t.state === 'running') box.textContent = `${t.apply ? 'Tidying up' : 'Checking'}… ${t.total ? `${t.done} of ${t.total} files` : ''}`;
+    else if (t.state === 'failed') box.textContent = `Couldn’t finish: ${t.error || 'something went wrong'}.`;
+    else if (t.state === 'done' && t.apply) box.textContent = `Done. ${b(r.freed)} freed${r.stray ? ` (including ${r.stray} ${r.stray === 1 ? 'file' : 'files'} nothing used)` : ''}. Videos and photos are being made smaller in the background; the figures above update as they go.`;
+    else if (t.state === 'done') {
+      const bits = [];
+      bits.push(r.duplicates ? `${r.duplicates} duplicate ${r.duplicates === 1 ? 'copy' : 'copies'} (${b(r.duplicate_bytes)}) can go.` : 'No duplicates found.');
+      if (r.videos) bits.push(`${r.videos} ${r.videos === 1 ? 'video' : 'videos'} (${b(r.video_bytes)}) can be re-encoded, usually to a fraction of the size.`);
+      if (r.photos) bits.push(`${r.photos} ${r.photos === 1 ? 'photo' : 'photos'} (${b(r.photo_bytes)}) can be stored as WebP.`);
+      if (r.stray) bits.push(`${r.stray} ${r.stray === 1 ? 'file' : 'files'} (${b(r.stray_bytes)}) nothing uses can go.`);
+      bits.push(r.duplicates || r.videos || r.photos || r.stray ? 'Nothing has changed yet: Tidy Up Now does it.' : 'There’s nothing to tidy.');
+      box.textContent = bits.join(' ');
+      if (apply) apply.hidden = !(r.duplicates || r.videos || r.photos || r.stray);
+    }
   }
 
   _onRetention(days) {
@@ -14802,7 +14907,7 @@ Object.assign(CrowMessengerCard.prototype, LAZY_STUBS, {
 });
 
 // What the Feed's own file (crow-feed.js) borrows from the card, so both look and behave the same
-CrowMessengerCard.kit = { esc, clamp, isApple, fmtBytes, fmtDur, hashHue, initials, locale, fmtTime, fmtListDate, loadImage, resizeToBlob, videoInfo, copyImage, linkTarget, openExternal, MISSING_Q, ICON, MICON, FEED_ICON, HA_ID, STICKER_EMOJI, contactName, CM_LIVE, FM_ICON, FM_NEARBY, FM_NEAR_KEY, GAME_NAME, PDF_FONT_BASE, PDF_IMG_RUN, PICON, cmLiveInfo, contactLetter, copyText, downloadBlob, fmtLongDate, formatAddress, fxBokeh, fxCanvas, fxDraw, fxFlake, fxGlint, fxGlow, fxHex, fxPick, fxRgba, fxRnd, haversine, hour12, isAndroid, telValue, timeAgoShort };
+CrowMessengerCard.kit = { fileToBackground, esc, clamp, isApple, fmtBytes, fmtDur, hashHue, initials, locale, fmtTime, fmtListDate, loadImage, resizeToBlob, videoInfo, copyImage, linkTarget, openExternal, MISSING_Q, ICON, MICON, FEED_ICON, HA_ID, STICKER_EMOJI, contactName, CM_LIVE, FM_ICON, FM_NEARBY, FM_NEAR_KEY, GAME_NAME, PDF_FONT_BASE, PDF_IMG_RUN, PICON, cmLiveInfo, contactLetter, copyText, downloadBlob, fmtLongDate, formatAddress, fxBokeh, fxCanvas, fxDraw, fxFlake, fxGlint, fxGlow, fxHex, fxPick, fxRgba, fxRnd, haversine, hour12, isAndroid, telValue, timeAgoShort };
 
 // ── The Feed card: the household Feed on its own, or as a photo slideshow for a wall tablet ──
 class CrowFeedCard extends CrowMessengerCard {

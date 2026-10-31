@@ -60,6 +60,7 @@ const FI = {
   check: mdi('check'),
   x: mdi('close'),
   sticker: mdi('sticker-emoji'),
+  gif: mdi('file-gif-box'),
   members: mdi('account-multiple-outline'),
   leave: mdi('logout-variant'),
   back: mdi('chevron-left'),
@@ -149,6 +150,20 @@ const URL_RE = /https?:\/\/[^\s<>"']+/gi;
 // ── Styles (added to the card the first time the Feed opens) ─────────────────
 const FEED_CSS = `
 .fd { --fd-card: var(--cm-group); --fd-gap: 10px; }
+/* Feed Background: behind the Feed's main screen, with the posts solid on top */
+.fd > .fd-bg { display: none; }
+.fd.has-bg > .fd-bg { display: block; }
+.fd.has-bg > .scroll { position: relative; z-index: 1; }
+.fd.has-bg > .fd-bg::after { content: ''; position: absolute; inset: 0; background: rgba(0,0,0,0.28); }
+:host([data-mode="light"]) .fd.has-bg > .fd-bg::after { background: rgba(255,255,255,0.3); }
+.fd.has-live > .fd-bg::after { background: rgba(0,0,0,0.12); }
+:host([data-mode="light"]) .fd.has-live > .fd-bg::after { background: rgba(255,255,255,0.12); }
+.fd.has-bg > .edge.top { background: none; }
+.fd.has-bg .fd-hero :is(.hn, .hs), .fd.has-bg .fd-tabs button { text-shadow: 0 1px 3px rgba(0,0,0,0.55); }
+:host([data-mode="light"]) .fd.has-bg .fd-hero :is(.hn, .hs), :host([data-mode="light"]) .fd.has-bg .fd-tabs button { text-shadow: 0 1px 3px rgba(255,255,255,0.85); }
+.fd.has-bg > .scroll > .large-title, .fd.has-bg .fd-body > :is(.fd-loading, .empty, .fd-h2) { text-shadow: 0 1px 3px rgba(0,0,0,0.55); }
+:host([data-mode="light"]) .fd.has-bg > .scroll > .large-title, :host([data-mode="light"]) .fd.has-bg .fd-body > :is(.fd-loading, .empty, .fd-h2) { text-shadow: 0 1px 3px rgba(255,255,255,0.85); }
+:host([data-retro]) .fd > .fd-bg { display: none; }
 .fd .scroll { padding-bottom: 30px; }
 .fd .large-title { padding-bottom: 2px; }
 .fd-seg { display: flex; gap: 6px; padding: 8px 14px 4px; overflow-x: auto; scrollbar-width: none; }
@@ -282,6 +297,17 @@ const FEED_CSS = `
 .fc-bub .ft .mn { color: var(--cm-accent); font-weight: 600; }
 .fc-bub .crx { position: absolute; right: -6px; bottom: -10px; display: flex; align-items: center; gap: 2px; padding: 1px 6px; border-radius: 12px; background: var(--fd-card); box-shadow: 0 1px 4px rgba(0,0,0,0.18); font-size: 12px; color: var(--cm-text2); }
 .fc-pic { margin-top: 6px; max-width: 200px; border-radius: 14px; overflow: hidden; cursor: pointer; }
+/* GIFs */
+.fp-media .mi .gifb { position: absolute; left: 7px; bottom: 7px; padding: 1px 6px; border-radius: 6px; background: rgba(0,0,0,0.55); color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .04em; pointer-events: none; }
+.fgif-sheet .xbody { padding-bottom: 20px; }
+.fgif-q { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+.fgif-grid { display: flex; gap: 6px; align-items: flex-start; }
+.fgif-col { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.fgif { display: block; width: 100%; padding: 0; border: 0; border-radius: 10px; overflow: hidden; background: var(--cm-fill); cursor: pointer; }
+.fgif img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.fgif:active { transform: scale(0.97); }
+.fgif-msg { text-align: center; color: var(--cm-text2); font-size: 14px; padding: 18px 0; }
+.fgif-by { text-align: center; color: var(--cm-text3); font-size: 11.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; padding-top: 10px; }
 .fc-pic img { width: 100%; display: block; }
 .fc-stk { font-size: 60px; line-height: 1; margin-top: 4px; }
 .fc-stk img { width: 110px; height: 110px; object-fit: contain; }
@@ -804,7 +830,7 @@ const FEED_CSS = `
 .fdc-media .th .vp svg { width: 26px; height: 26px; filter: drop-shadow(0 1px 3px rgba(0,0,0,.6)); }
 .fdc-sec { margin: 4px 16px 12px; }
 .fdc-tools { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; justify-content: space-around; padding: 10px 8px 16px; background: var(--cm-glass-strong); border-top: 0.5px solid var(--cm-sep); }
-.fdc-tools button { width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--cm-accent); }
+.fdc-tools button { width: 42px; min-width: 0; flex: 0 1 42px; height: 42px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--cm-accent); }
 .fdc-tools button svg { width: 24px; height: 24px; }
 .fdc-tools button.on { background: color-mix(in srgb, var(--cm-accent) 18%, transparent); }
 /* sheets */
@@ -1038,6 +1064,67 @@ Object.assign(Card.prototype, {
   _fkindOn(k) { return k === 'post' || this._fopt().kinds[k] !== false; },
   // the household's switches for the Facebook extras (Household → Feed)
   _fon(k) { return this._s.feed?.options?.[k] !== false; },
+  // GIF search: only once an administrator has added a GIPHY key
+  _fgifsOn() { return this._s.feed?.options?.gifs === true; },
+
+  // Choose a GIF from GIPHY: what's trending, or a search. The chosen one is downloaded by Home
+  // Assistant and comes back ready to add, like an uploaded photo (null if nothing was chosen).
+  _fgifPick() {
+    return new Promise((resolve) => {
+      let done = false, q = '', next = 0, loading = false, seq = 0, timer = null;
+      const sh = this._xsheet({
+        title: 'GIFs',
+        body: `<input class="xfield fgif-q" type="search" placeholder="Search GIPHY" autocomplete="off" enterkeyhint="search">
+          <div class="fgif-grid"><div class="fgif-col"></div><div class="fgif-col"></div></div>
+          <div class="fgif-msg">Loading…</div>
+          <div class="fgif-by">Powered by GIPHY</div>`,
+      });
+      sh.wrap.classList.add('fgif-sheet');
+      const finish = (v) => { if (done) return; done = true; resolve(v); };
+      const close = sh.close; sh.close = () => { close(); finish(null); };
+      const input = sh.el.querySelector('.fgif-q'), cols = [...sh.el.querySelectorAll('.fgif-col')], msg = sh.el.querySelector('.fgif-msg');
+      const hts = [0, 0];
+      const load = async (fresh) => {
+        if (loading && !fresh) return;
+        if (!fresh && next === null) return;
+        const my = ++seq;
+        if (fresh) { next = 0; cols.forEach(c => { c.innerHTML = ''; }); hts[0] = hts[1] = 0; }
+        loading = true;
+        msg.hidden = false; msg.textContent = 'Loading…';
+        try {
+          const r = await this._ws('feed/gif/search', { q, offset: next || 0 });
+          if (my !== seq) return;
+          next = r.next;
+          (r.gifs || []).forEach(g => {
+            const c = hts[0] <= hts[1] ? 0 : 1;
+            hts[c] += g.h / Math.max(1, g.w);
+            cols[c].insertAdjacentHTML('beforeend', `<button class="fgif" data-gif="${esc(g.id)}" aria-label="${esc(g.title || 'GIF')}" style="aspect-ratio:${g.w} / ${g.h}"><img src="${esc(g.preview)}" alt="" loading="lazy" referrerpolicy="no-referrer"></button>`);
+          });
+          const none = !cols[0].children.length;
+          msg.hidden = !none;
+          if (none) msg.textContent = q ? `No GIFs for “${q}”` : 'No GIFs right now';
+        } catch (err) {
+          if (my === seq) { msg.hidden = false; msg.textContent = err.message || 'Couldn’t load GIFs'; }
+        } finally { if (my === seq) loading = false; }
+      };
+      input.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(() => { q = input.value.trim(); load(true); }, 350); });
+      input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); clearTimeout(timer); q = input.value.trim(); load(true); input.blur(); } });
+      sh.el.addEventListener('scroll', () => { if (sh.el.scrollTop + sh.el.clientHeight > sh.el.scrollHeight - 400) load(false); }, { passive: true });
+      sh.el.addEventListener('click', async (e) => {
+        const b = e.target.closest('[data-gif]');
+        if (!b || done || sh.adding) return;
+        sh.adding = true;
+        const preview = b.querySelector('img')?.src || '';
+        this._toast('Adding GIF…');
+        const a = await this._ws('feed/gif/add', { gif_id: b.dataset.gif }).then(r => r.attachment).catch(err => { this._toast(err.message || 'Couldn’t add that GIF'); return null; });
+        sh.adding = false;
+        if (!a) return;
+        finish({ id: a.id, name: a.name, mime: a.mime || 'image/gif', size: a.size, width: a.width, height: a.height, has_thumb: !!a.has_thumb, status: 'done', progress: 1, preview });
+        close();
+      });
+      load(true);
+    });
+  },
   _fstoriesOn() { return this._fopt().stories && this._config.show_stories !== false; },
   _fdefaultAudience() { return { type: this._fopt().default_audience === 'me' ? 'me' : 'everyone' }; },
   _fkeep(list) { (list || []).forEach(p => this._fd.posts.set(p.id, p)); return list || []; },
@@ -1225,6 +1312,7 @@ Object.assign(Card.prototype, {
       return `<div class="mi" data-fview="${esc(m.id)}" data-i="${i}">${pic}
         ${video ? `<div class="vplay"><span>${FI.play}</span></div>${m.duration ? `<span class="vdur">${fmtDur(m.duration)}</span>` : ''}` : ''}
         ${tagged ? `<span class="tg">${FI.tag}</span>` : ''}
+        ${m.mime === 'image/gif' && !(i === 3 && n > 4) ? '<span class="gifb">GIF</span>' : ''}
         ${i === 3 && n > 4 ? `<div class="more">+${n - 4}</div>` : ''}</div>`;
     }).join('')}</div>`;
   },
@@ -1421,7 +1509,7 @@ Object.assign(Card.prototype, {
       </div></div>`;
     };
     const boxHtml = () => `<div class="fd-card"><div class="fd-box" data-a="new">${this._userAv(s.me, 40)}<div class="fd-ph">What’s happening at home?</div><span class="fd-bi" data-a="newphoto">${FI.photo}</span></div>
-      <div class="fd-quick"><button data-a="newphoto">${FI.photo}Photo</button>${this._fkindOn('poll') ? `<button data-a="newkind" data-kind="poll">${FI.poll}Poll</button>` : ''}${this._fkindOn('event') ? `<button data-a="newkind" data-kind="event">${FI.event}Event</button>` : ''}${this._fkindOn('fund') || this._fkindOn('grabs') || this._fstoriesOn() ? `<button data-a="newmore">${FI.more}More</button>` : ''}</div></div>`;
+      <div class="fd-quick"><button data-a="newphoto">${FI.photo}Photo</button>${this._fgifsOn() ? `<button data-a="newgif">${FI.gif}GIF</button>` : ''}${this._fkindOn('poll') ? `<button data-a="newkind" data-kind="poll">${FI.poll}Poll</button>` : ''}${this._fkindOn('event') ? `<button data-a="newkind" data-kind="event">${FI.event}Event</button>` : ''}${this._fkindOn('fund') || this._fkindOn('grabs') || this._fstoriesOn() ? `<button data-a="newmore">${FI.more}More</button>` : ''}</div></div>`;
     const missHtml = () => {
       if (!missSince || !this._faiOn('catchup')) return '';
       if (!missed) return `<div class="fd-card fai-miss"><button data-a="missed">${FI.ai}<span><b>What did I miss?</b><br>A quick catch-up on the posts since you last looked</span></button><button class="x" data-a="nomiss" aria-label="No thanks">${FI.x}</button></div>`;
@@ -1651,6 +1739,7 @@ Object.assign(Card.prototype, {
       if (a === 'back') { this._back(); return; }
       if (a === 'new') { this._nav('fcompose', {}); return; }
       if (a === 'newphoto') { e.stopPropagation(); this._nav('fcompose', { pickMedia: true }); return; }
+      if (a === 'newgif') { e.stopPropagation(); this._nav('fcompose', { pickGif: true }); return; }
       if (a === 'newkind') { this._nav('fcompose', { preset: { kind: e.target.closest('[data-kind]').dataset.kind } }); return; }
       if (a === 'newmore') {
         const k = await this._menu(e.target.closest('button'), [
@@ -1763,6 +1852,7 @@ Object.assign(Card.prototype, {
       if (await this._fpostClick(e)) return;
     });
     page.refresh = (what, id) => {
+      if (what === 'background') return;
       // someone's name or photo changed: show the new one
       if (what === 'fusers') { if (view !== 'alerts') render(); else if (notifs) render(); return; }
       if (what === 'fpost' || what === 'fgone') {
@@ -1803,7 +1893,7 @@ Object.assign(Card.prototype, {
     };
     page.resumeData = () => ({ view });   // coming back reopens the same tab
     if (view !== 'feed') setTimeout(() => setView(view), 0);
-    return page;
+    return this._fbgAttach(page);
   },
 
   async _fmainMenu(anchor) {
@@ -1835,7 +1925,7 @@ Object.assign(Card.prototype, {
   },
 
   // ── Page: one post and all its comments ────────────────────────────────────
-  _pg_fpost({ pid, cid = null, focus = false, media = null }) {
+  _pg_fpost({ pid, cid = null, focus = false, media = null, reply = null }) {
     this._feedSetup();
     const el = this._el(`<div class="fd">
       <div class="scroll"><div class="fd-body" style="padding-top:72px"><div class="fd-loading">Loading…</div></div></div>
@@ -1844,7 +1934,7 @@ Object.assign(Card.prototype, {
       <div class="fd-cbar" hidden>
         <div class="rep" hidden></div><div class="att" hidden></div>
         <div class="fai-chips" hidden></div>
-        <div class="row">${this._faiOn('comments') || this._faiOn('writing') ? `<button class="cbtn" data-c="ai" aria-label="AI">${FI.ai}</button>` : ''}<button class="cbtn" data-c="photo" aria-label="Add a Photo">${FI.photo}</button><button class="cbtn" data-c="sticker" aria-label="Sticker">${FI.sticker}</button>
+        <div class="row">${this._faiOn('comments') || this._faiOn('writing') ? `<button class="cbtn" data-c="ai" aria-label="AI">${FI.ai}</button>` : ''}<button class="cbtn" data-c="photo" aria-label="Add a Photo">${FI.photo}</button><button class="cbtn" data-c="sticker" aria-label="Sticker">${FI.sticker}</button>${this._fgifsOn() ? `<button class="cbtn" data-c="gif" aria-label="GIF">${FI.gif}</button>` : ''}
           <textarea rows="1" placeholder="Write a comment…" enterkeyhint="send"></textarea><button class="cbtn" data-c="at" aria-label="Mention someone">${FI.at}</button><button class="go" data-c="send" aria-label="Send" disabled>${FI.send}</button></div></div>
     </div>`);
     const page = { el };
@@ -1931,11 +2021,14 @@ Object.assign(Card.prototype, {
         if (!files.length) return;
         photo = { status: 'uploading', name: files[0].name };
         showAtt();
-        try { await this._prepareAndUpload(files[0], photo, null, () => showAtt()); } catch (err) { photo = null; }
+        try { await this._prepareAndUpload(files[0], photo, null, () => showAtt(), { feed: true }); } catch (err) { photo = null; }
         showAtt();
       } else if (c === 'sticker') {
         const st = await this._fpickSticker();
         if (st) { sticker = st; photo = null; showAtt(); }
+      } else if (c === 'gif') {
+        const g = await this._fgifPick();
+        if (g) { photo = g; sticker = null; showAtt(); input.focus(); }
       }
     });
     el.addEventListener('click', async (e) => {
@@ -1988,7 +2081,12 @@ Object.assign(Card.prototype, {
       if (cid) {
         const c = body.querySelector(`[data-cid="${CSS.escape(cid)}"]`);
         if (c) { c.scrollIntoView({ block: 'center' }); c.querySelector('.fc-bub')?.animate([{ background: 'color-mix(in srgb, var(--cm-accent) 30%, transparent)' }, { background: 'var(--cm-fill)' }], { duration: 1600 }); }
-      } else if (focus) setTimeout(() => input.focus(), 300);
+      }
+      // Reply tapped on a comment in the Feed: the post opens with the reply started
+      const p2 = reply && this._fpost(pid);
+      const rc = p2 && p2.can_comment !== false ? p2.comments?.find(x => x.id === reply) : null;
+      if (rc) setTimeout(() => setReply(rc.reply_to ? p2.comments.find(x => x.id === rc.reply_to) || rc : rc), 300);
+      else if (focus && !cid) setTimeout(() => input.focus(), 300);
     };
     return page;
   },
@@ -2018,6 +2116,20 @@ Object.assign(Card.prototype, {
       if (view.dataset.comment) { this._fview([{ id: view.dataset.fview, mime: 'image/jpeg', post_id: pid }], 0); return true; }
       const list = (p.media?.length ? p.media : p.refs || []).filter(m => !m.removed).map(m => ({ ...m, post_id: pid, author: p.author, ts: p.ts }));
       this._fview(list, Math.max(0, list.findIndex(m => m.id === view.dataset.fview)), { post: p });
+      return true;
+    }
+    // Like, Reply and ••• on the comments shown under a post in the Feed
+    const ca = !inPost && e.target.closest('[data-ca]');
+    if (ca) {
+      const cm = p.comments?.find(x => x.id === ca.closest('[data-cid]')?.dataset.cid);
+      if (!cm) return true;
+      const act = ca.dataset.ca;
+      if (act === 'reply') this._nav('fpost', { pid, cid: cm.id, reply: cm.id });
+      else if (act === 'react') {
+        const pick = await this._freactPicker(ca, cm.reactions?.[this._s.me]);
+        if (pick === undefined) return true;
+        try { const r = await this._ws('feed/comment/react', { post_id: pid, comment_id: cm.id, reaction: pick }); this._fd.posts.set(pid, r.post); this._refresh('fpost', pid); } catch (err) { this._toast(err.message); }
+      } else if (act === 'more') this._fcommentMenu(ca, p, cm, () => this._refresh('fpost', pid));
       return true;
     }
     const fa = e.target.closest('[data-fa]')?.dataset.fa;
@@ -2464,7 +2576,7 @@ Object.assign(Card.prototype, {
   // preset: { text, kind, audience, album } · edit: a post id · pickMedia: open the photo picker first
   // onPosted: called after posting (Share to Crow Messenger uses it to tidy up)
   // share: a link shared from a phone (Post on a Page) · comment: words typed with it
-  _pg_fcompose({ preset = null, edit = null, pickMedia = false, onPosted = null, share = null, comment = '' } = {}) {
+  _pg_fcompose({ preset = null, edit = null, pickMedia = false, pickGif = false, onPosted = null, share = null, comment = '' } = {}) {
     this._feedSetup();
     const s = this._s, me = s.me;
     const editing = edit ? this._fpost(edit) : null;
@@ -2517,6 +2629,7 @@ Object.assign(Card.prototype, {
       <div class="top"><button class="pill g" data-a="cancel">Cancel</button><div class="title">${editing ? 'Edit Post' : 'New Post'}</div><button class="pill g accent" data-a="post">${editing ? 'Save' : 'Post'}</button></div>
       <div class="fdc-tools">
         <button data-t="media" aria-label="Photo or Video">${FI.photo}</button>
+        <button data-t="gif" aria-label="GIF"${this._fgifsOn() ? '' : ' hidden'}>${FI.gif}</button>
         <button data-t="tag" aria-label="Tag People">${FI.tag}</button>
         <button data-t="feeling" aria-label="Feeling or Activity">${FI.smile}</button>
         <button data-t="place" aria-label="Check In">${FI.pin}</button>
@@ -2699,7 +2812,7 @@ Object.assign(Card.prototype, {
       el.querySelectorAll('.fdc-tools [data-t]').forEach(b => {
         const t = b.dataset.t;
         b.classList.toggle('on', (t === 'feeling' && !!st.feeling) || (t === 'place' && !!st.place) || (t === 'album' && !!st.album) || (t === 'schedule' && !!st.scheduled_at) || (t === 'tag' && Object.keys(st.tags).length > 0));
-        b.hidden = (st.shared && ['media', 'album', 'tag', 'home'].includes(t)) || (t === 'home' && (editing || st.kind !== 'post')) || (t === 'album' && !!st.page) || (editing && ['media', 'album'].includes(t)) || (t === 'schedule' && editing && !editing.scheduled_at) || (t === 'tag' && !st.media.some(m => (m.mime || '').startsWith('image/')));
+        b.hidden = (t === 'gif' && (!this._fgifsOn() || !!st.shared || !!editing)) || (st.shared && ['media', 'album', 'tag', 'home'].includes(t)) || (t === 'home' && (editing || st.kind !== 'post')) || (t === 'album' && !!st.page) || (editing && ['media', 'album'].includes(t)) || (t === 'schedule' && editing && !editing.scheduled_at) || (t === 'tag' && !st.media.some(m => (m.mime || '').startsWith('image/')));
       });
       check();
     };
@@ -2724,7 +2837,7 @@ Object.assign(Card.prototype, {
         this._prepareAndUpload(f, item, null, () => {
           const box = inner.querySelector(`[data-mi="${st.media.indexOf(item)}"] .pr`);
           if (box) box.style.width = `${Math.round((item.progress || 0) * 100)}%`;
-        }).then(() => { item.has_thumb = !!item.preview; render(); }).catch(() => { st.media = st.media.filter(x => x !== item); render(); });
+        }, { feed: true }).then(() => { item.has_thumb = !!item.preview; render(); }).catch(() => { st.media = st.media.filter(x => x !== item); render(); });
       }
       if (files.length > room) this._toast('Up to 20 photos and videos in a post');
     };
@@ -2870,6 +2983,12 @@ Object.assign(Card.prototype, {
       }
       if (x === 'place') { st.place = null; render(); saveDraft(); return; }
       if (t === 'media') { const files = await this._fpickFiles('image/*,video/*', true); if (files.length) addFiles(files); return; }
+      if (t === 'gif') {
+        if (st.media.length >= 20) { this._toast('Up to 20 photos and videos in a post'); return; }
+        const g = await this._fgifPick();
+        if (g) { st.media.push(g); render(); }
+        return;
+      }
       if (t === 'ai') {
         const photos = st.media.filter(m => m.id && (m.mime || '').startsWith('image/') && !m.existing);
         const v = await this._menu(e.target.closest('button'), [
@@ -2944,6 +3063,7 @@ Object.assign(Card.prototype, {
       render();
       checkLink();
       if (pickMedia) setTimeout(async () => { const files = await this._fpickFiles('image/*,video/*', true); if (files.length) addFiles(files); }, 50);
+      else if (pickGif) setTimeout(async () => { const g = await this._fgifPick(); if (g) { st.media.push(g); render(); } }, 350);
       else setTimeout(() => { const ta = inner.querySelector('.fdc-text'); if (ta && st.kind !== 'event' && st.kind !== 'fund') { try { ta.focus({ preventScroll: true }); } catch (e) { /* */ } } }, 350);
       // from Email: its photos, uploaded like ones chosen here
       if (preset?.files?.length) setTimeout(() => addFiles(preset.files), 50);
@@ -3829,7 +3949,7 @@ Object.assign(Card.prototype, {
         else if (v === 'del') { const r = await this._alert({ title: `Delete “${h.name}”?`, message: 'The stories in it are deleted from your profile.', buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Delete', style: 'destructive', value: true }] }); if (r.value) { await this._ws('feed/highlight', { highlight_id: h.id, delete: true }); loadInfo(); } }
       } catch (err) { this._toast(err.message); }
     });
-    return page;
+    return this._fbgAttach(page);
   },
 
   // ── Your cover photo and profile photo ──────────────────────────────────────
@@ -3946,7 +4066,7 @@ Object.assign(Card.prototype, {
       else if (what === 'fgone') { order = order.filter(x => x !== id); render(); }
     };
     page.onShow = () => { head(); if (!page.loaded) { page.loaded = true; load(); } };
-    return page;
+    return this._fbgAttach(page);
   },
 
   _fgroupSheet(g) {
@@ -4533,7 +4653,10 @@ Object.assign(Card.prototype, {
       const ms = s.feed?.milestones || [];
       const bday = pr.birthday || '';
       const bdayDate = /^\d{4}-\d{2}-\d{2}$/.test(bday) ? bday : '';
-      body.innerHTML = `<div class="fd-h2">Notifications</div><div class="group">${NOTE.map(([k, n, d]) => `<label class="gr"><div class="gl">${esc(n)}<div style="font-size:13px;color:var(--cm-text2)">${esc(d)}</div></div><span class="tsw"><input type="checkbox" data-n="${k}"${pr.notify?.[k] !== false && (k !== 'new_posts' || pr.notify?.[k]) ? ' checked' : ''}><span></span></span></label>`).join('')}</div>
+      body.innerHTML = `<div class="fd-h2">Background</div><div class="group">
+          <div class="gr" role="button" data-a="fbg"><span class="gi">${K.ICON.wallpaper}</span><div class="gl">Feed Background</div><div class="gv">${esc(this._fbgLabel())}</div></div></div>
+        <div class="xnote">A photo or Live Wallpaper behind your Feed, profiles and groups. Only you see it.</div>
+        <div class="fd-h2">Notifications</div><div class="group">${NOTE.map(([k, n, d]) => `<label class="gr"><div class="gl">${esc(n)}<div style="font-size:13px;color:var(--cm-text2)">${esc(d)}</div></div><span class="tsw"><input type="checkbox" data-n="${k}"${pr.notify?.[k] !== false && (k !== 'new_posts' || pr.notify?.[k]) ? ' checked' : ''}><span></span></span></label>`).join('')}</div>
         <div class="xnote">You’re only ever told about posts that are shared with you.</div>
         ${quietHtml()}
         <div class="fd-h2">Your Birthday</div><div class="group">
@@ -4566,6 +4689,7 @@ Object.assign(Card.prototype, {
     el.addEventListener('click', async (e) => {
       const a = e.target.closest('[data-a]')?.dataset.a;
       if (a === 'back') { this._back(); return; }
+      if (a === 'fbg') { this._nav('fbg', {}); return; }
       if (a === 'addms') { await this._fmilestoneSheet(null); render(); return; }
       if (a === 'quiet') {
         const q = s.feed?.quiet || {};
@@ -4587,8 +4711,127 @@ Object.assign(Card.prototype, {
         try { const r = await this._ws('feed/review', {}); this._fd.posts.set(r.post.id, r.post); this._toast('Year in Review posted'); this._nav('fpost', { pid: r.post.id }); } catch (err) { this._toast(err.message); }
       }
     });
-    page.refresh = (what) => { if (what === 'fmeta') render(); };
+    page.refresh = (what) => { if (what === 'fmeta' || what === 'background') render(); };
     page.onShow = render;
+    return page;
+  },
+
+  // ── Feed Background (each person's own; nobody else sees it) ───────────────
+  // behind the Feed, profiles and groups: a photo, or a Live Wallpaper that only runs while
+  // that screen is showing. The posts stay solid on top.
+  _fbgAttach(page) {
+    const el = page.el, s = this._s;
+    const bgEl = document.createElement('div');
+    bgEl.className = 'chatbg fd-bg';
+    el.prepend(bgEl);
+    let visible = false, live = null;
+    const render = () => {
+      const v = s.backgrounds?.feed || '';
+      const img = v === 'none' ? '' : v;
+      const kind = img.startsWith('live:') ? img.slice(5) : '';
+      const want = !!kind && visible && this.isConnected;
+      if (bgEl.dataset.src === img && !!live === want) return;
+      bgEl.dataset.src = img;
+      if (live) { live.stop(); this._lives.delete(live); live = null; }
+      bgEl.style.backgroundImage = img && !kind ? `url("${img}")` : '';
+      if (want) { live = this._liveWallpaper(bgEl, kind); this._lives.add(live); }
+      el.classList.toggle('has-bg', !!img);
+      el.classList.toggle('has-live', !!kind);
+    };
+    const after = (k, fn) => { const o = page[k]; page[k] = (...a) => { const r = o?.(...a); fn(...a); return r; }; };
+    after('refresh', (what) => { if (what === 'background' || what === 'all') render(); });
+    after('onShow', () => { visible = true; render(); });
+    after('onHide', () => { visible = false; render(); });
+    after('destroy', () => { visible = false; render(); });
+    render();
+    return page;
+  },
+
+  _fbgLabel() {
+    const v = this._s.backgrounds?.feed || '';
+    if (!v || v === 'none') return 'None';
+    if (v.startsWith('live:')) return K.cmLiveInfo(v.slice(5))?.name || 'Live Wallpaper';
+    return 'Photo';
+  },
+
+  _pg_fbg() {
+    this._feedSetup();
+    const s = this._s, I = K.ICON;
+    const previews = new Map();
+    const el = this._el(`<div class="fd">
+      <div class="scroll"><div class="ipage">
+        <div class="pick-grid"></div>
+        <div class="group fbg-rm" hidden><div class="gr red" role="button" data-a="rm"><div class="gl">Remove Feed Background</div></div></div>
+        <div class="pick-note">Your background shows behind the Feed, profiles and groups, with posts on top as usual. Live Wallpapers move gently, and pause when the Feed isn’t on screen. Only you see your Feed background.</div>
+      </div></div>
+      <div class="edge top"></div>
+      <div class="top"><button class="cb g" data-a="back" aria-label="Back">${FI.back}</button><div class="title">Feed Background</div><div style="width:44px"></div></div>
+    </div>`);
+    const page = { el };
+    const grid = el.querySelector('.pick-grid');
+    // None, a photo of your own, then the Live Wallpapers (built once, so the previews keep running)
+    grid.innerHTML = `<div class="pick" data-id="none" role="button" aria-label="None">
+        <div class="tile none-tile"><span class="none-x">${I.x}</span><span class="ck">${I.check}</span></div><div class="nm">None</div></div>
+      <div class="pick" data-id="photo" role="button" aria-label="Photo">
+        <div class="tile none-tile fbg-photo"><span class="none-x">${I.photo}</span><span class="ck">${I.check}</span></div><div class="nm">Photo…</div></div>`
+      + K.CM_LIVE.map(l => `<div class="pick" data-id="${esc(l.id)}" role="button" aria-label="${esc(l.name)}">
+        <div class="tile" style="background:${l.thumb}"><div class="live" data-live="${esc(l.id)}"></div><span class="ck">${I.check}</span></div><div class="nm">${esc(l.name)}</div></div>`).join('');
+    const photoTile = grid.querySelector('.fbg-photo');
+    page.refresh = (what) => {
+      if (!['all', 'background'].includes(what)) return;
+      const v = s.backgrounds?.feed || '';
+      const on = !v || v === 'none' ? 'none' : v.startsWith('live:') ? v.slice(5) : 'photo';
+      grid.querySelectorAll('.pick').forEach(p => p.classList.toggle('on', p.dataset.id === on));
+      // the photo tile shows your photo once one is chosen
+      const isPhoto = on === 'photo';
+      photoTile.classList.toggle('none-tile', !isPhoto);
+      photoTile.style.background = isPhoto ? `center / cover no-repeat url("${v}")` : '';
+      photoTile.querySelector('.none-x').hidden = isPhoto;
+      el.querySelector('.fbg-rm').hidden = on === 'none';
+    };
+    const set = async (image, done) => {
+      try { await this._ws('background/set', { key: 'feed', image }); if (done) this._toast(done); }
+      catch (err) {
+        // the card was updated but Home Assistant is still running the integration from before
+        if (err?.code === 'not_found') this._toast('Restart Home Assistant to finish updating Crow Messenger, then try again');
+        else this._toast(err.message || 'Couldn’t change the background');
+      }
+    };
+    const pickPhoto = () => {
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'image/*'; input.hidden = true;
+      el.appendChild(input);
+      input.addEventListener('change', async () => {
+        const f = input.files[0]; input.remove();
+        if (!f) return;
+        this._toast('Setting background…');
+          let image;
+        try { image = await K.fileToBackground(f); } catch (err) { this._toast(err.message || 'Couldn’t use that picture'); return; }
+        await set(image, 'Feed background set');
+      });
+      input.click();
+    };
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('[data-a="back"]')) { this._back(); return; }
+      if (e.target.closest('[data-a="rm"]')) { set(null, 'Feed background removed'); return; }
+      const p = e.target.closest('.pick');
+      if (!p) return;
+      const id = p.dataset.id;
+      if (id === 'none') set(null);
+      else if (id === 'photo') pickPhoto();
+      else set(`live:${id}`, `${K.cmLiveInfo(id)?.name || 'Live Wallpaper'} set for your Feed`);
+    });
+    const stop = () => { previews.forEach(w => { w.stop(); this._lives.delete(w); }); previews.clear(); };
+    page.onShow = () => {
+      page.refresh('all');
+      el.querySelectorAll('[data-live]').forEach(box => {
+        if (previews.has(box)) return;
+        const w = this._liveWallpaper(box, box.dataset.live);
+        previews.set(box, w); this._lives.add(w);
+      });
+    };
+    page.onHide = stop;
+    page.destroy = stop;
     return page;
   },
 

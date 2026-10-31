@@ -15,7 +15,7 @@
 const Card = window.__crowMessengerCard || customElements.get('crow-messenger-card');
 if (!Card || Card.lazyReady?.email) return;
 
-const CE_VERSION = '0.1.3';
+const CE_VERSION = '0.1.4';
 const CE_BUILD = '27 Oct 2026';
 const DOMAIN = 'crow_messenger_email';
 
@@ -1319,6 +1319,8 @@ class CrowMessengerEmail extends HTMLElement {
     this._stack = [];
     this._onLoc = () => this._checkDeepLink();
     this._onReady = () => this._connect(true);
+    // leaving the app or the page: where you were is kept now, not a moment later
+    this._onHide = (e) => { if (e?.type === 'pagehide' || document.visibilityState !== 'visible') ceStore.flush(this._uid()); };
   }
 
   static getConfigElement() { return document.createElement('crow-messenger-email-editor'); }
@@ -1356,12 +1358,17 @@ class CrowMessengerEmail extends HTMLElement {
     this._kbWire(true);
     window.addEventListener('location-changed', this._onLoc);
     window.addEventListener('popstate', this._onLoc);
+    document.addEventListener('visibilitychange', this._onHide);
+    window.addEventListener('pagehide', this._onHide);
     if (this._hass && !this._unsub && !this._connecting) this._connect();
   }
 
   disconnectedCallback() {
     window.removeEventListener('location-changed', this._onLoc);
     window.removeEventListener('popstate', this._onLoc);
+    document.removeEventListener('visibilitychange', this._onHide);
+    window.removeEventListener('pagehide', this._onHide);
+    ceStore.flush(this._uid());
     this._kbWire(false);
     this._stack.forEach(p => p.onHide?.());
     // leaving the view (or the dashboard moving the card) always ends full screen
@@ -9061,6 +9068,10 @@ const ceMsgDb = {
   },
 };   // user id -> { lists, msgs, folders, state, nav } shared by every card on the page
 
+// where you were in Email (the mailbox and the email you were reading) is put back for this long,
+// the same as the rest of the card
+const CE_NAV_KEEP = 12 * 3600000;
+
 const ceStore = {
   key: (uid) => `crowMsgEmailCache:${uid}`,
   keepKey: (uid) => `crowMsgEmailKeep:${uid}`,
@@ -9083,7 +9094,7 @@ const ceStore = {
           for (const [k, v] of Object.entries(raw.lists || {})) if (v.at > old) s.lists[k] = v;
           for (const [k, v] of Object.entries(raw.folders || {})) if (v.at > old) s.folders.set(k, v);
           if (raw.state?.at > old) s.state = raw.state;
-          if (raw.nav?.at > Date.now() - 3600000) s.nav = raw.nav;
+          if (raw.nav?.at > Date.now() - CE_NAV_KEEP) s.nav = raw.nav;
           if (raw.compose?.at > Date.now() - 86400000) s.compose = raw.compose;
         }
       } catch (e) { /* nothing kept, or it couldn't be read */ }
@@ -9101,22 +9112,30 @@ const ceStore = {
       }
     } catch (e) { /* */ }
   },
+  // written straight away: leaving the app can suspend the page before a timer runs
+  flush(uid) {
+    if (!this._t?.[uid]) return;
+    clearTimeout(this._t[uid]);
+    this._t[uid] = null;
+    this._write(uid);
+  },
   persist(uid) {
     clearTimeout(this._t?.[uid]);
     this._t = this._t || {};
-    this._t[uid] = setTimeout(() => {
-      if (!this.keep(uid)) return;
-      const s = CE_SHARED.get(uid);
-      if (!s) return;
-      // the newest lists first, and no more than about 1.5 MB in all
-      let lists = Object.entries(s.lists).sort((a, b) => b[1].at - a[1].at).slice(0, 14);
-      const pack = () => JSON.stringify({ v: 2, lists: Object.fromEntries(lists), folders: Object.fromEntries(s.folders), state: s.state, nav: s.nav, compose: s.compose });
-      let out = pack();
-      while (out.length > 1500000 && lists.length > 1) { lists = lists.slice(0, -1); out = pack(); }
-      try { localStorage.setItem(this.key(uid), out); } catch (e) {
-        try { lists = lists.slice(0, 3); localStorage.setItem(this.key(uid), pack()); } catch (e2) { /* storage full or blocked */ }
-      }
-    }, 800);
+    this._t[uid] = setTimeout(() => { this._t[uid] = null; this._write(uid); }, 800);
+  },
+  _write(uid) {
+    if (!this.keep(uid)) return;
+    const s = CE_SHARED.get(uid);
+    if (!s) return;
+    // the newest lists first, and no more than about 1.5 MB in all
+    let lists = Object.entries(s.lists).sort((a, b) => b[1].at - a[1].at).slice(0, 14);
+    const pack = () => JSON.stringify({ v: 2, lists: Object.fromEntries(lists), folders: Object.fromEntries(s.folders), state: s.state, nav: s.nav, compose: s.compose });
+    let out = pack();
+    while (out.length > 1500000 && lists.length > 1) { lists = lists.slice(0, -1); out = pack(); }
+    try { localStorage.setItem(this.key(uid), out); } catch (e) {
+      try { lists = lists.slice(0, 3); localStorage.setItem(this.key(uid), pack()); } catch (e2) { /* storage full or blocked */ }
+    }
   },
 };
 
@@ -9198,7 +9217,7 @@ Object.assign(CrowMessengerEmail.prototype, {
 
   _restoreNav() {
     const nav = this._shared().nav;
-    if (!nav || nav.at < Date.now() - 3600000 || !nav.stack?.length) return false;
+    if (!nav || nav.at < Date.now() - CE_NAV_KEEP || !nav.stack?.length) return false;
     const okAcc = (d) => !d.account || this._acc(d.account);
     if (!nav.stack.every(p => okAcc(p.data))) return false;
     for (const p of nav.stack) {
