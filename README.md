@@ -97,7 +97,7 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **Search** — across every conversation, or within one, with filters for photos, links, files and locations
 - **Export as PDF** — a conversation, a contact or your whole address book, then download it or send it straight into one or more conversations
 - **Drafts** — whatever you've typed is kept when you leave a conversation
-- **Reopens your last chat** — come back to the app and you're where you left off
+- **Reopens where you left off** — leave the app and come back to the same screen: a chat, Contacts, a Feed post or profile, or Email with the mailbox and email you were reading
 
 ### Add to a Message
 
@@ -207,12 +207,14 @@ A private social feed for the people in your home. It's **on by default** and ca
 - **Private by design** — every post is shared with **Everyone at home**, **Chosen people**, **Only me** or a **group**. Only those people see the post, its photos and videos, its comments and who reacted, and only they are ever notified about it. The audience can be changed after posting
 - **Link previews like Facebook** — paste a link and a preview of the page appears as you write (tap ✕ to leave it off); in the Feed it shows the page's picture across the post with the site, title and description, and the link itself isn't repeated in the words. If a site doesn't answer at first, the preview is tried again later
 - **Videos play straight away** — they stream as they play instead of downloading first
-- **Posts** — words, up to 20 photos and videos, link previews, a feeling or activity, a place (check in at a Home Assistant zone), @mentions, and coloured backgrounds for short posts that follow your theme
+- **Posts** — words, up to 20 photos, videos and GIFs, link previews, a feeling or activity, a place (check in at a Home Assistant zone), @mentions, and coloured backgrounds for short posts that follow your theme
 - **Post on someone's page** — like Facebook: it shows on their profile as “person1 ▸ person2” and they're told about it. It's always shared with them (and whoever else you choose), and they can hide it from their page or delete it. Every profile has **Post on Their Page**
 - **Tag people in photos** — tap where someone is; they're told, can see it in their Photos, and can remove the tag
 - **Reactions** — Love, Like, Haha, Wow, Sad and Angry (press and hold Like), and see who reacted with what
 - **One row under each post** — Like, Comment and Share, each with how many, a Save bookmark (saved posts are in Menu → Saved), and the reactions on the right (tap them to see who reacted)
-- **Comments** — with replies, @mentions, a photo or a sticker, reactions on comments, edit and delete
+- **Comments** — with replies, @mentions, a photo, a GIF or a sticker, reactions on comments, edit and delete
+- **GIFs** — search GIPHY and add GIFs to posts and comments, or add your own. An administrator adds a free GIPHY API key in the card editor (Feed → GIFs) to switch search on; searches go through Home Assistant so the key stays private, and results are rated PG
+- **Feed background** — each person can choose a photo or a Live Wallpaper to show behind their Feed, profiles and groups (Menu → Feed Settings → Feed Background). Only they see it
 - **Who can comment** — everyone who can see the post, or only people you choose
 - **Stories** — photos, videos or words that disappear after 24 hours, with who's seen yours and replies straight to a chat
 - **Photos and Videos** — every photo and every video shared with you, in their own grids, for the whole household and on each person's profile
@@ -825,7 +827,7 @@ The Feed shows what's shared with whoever is signed in on that device. On a shar
 | `show_memories` | `true` | On This Day at the top of the Feed |
 | `contact_extras` | `true` | A household member's contact card shows their Feed, your chats with them, Hide Alerts and Ring Phone |
 | `start_view` | `messages` | Startup Screen: `messages` (reopens the chat you were last in), `contacts`, `feed`, `feed_videos`, `feed_groups`, `feed_events` or `feed_alerts` (Notifications). The Feed screens need the Feed switched on, otherwise it opens on Messages. Back always goes to Messages |
-| `resume` | `true` | Return to Where You Left Off: leave the dashboard or the app and come back to the same screens — the chat, Contacts, a profile (and its tab), a post, the Feed tab you were on — scrolled to where you were. After 12 hours away the Startup Screen is used instead; a notification you tap or a link still opens what it's about |
+| `resume` | `true` | Return to Where You Left Off: leave the dashboard or the app and come back to the same screens — the chat, Contacts, a profile (and its tab), a post, the Feed tab you were on, Email (with the mailbox and email you had open) — scrolled to where you were. Where you are is saved the moment you leave the app. After 12 hours away the Startup Screen is used instead; a notification you tap or a link still opens what it's about |
 | `card_height` | `700` | Height in pixels, or `fill` to fill the screen |
 | `card_liquid_glass` | `true` | `true` for Glass, `false` for Classic |
 | `appearance` | `auto` | `auto`, `light` or `dark` |

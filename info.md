@@ -55,7 +55,9 @@ On by default, and can be switched off in the editor.
 - **Private Posts** — share with everyone at home, chosen people, only you, or a group
 - **Post on Someone's Page** — shows on their profile, and they can hide or delete it
 - **Photos, Videos, Feelings, Places, @Mentions and Photo Tags**, with link previews and coloured backgrounds
-- **Reactions and Comments** — Love, Like, Haha, Wow, Sad and Angry, with replies, photos and stickers
+- **Reactions and Comments** — Love, Like, Haha, Wow, Sad and Angry, with replies, photos, GIFs and stickers
+- **GIFs** — search GIPHY from posts and comments once an administrator adds a free GIPHY API key in the editor
+- **Feed Background** — each person can put a photo or Live Wallpaper behind their Feed, profiles and groups
 - **Stories** that disappear after 24 hours
 - **Photos and Videos** grids, **Profiles**, **Groups** and shared **Albums**
 - **Polls, Events with RSVPs and reminders, Chip In and Up for Grabs**
