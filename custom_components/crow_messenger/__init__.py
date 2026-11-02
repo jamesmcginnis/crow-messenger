@@ -31,9 +31,11 @@ from homeassistant.loader import async_get_integration
 from .const import CLEANUP_INTERVAL_MINUTES, DOMAIN, HA_SENDER_ID, SERVICE_SEND_MESSAGE
 
 SERVICE_POST = "post"
+SERVICE_ANNOUNCE = "announce"
 # parts of the card in files of their own, fetched by the card the first time each is used
 LAZY_FILES = {"feed": "crow-feed.js", "pdf": "crow-pdf.js", "games": "crow-games.js",
-              "live": "crow-live.js", "people": "crow-people.js", "email": "crow-email.js"}
+              "live": "crow-live.js", "people": "crow-people.js", "email": "crow-email.js",
+              "announce": "crow-announce.js"}
 from .http import BackupView, MediaView, PushMediaView, UploadView, PushImageView
 from .manager import Messenger, MessengerError, new_id, now_ms
 from .const import ACTION_PREFIX
@@ -58,6 +60,15 @@ POST_SCHEMA = vol.Schema({
     vol.Optional("background"): cv.string,
 })
 
+ANNOUNCE_SCHEMA = vol.Schema({
+    vol.Required("message"): cv.string,
+    # speakers (media players); "all" for every speaker on the Announce screen
+    vol.Optional("speakers"): vol.Any(cv.string, [cv.string]),
+    vol.Optional("volume"): vol.All(vol.Coerce(int), vol.Range(min=1, max=100)),
+    # people's phones (names, user IDs or person. entities) - when People is switched on
+    vol.Optional("people"): vol.Any(cv.string, [cv.string]),
+})
+
 SEND_SCHEMA = vol.Schema({
     vol.Required("to"): vol.Any(cv.string, [cv.string]),
     vol.Required("message"): cv.string,
@@ -75,7 +86,9 @@ async def _async_register_card(hass: HomeAssistant) -> None:
     www = Path(__file__).parent / "www"
     card_path = www / CARD_FILENAME
     await hass.http.async_register_static_paths(
-        [StaticPathConfig(CARD_URL, str(card_path), True)]
+        [StaticPathConfig(CARD_URL, str(card_path), True),
+         # the chime before an announcement (speakers fetch it, so it's served without signing in)
+         StaticPathConfig(f"/{DOMAIN}/crow-chime.mp3", str(www / "crow-chime.mp3"), True)]
         + [StaticPathConfig(f"/{DOMAIN}/{name}", str(www / name), True) for name in LAZY_FILES.values()])
     integration = await async_get_integration(hass, DOMAIN)
     # The cache-buster includes a fingerprint of the card file itself, so any
@@ -254,7 +267,36 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await _async_service_post(hass, messenger, call)
 
     hass.services.async_register(DOMAIN, SERVICE_POST, _handle_post, schema=POST_SCHEMA)
+
+    async def _handle_announce(call: ServiceCall) -> None:
+        await _async_service_announce(hass, messenger, call)
+
+    hass.services.async_register(DOMAIN, SERVICE_ANNOUNCE, _handle_announce, schema=ANNOUNCE_SCHEMA)
     return True
+
+
+async def _async_service_announce(hass: HomeAssistant, messenger: Messenger, call: ServiceCall) -> None:
+    """crow_messenger.announce: say something on speakers (and phones), from an automation or script."""
+    from . import announce
+    if not announce.enabled(messenger):
+        raise HomeAssistantError("Crow Messenger: Announce is switched off in the card editor")
+    want = call.data.get("speakers") or []
+    if isinstance(want, str):
+        want = [w.strip() for w in want.split(",") if w.strip()]
+    if [w.lower() for w in want] == ["all"]:
+        want = [s["id"] for s in announce.speakers(hass, messenger)]
+    people_in = call.data.get("people") or []
+    if isinstance(people_in, str):
+        people_in = [p.strip() for p in people_in.split(",") if p.strip()]
+    people = await _async_resolve_people(hass, messenger, people_in) if people_in else []
+    if people and not announce.options(messenger)["phones"]:
+        raise HomeAssistantError("Crow Messenger: announcing on phones is switched off (Announce → People in the card editor)")
+    vol_ = call.data.get("volume")
+    volumes = {eid: vol_ for eid in want} if vol_ else {}
+    try:
+        await announce.async_announce(hass, messenger, HA_SENDER_ID, call.data["message"], want, volumes, people, keep=False)
+    except MessengerError as err:
+        raise HomeAssistantError(f"Crow Messenger: {err}") from err
 
 
 async def _async_service_send(hass: HomeAssistant, messenger: Messenger, call: ServiceCall) -> None:
@@ -413,6 +455,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         return False
     hass.services.async_remove(DOMAIN, SERVICE_SEND_MESSAGE)
     hass.services.async_remove(DOMAIN, SERVICE_POST)
+    hass.services.async_remove(DOMAIN, SERVICE_ANNOUNCE)
     m = hass.data.pop(DOMAIN, None)
     if m is not None and getattr(m, "badge", None):
         m.badge.unload()

@@ -145,7 +145,8 @@ class Feed(FeedMoreMixin):
         o = {**DEFAULT_SETTINGS["feed"], **(self.m.settings.get("feed") or {})}
         o["kinds"] = {**DEFAULT_SETTINGS["feed"]["kinds"], **(o.get("kinds") or {})}
         # GIFs from GIPHY: only whether they're available (the key itself stays here)
-        o["gifs"] = bool(str(self.m.settings.get("giphy_key") or "").strip())
+        from .gifs import place_on
+        o["gifs"] = place_on(self.m, "feed")
         return o
 
     def kind_on(self, kind: str) -> bool:
@@ -1942,7 +1943,7 @@ class Feed(FeedMoreMixin):
         story = {"id": sid, "author": uid, "ts": _now(), "text": text,
                  "bg": raw.get("bg") if raw.get("bg") in BACKGROUNDS else ("accent" if not media else None),
                  "media": media[0] if media else None, "audience": audience,
-                 "views": {}, "stickers": self.check_stickers(uid, raw.get("stickers"), audience)}
+                 "views": {}, "stickers": self.check_stickers(uid, raw.get("stickers"), audience, sid)}
         self.data["stories"][sid] = story
         self.m._save()
         self.save()
@@ -1974,6 +1975,10 @@ class Feed(FeedMoreMixin):
         if story.get("media") and not att.get("highlights") and not kept:
             # a story in a highlight keeps its photo or video
             await self.m._async_remove_attachment(story["media"])
+        # GIF stickers go with their story (highlights and the archive don't keep stickers)
+        for st in story.get("stickers") or []:
+            if st.get("type") == "gif" and st.get("media") in self.m.data["attachments"]:
+                await self.m._async_remove_attachment(st["media"])
         self.m._save()
         self.save()
         for uid in self.household():

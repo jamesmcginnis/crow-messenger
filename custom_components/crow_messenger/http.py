@@ -47,7 +47,8 @@ def _messenger(hass: HomeAssistant) -> Messenger:
 async def _file_response(hass: HomeAssistant, path: str | None, att: dict, thumb: bool) -> web.StreamResponse:
     if not path or not await hass.async_add_executor_job(os.path.isfile, path):
         return web.Response(status=404)
-    mime = "image/jpeg" if thumb else (att.get("mime") or "application/octet-stream")
+    # a GIF's small copy is a GIF too
+    mime = ("image/gif" if att.get("mime") == "image/gif" else "image/jpeg") if thumb else (att.get("mime") or "application/octet-stream")
     inline = any(mime.startswith(t) for t in INLINE_TYPES)
     if not inline:
         mime = "application/octet-stream"

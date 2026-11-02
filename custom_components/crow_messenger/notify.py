@@ -77,6 +77,8 @@ def dashboard_path(messenger: Messenger, uid: str) -> str:
 
 def _attachment_label(att: dict) -> str:
     mime = att.get("mime") or ""
+    if mime == "image/gif":
+        return "GIF"
     if mime.startswith("image/"):
         return "📷 Photo"
     if mime.startswith("video/"):
@@ -219,7 +221,8 @@ async def async_push(hass: HomeAssistant, messenger: Messenger, thread: dict, ms
                 mime = first.get("mime") or ""
                 if mime.startswith("image/"):
                     # a WebP photo goes as its JPEG preview: phone notifications don't all show WebP
-                    data["image"] = messenger.push_media_path(first["id"], thumb=mime == "image/webp" and bool(first.get("thumb")))
+                    # (a GIF goes as its small copy, when it has one)
+                    data["image"] = messenger.push_media_path(first["id"], thumb=mime in ("image/webp", "image/gif") and bool(first.get("thumb")))
                 elif mime.startswith("video/"):
                     if (first.get("size") or 0) <= 20 * 1024 * 1024:
                         data["video"] = messenger.push_media_path(first["id"])

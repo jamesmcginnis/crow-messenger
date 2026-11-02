@@ -17,6 +17,8 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import DOMAIN, RETENTION_CHOICES
 from . import ai
+from . import announce
+from . import gifs
 from . import share
 from . import together
 from .manager import Messenger, MessengerError
@@ -356,6 +358,8 @@ async def ws_bootstrap(hass, connection, msg) -> None:
         "shares": share.pending(messenger, uid),
         "feed": messenger.feed.bootstrap(uid),
         "email": messenger.email.status_for(uid),
+        "announce": announce.state_for(messenger, uid, connection.user.is_admin),
+        "gifs": gifs.state(messenger),
         "modules": hass.data.get(f"{DOMAIN}_modules", {}),
         "features": {"link_previews": messenger._feature("link_previews"),
                      "checkin": messenger.person_for(uid) is not None,
@@ -756,6 +760,9 @@ async def ws_settings_get(hass, connection, msg) -> None:
             "auto_paths": messenger.data.get("auto_paths", {}),
             "ai": ai.capabilities(hass, messenger),
             "ai_task_default": ai.task_entity(hass, messenger) if not (messenger.settings.get("ai", {}) or {}).get("task_entity") else None,
+            "announce": {"speakers": announce.speakers(hass, messenger, everything=True),
+                         "tts": announce.tts_choices(hass),
+                         "tts_auto": (announce.resolve_tts(hass, messenger) or {}).get("label")},
         })
     connection.send_result(msg["id"], result)
 
@@ -764,6 +771,7 @@ SETTINGS_SCHEMA = vol.Schema({
     vol.Optional("retention_days"): vol.All(int, vol.In(RETENTION_CHOICES)),
     # GIFs in the Feed (kept out of the Feed's options, which every card is sent)
     vol.Optional("giphy_key"): vol.Any(None, vol.All(str, vol.Strip, vol.Length(max=100))),
+    vol.Optional("gifs"): vol.Schema({vol.Optional(k): bool for k in ("chats", "feed", "email")}),
     vol.Optional("max_upload_mb"): vol.All(int, vol.Range(min=1, max=2000)),
     vol.Optional("notifications"): vol.Schema({
         vol.Optional("enabled"): bool,
@@ -802,6 +810,18 @@ SETTINGS_SCHEMA = vol.Schema({
         vol.Optional("share_sheet"): bool,
         vol.Optional("feed"): bool,
         vol.Optional("email"): bool,
+        vol.Optional("announce"): bool,
+    }),
+    vol.Optional("announce"): vol.Schema({
+        vol.Optional("who"): vol.In(("everyone", "admins", "people")),
+        vol.Optional("people"): [str],
+        vol.Optional("tts"): vol.All(str, vol.Length(max=200)),
+        vol.Optional("hidden"): [str],
+        vol.Optional("names"): {str: vol.All(str, vol.Length(max=60))},
+        vol.Optional("volume"): vol.Any(None, vol.All(int, vol.Range(min=1, max=100))),
+        vol.Optional("pause"): bool,
+        vol.Optional("chime"): bool,
+        vol.Optional("phones"): bool,
     }),
     vol.Optional("dashboard"): vol.Schema({
         vol.Optional("everyone"): bool,
@@ -830,6 +850,13 @@ SETTINGS_SCHEMA = vol.Schema({
 async def ws_settings_set(hass, connection, msg) -> None:
     messenger = _m(hass)
     settings = await messenger.async_update_settings(msg["settings"])
+    if "announce" in msg["settings"] or "announce" in (msg["settings"].get("features") or {}):
+        admins = {u["id"] for u in await messenger.async_users() if u.get("is_admin")}
+        for sub in list(messenger._subs.values()):
+            try:
+                sub.send({"type": "announce_state", "announce": announce.state_for(messenger, sub.uid, sub.uid in admins)})
+            except Exception:  # noqa: BLE001
+                pass
     if "ai" in msg["settings"]:
         messenger.broadcast_all({"type": "ai", "ai": ai.capabilities(hass, messenger)})
     connection.send_result(msg["id"], {"settings": settings, "ai": ai.capabilities(hass, messenger)})
@@ -929,13 +956,11 @@ def _first_page(f, u, d):
 
 
 async def _gif_search(f, u, d) -> dict:
-    from . import gifs
-    return await gifs.async_search(f.m.hass, f.m, d.get("q") or "", d.get("offset") or 0)
+    return await gifs.async_search(f.m.hass, f.m, d.get("q") or "", d.get("offset") or 0, "feed")
 
 
 async def _gif_add(f, u, d) -> dict:
-    from . import gifs
-    return {"attachment": await gifs.async_add(f.m.hass, f.m, u.id, d["gif_id"])}
+    return {"attachment": await gifs.async_add(f.m.hass, f.m, u.id, d["gif_id"], "feed")}
 
 
 FEED_COMMANDS = (
@@ -1135,7 +1160,116 @@ async def _review(f, u, d) -> dict:
     return {"post": f.post_view(post, u.id)}
 
 
+# ── GIFs (chats, the Feed, story stickers and Email) ────────────────────────
+GIF_PURPOSES = ("chat", "feed", "sticker", "email")
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "crow_messenger/gif/search",
+    vol.Optional("q"): vol.All(str, vol.Length(max=100)),
+    vol.Optional("offset"): vol.All(int, vol.Range(0, 5000)),
+    vol.Optional("purpose", default="feed"): vol.In(GIF_PURPOSES),
+})
+@websocket_api.async_response
+@_errors
+async def ws_gif_search(hass, connection, msg) -> None:
+    connection.send_result(msg["id"], await gifs.async_search(hass, _m(hass), msg.get("q") or "", msg.get("offset") or 0, msg["purpose"]))
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "crow_messenger/gif/add",
+    vol.Required("gif_id"): vol.All(str, vol.Length(max=60)),
+    vol.Required("purpose"): vol.In(GIF_PURPOSES),
+    vol.Optional("thread_id"): str,
+})
+@websocket_api.async_response
+@_errors
+async def ws_gif_add(hass, connection, msg) -> None:
+    out = await gifs.async_add(hass, _m(hass), connection.user.id, msg["gif_id"], msg["purpose"], msg.get("thread_id"))
+    connection.send_result(msg["id"], out if msg["purpose"] == "email" else {"attachment": out})
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "crow_messenger/gif/history",
+    vol.Optional("action"): vol.In(("delete", "favourite", "clear")),
+    vol.Optional("gif_id", default=""): str,
+})
+@websocket_api.async_response
+@_errors
+async def ws_gif_history(hass, connection, msg) -> None:
+    m = _m(hass)
+    if msg.get("action"):
+        items = gifs.edit_history(m, connection.user.id, msg["action"], msg["gif_id"])
+    else:
+        items = gifs.history(m, connection.user.id)
+    connection.send_result(msg["id"], {"history": items})
+
+
+# ── Announce ────────────────────────────────────────────────────────────────
+def _announce_check(hass, connection) -> Messenger:
+    messenger = _m(hass)
+    if not announce.allowed(messenger, connection.user.id, connection.user.is_admin):
+        raise MessengerError("unavailable", "Announce isn’t switched on for you")
+    return messenger
+
+
+@websocket_api.websocket_command({vol.Required("type"): "crow_messenger/announce/info"})
+@websocket_api.async_response
+@_errors
+async def ws_announce_info(hass, connection, msg) -> None:
+    """The Announce screen: the speakers by room, how it'll speak, and your recent announcements."""
+    messenger = _announce_check(hass, connection)
+    o = announce.options(messenger)
+    tts = announce.resolve_tts(hass, messenger)
+    connection.send_result(msg["id"], {
+        "speakers": announce.speakers(hass, messenger),
+        "tts": tts.get("label") if tts else None,
+        "history": announce.history(messenger, connection.user.id),
+        "phones": bool(o["phones"]),
+        "volume": o.get("volume"),
+        "ai": ai.capabilities(hass, messenger).get("announce", False),
+    })
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "crow_messenger/announce/send",
+    vol.Required("text"): vol.All(str, vol.Length(max=1000)),
+    vol.Optional("speakers"): [str],
+    vol.Optional("volumes"): {str: vol.All(int, vol.Range(min=0, max=100))},
+    vol.Optional("people"): [str],
+})
+@websocket_api.async_response
+@_errors
+async def ws_announce_send(hass, connection, msg) -> None:
+    messenger = _announce_check(hass, connection)
+    result = await announce.async_announce(hass, messenger, connection.user.id, msg["text"], msg.get("speakers") or [],
+                                           msg.get("volumes") or {}, msg.get("people") or [])
+    connection.send_result(msg["id"], result)
+
+
+@websocket_api.websocket_command({
+    vol.Required("type"): "crow_messenger/announce/history",
+    vol.Required("action"): vol.In(("delete", "favourite", "clear")),
+    vol.Optional("text", default=""): str,
+})
+@websocket_api.async_response
+@_errors
+async def ws_announce_history(hass, connection, msg) -> None:
+    messenger = _announce_check(hass, connection)
+    connection.send_result(msg["id"], {"history": announce.edit_history(messenger, connection.user.id, msg["action"], msg["text"])})
+
+
+@websocket_api.websocket_command({vol.Required("type"): "crow_messenger/announce/improve", vol.Required("text"): str})
+@websocket_api.async_response
+@_errors
+async def ws_announce_improve(hass, connection, msg) -> None:
+    messenger = _announce_check(hass, connection)
+    connection.send_result(msg["id"], {"text": await announce.async_improve(hass, messenger, msg["text"])})
+
+
 COMMANDS = (
+    ws_announce_info, ws_announce_send, ws_announce_history, ws_announce_improve,
+    ws_gif_search, ws_gif_add, ws_gif_history,
     ws_subscribe, ws_focus, ws_here, ws_bootstrap, ws_share_get, ws_share_done, ws_media_url, ws_threads, ws_messages, ws_create_thread, ws_send,
     ws_mark_read, ws_typing, ws_update_thread, ws_leave, ws_delete_thread, ws_discard_upload,
     ws_delete_message, ws_unsend, ws_remove_attachment, ws_ai, ws_feed_ai, ws_feed_story_reply, ws_storage_get, ws_storage_tidy, ws_storage_clear,

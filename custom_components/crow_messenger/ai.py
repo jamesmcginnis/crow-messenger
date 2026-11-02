@@ -37,7 +37,9 @@ FEATURES = ("assistant", "replies", "writing", "catchup", "translate", "actions"
             "feed_threads", "feed_translate", "feed_photos", "feed_search", "feed_memories", "feed_kindness", "feed_ask",
             "feed_make_album",
             # Link Safety, in chats and the Feed (linksafety.py)
-            "links")
+            "links",
+            # Announce: AI Improve (announce.py)
+            "announce")
 # features that start off (everything else starts on once AI Features are on)
 OFF_UNTIL_ON = ("feed_search",)
 # features that need an AI that can look at photos

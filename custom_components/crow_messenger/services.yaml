@@ -213,3 +213,31 @@ update_email_badge:
           min: 0
           max: 9999
           mode: box
+announce:
+  fields:
+    message:
+      required: true
+      example: "Dinner's ready, come down please"
+      selector:
+        text:
+          multiline: true
+    speakers:
+      required: false
+      example: '["media_player.kitchen", "media_player.downstairs_bedroom"]'
+      selector:
+        entity:
+          domain: media_player
+          multiple: true
+    volume:
+      required: false
+      example: 40
+      selector:
+        number:
+          min: 1
+          max: 100
+          unit_of_measurement: "%"
+    people:
+      required: false
+      example: '["person.keeva"]'
+      selector:
+        object:

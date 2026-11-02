@@ -51,7 +51,7 @@ BACKUP_PREFIX = "crow-messenger-backup-"
 # what goes with "Messages and chats"
 MESSAGE_KEYS = ("threads", "messages", "scheduled", "starred", "reminders", "last_active")
 # what goes with "Personal settings" (in the main store; the rest is in contacts and backgrounds)
-PERSONAL_KEYS = ("quick", "share_hidden", "zone_towns")
+PERSONAL_KEYS = ("quick", "share_hidden", "zone_towns", "announce_history", "gif_history")
 
 
 def _dir_size(path: str) -> tuple[int, int]:

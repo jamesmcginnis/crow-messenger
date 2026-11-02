@@ -1084,13 +1084,16 @@ class Messenger(FeaturesMixin, MoreFeaturesMixin, PlayMixin, OrganiseMixin, Ring
         self._save()
         if "retention_days" in patch or "keep_days" in (patch.get("feed") or {}):
             await self.async_cleanup()
-        if "feed" in patch or "giphy_key" in patch or "feed" in (patch.get("features") or {}):
+        if "feed" in patch or "giphy_key" in patch or "gifs" in patch or "feed" in (patch.get("features") or {}):
             # open cards follow the household's Feed settings straight away
             for sub in list(self._subs.values()):
                 try:
                     sub.send({"type": "feed_options", "options": self.feed.options(), "enabled": self.feed.enabled()})
                 except Exception:  # noqa: BLE001
                     pass
+        if "giphy_key" in patch or "gifs" in patch:
+            from .gifs import state as gif_state
+            self.broadcast_all({"type": "gifs_state", "gifs": gif_state(self)})
         if "badge" in (patch.get("notifications") or {}):
             self.badge.everyone_changed(force=True)
         if "email" in (patch.get("features") or {}) and getattr(self, "email", None):

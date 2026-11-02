@@ -754,7 +754,7 @@ class FeedMoreMixin:
         return out
 
     # ── Stories: reactions, replies, stickers ───────────────────────────────
-    def check_stickers(self: "Feed", uid: str, raw: list | None, audience: dict) -> list[dict]:
+    def check_stickers(self: "Feed", uid: str, raw: list | None, audience: dict, sid: str | None = None) -> list[dict]:
         if not raw:
             return []
         self._need("story_stickers", "Story stickers")
@@ -797,6 +797,14 @@ class FeedMoreMixin:
                 out.append({**base, "condition": state.state, "temperature": f"{round(float(temp))}{unit}" if temp not in (None, "") else ""})
             elif kind == "time":
                 out.append(base)
+            elif kind == "gif":
+                # a GIF from GIPHY, added a moment ago (kept with the story, gone when it goes)
+                aid = _str(st.get("media"), 64)
+                att = self.m.data["attachments"].get(aid)
+                if not att or att.get("mime") != "image/gif":
+                    raise _err("not_found", "That GIF wasn't found. Try adding it again.")
+                media = self._take_media(uid, [aid], {"story": sid} if sid else {})
+                out.append({**base, "media": media[0], "w": att.get("width"), "h": att.get("height")})
             else:
                 raise _err("invalid_format", "Unknown sticker")
         return out
