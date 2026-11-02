@@ -1,21 +1,37 @@
-MIT License
+CROW MEDIA PLAYER – PROPRIETARY LICENCE
 
-Copyright (c) 2026 James McGinnis
+Copyright © 2026 James McGinnis. All rights reserved.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Crow Media Player is proprietary software. All intellectual property rights remain with the copyright holder.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1. Permission to use
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+Permission is granted to download, install and use the unmodified compiled software for personal use with Home Assistant.
+
+2. Restrictions
+
+Without prior written permission from the copyright holder, you may not:
+
+* Copy or redistribute this software.
+* Modify, adapt or create derivative works.
+* Publish or share modified versions.
+* Sell, sublicense or commercially distribute this software.
+* Reverse engineer, decompile or disassemble this software, except where applicable law permits.
+
+3. Ownership
+
+All rights, title and interest in Crow Media Player remain with the copyright holder.
+
+No ownership rights are transferred through this licence.
+
+4. Termination
+
+Any permission granted under this licence may be terminated if these terms are breached, subject to applicable law.
+
+5. Disclaimer
+
+This software is provided “as is”, without warranty of any kind, to the extent permitted by law.
+
+All rights not expressly granted are reserved.
+
+For licensing enquiries, contact the copyright holder through GitHub.
