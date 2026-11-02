@@ -244,6 +244,28 @@
           "description": "A number added to the badge, kept until you change it. Use 0 to stop adding one."
         }
       }
+    },
+    "announce": {
+      "name": "Announce",
+      "description": "Say something out loud on speakers, and on people's phones when People is switched on in the card editor (Announce). Music that's playing is paused and carries on afterwards.",
+      "fields": {
+        "message": {
+          "name": "Message",
+          "description": "What to say."
+        },
+        "speakers": {
+          "name": "Speakers",
+          "description": "The speakers to announce on, or \"all\" for every speaker on the Announce screen."
+        },
+        "volume": {
+          "name": "Volume",
+          "description": "Optional: the volume to announce at. Each speaker goes back to its own volume afterwards."
+        },
+        "people": {
+          "name": "People",
+          "description": "Optional: Home Assistant users, names or person entities whose phones it's announced on (a critical alert on iPhone, read aloud on Android). Needs People switched on in the card editor."
+        }
+      }
     }
   },
   "entity": {
