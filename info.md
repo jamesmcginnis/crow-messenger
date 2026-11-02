@@ -29,6 +29,7 @@ Everything is **private to your household** — nothing is stored in the cloud.
 - **iPhone Messages Design** — Liquid Glass bars, bubbles with tails and swipe actions
 - **One-to-one and Group Chats** — group names and photos, mentions and nicknames
 - **Photos, Videos and Files** — up to 300 MB each by default, stored on your server
+- **GIFs** — search GIPHY from the message box, with your Favourites and Recent first (once an administrator adds a GIPHY key)
 - **Instant When You Come Back** — your chats show straight away, then only new messages are fetched
 - **Replies, Tapbacks, Edits and Undo Send** — press and hold any message
 - **Conversation Menus** — press and hold a chat, or open its ••• menu, for Pin, Hide Alerts, Mark as Unread, Find Me, Export as PDF, Archive, Delete and more
@@ -39,6 +40,7 @@ Everything is **private to your household** — nothing is stored in the cloud.
 - **Pinned and Starred Messages, Search and Export as PDF** — send an exported PDF straight into a chat
 - **Polls, Check In, Where Are You?, Live Location and Shared Places**
 - **Ring Phone** — make someone's phone ring loudly, even on silent, until they say they've found it
+- **Announce** — say something out loud on your speakers, chosen by room, with a volume for each; music pauses and carries on afterwards, with Recent and Favourites, AI Improve, an optional chime, and (when switched on) people's phones too
 - **Share a Device and Home Status** — live Home Assistant cards in the conversation
 - **Checklists, Events and Shared Timers**
 - **Games** — Noughts and Crosses, Connect Four, Reversi, Draughts and Sea Battle
@@ -56,7 +58,7 @@ On by default, and can be switched off in the editor.
 - **Post on Someone's Page** — shows on their profile, and they can hide or delete it
 - **Photos, Videos, Feelings, Places, @Mentions and Photo Tags**, with link previews and coloured backgrounds
 - **Reactions and Comments** — Love, Like, Haha, Wow, Sad and Angry, with replies, photos, GIFs and stickers
-- **GIFs** — search GIPHY from posts and comments once an administrator adds a free GIPHY API key in the editor
+- **GIFs** — search GIPHY from posts, comments and story stickers once an administrator adds a free GIPHY API key in the editor; also in chats and Email
 - **Feed Background** — each person can put a photo or Live Wallpaper behind their Feed, profiles and groups
 - **Stories** that disappear after 24 hours
 - **Photos and Videos** grids, **Profiles**, **Groups** and shared **Albums**
@@ -74,7 +76,7 @@ On by default, and can be switched off in the editor.
 - **A Facebook-style navigation bar** — Home, Videos, Groups, Events, Notifications and Menu along the bottom, frosted glass or solid to match your Bars Liquid Glass setting
 - **Notifications** — reactions, comments, replies, tags, mentions and posts on your page, with a red count; swipe to mark read or remove, turn off a post, filter, Clear All and Recently Removed
 - **Favourites** — a row at the top of Contacts, first when choosing who to message, and a Favourites filter on Messages
-- **Startup Screen** — open the card on Messages (the default), Contacts, the Feed, or straight to the Feed's Videos, Groups, Events or Notifications
+- **Startup Screen** — open the card on Messages (the default), Contacts, Announce, the Feed, or straight to the Feed's Videos, Groups, Events or Notifications
 
 ## Email (Optional)
 

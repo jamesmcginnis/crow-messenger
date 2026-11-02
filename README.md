@@ -6,6 +6,8 @@ It also has a **Feed**: a private, Facebook-style social feed just for your hous
 
 And, when an administrator switches it on, **Email**: each person's own iCloud, Gmail, Yahoo, Outlook or other email accounts in the card, sharing the same contacts book and app icon badge as Messages (see [Email](#email)).
 
+There's also **Announce**: say something out loud on your speakers, room by room, with music paused and carried on afterwards.
+
 Everything is **private to your household** — messages, photos and contacts are stored by the integration on your Home Assistant server, never in the cloud.
 
 > **One download installs both.** The card is bundled inside the integration and is loaded into your dashboards automatically — there's no separate resource to add.
@@ -64,7 +66,7 @@ AI features are **off by default** — the card works fully without them. They u
 - **Chat with Home Assistant** uses a **conversation agent** (Assist, or any AI conversation agent you've added under **Settings → Voice assistants**). Message "Home Assistant" to ask questions or control your home.
 - **Everything else** uses an **AI Task** entity. Add an AI integration under **Settings → Devices & Services**, then choose a preferred AI Task under **Settings → System → General → AI suggestions**, or pick one in the card editor.
 
-To turn them on, open the card editor's **AI Features** section, switch on **AI Features**, then choose the conversation agent and AI Task. Each feature can be switched off on its own.
+To turn them on, open the card editor's **AI** page, switch on **AI Features** at the top, then choose the conversation agent and AI Task. Each feature can be switched off on its own.
 
 > AI Tasks have no access to your devices, so a message that says "turn off the heating" can be translated or summarised without anything being switched off.
 
@@ -87,6 +89,7 @@ To turn them on, open the card editor's **AI Features** section, switch on **AI 
 - **Bubble and screen effects** — Slam, Loud, Gentle, Invisible Ink, Fireworks, Confetti, Balloons and many more
 - **Text formatting** — bold, italic, underline and strikethrough
 - **Stickers and Sketch** — make stickers from photos, or draw and send a sketch
+- **GIFs** — search GIPHY from the GIFs app in the message box. Your Favourites and Recent GIFs come first, and they're the same on all your devices. The GIF waits in the message box, ready to send, and plays in the chat; the notification shows a small version of it
 - **Read receipts and typing indicators**
 - **Send Later** — at a time you choose, or when you arrive at or leave a place
 - **Disappearing messages** — press and hold Send to send one that disappears
@@ -189,7 +192,7 @@ A private social feed for the people in your home. It's **on by default** and ca
   - **Ask for Recommendations** — a post type for "Anyone know a good plumber?". People tap **Recommend Someone** to put a contact from their Contacts in a comment (name, company, phone, email and website only); everything recommended is gathered on the post, and anyone can **Save** it to their own Contacts
   - **Lists** — a checklist post people tick off together, optionally kept in step with a Home Assistant to-do list both ways
   - **Share from Home** — a button in New Post for a camera snapshot, a sensor, a chart of the last day or the weather, as it is right then
-  - **Story reactions, replies and stickers** — react to a story or reply to it (replies arrive in Messages, quoting the story); add a poll, a question, a countdown, a mention, a place, the weather or the time to your story. Only you see the answers to your question and who reacted
+  - **Story reactions, replies and stickers** — react to a story or reply to it (replies arrive in Messages, quoting the story); add a poll, a question, a countdown, a mention, a place, the weather, the time or a GIF to your story. Only you see the answers to your question and who reacted
   - **Waves** — 👋 Wave on someone's profile; they get a notification with a **Wave Back** button
   - **Weekly badges** — Top Photographer, Conversation Starter, Biggest Supporter, Most Helpful, Early Bird, Night Owl and Event Planner, in a post on Sunday evenings and on profiles. Only posts shared with everyone count
   - **Saved Collections** — ••• → **Save to Collection** sorts saved posts into folders
@@ -213,7 +216,7 @@ A private social feed for the people in your home. It's **on by default** and ca
 - **Reactions** — Love, Like, Haha, Wow, Sad and Angry (press and hold Like), and see who reacted with what
 - **One row under each post** — Like, Comment and Share, each with how many, a Save bookmark (saved posts are in Menu → Saved), and the reactions on the right (tap them to see who reacted)
 - **Comments** — with replies, @mentions, a photo, a GIF or a sticker, reactions on comments, edit and delete
-- **GIFs** — search GIPHY and add GIFs to posts and comments, or add your own. An administrator adds a free GIPHY API key in the card editor (Feed → GIFs) to switch search on; searches go through Home Assistant so the key stays private, and results are rated PG
+- **GIFs** — search GIPHY and add GIFs to posts, comments and stories (as a GIF sticker), or add your own. An administrator adds a free GIPHY API key in the card editor (GIFs) to switch search on; searches go through Home Assistant so the key stays private, and results are always rated PG
 - **Feed background** — each person can choose a photo or a Live Wallpaper to show behind their Feed, profiles and groups (Menu → Feed Settings → Feed Background). Only they see it
 - **Who can comment** — everyone who can see the post, or only people you choose
 - **Stories** — photos, videos or words that disappear after 24 hours, with who's seen yours and replies straight to a chat
@@ -264,8 +267,27 @@ A private social feed for the people in your home. It's **on by default** and ca
 - **`crow_messenger_message_received` event** — build automations around new messages
 - **`crow_messenger_action` event** — fired when someone taps a button sent by an automation
 - **Household settings** — how long messages are kept, the largest attachment, notifications, link previews and more
-- **Opens quickly** — Export as PDF, Games, Live Wallpapers, the People Map and the Feed are fetched the first time they're used, so the card itself is smaller and opens faster
+- **Opens quickly** — Export as PDF, Games, Live Wallpapers, the People Map, the Feed and Announce are fetched the first time they're used, and every file is sent compressed, so the card itself is smaller and opens faster
 - Runs entirely on your own Home Assistant — no cloud service of its own
+
+---
+
+## Announce
+
+Say something out loud on your speakers, like "Dinner's ready, come down please". It's **on by default** and can be switched off in the editor (**Announce**, household settings). Open it from **Announce** in the app bar, from **Announce…** in a chat's ••• menu (whatever you've typed comes with it), or from a household member's contact card.
+
+- **Speakers by room** — every speaker in Home Assistant, grouped by the room it's in, with a search. Televisions and games consoles are left out, and an administrator can hide others or give them shorter names
+- **Volume for each speaker** — choose a volume for each one, or one volume for all of them. Every speaker goes back to its own volume afterwards
+- **Music carries on** — music playing on a speaker is paused for the announcement and starts again afterwards. Music Assistant speakers use Music Assistant's own announcements
+- **Finishes even if you leave** — Home Assistant does the announcing, so the music and volumes are put back even if you lock your phone straight after pressing Send
+- **Recent and Favourites** — your last announcements, with a star to keep the ones you use often. They're the same on all your devices
+- **AI Improve** — the sparkle button rewrites what you've typed as a short, clear announcement (with AI Features on)
+- **Chime Before Speaking** — an optional two-note chime first, so people know an announcement is coming (off by default)
+- **People** — an option, off by default: choose household members (or **Me**, to hear it on your own phone) and the announcement goes to their phones too. On iPhone it arrives as a critical alert that sounds even on silent; on Android the Home Assistant app reads it aloud
+- **Who can announce** — everyone, administrators only, or chosen people
+- **`crow_messenger.announce` action** — announce from automations and scripts, with the same pausing, volumes and chime
+
+> Announce needs text-to-speech in Home Assistant (Home Assistant Cloud, Google Translate, Piper or any other). It's chosen automatically, or an administrator can pick one in the editor. For the chime, speakers need to be able to reach Home Assistant's own address.
 
 ---
 
@@ -273,7 +295,7 @@ A private social feed for the people in your home. It's **on by default** and ca
 
 Email is an email client inside the card: each person adds their own iCloud, Gmail, Yahoo, Outlook / Microsoft 365 or other IMAP accounts and reads and writes email from the **Email** button in the app bar, next to Messages, Contacts and the Feed.
 
-**Email is off until an administrator switches it on**: card editor → **Household** → **Features** → **Email**, then press **Save**. It starts straight away, with no restart. While it's off nothing runs: no mail server connections, no entities, no actions and no Assist tools, and the card never downloads Email's screens. Switching it off again removes its entities and devices (each person's accounts and settings are kept for next time).
+**Email is off until an administrator switches it on**: card editor → **Email**, switch Email on at the top of the page, then press **Save**. It starts straight away, with no restart. While it's off nothing runs: no mail server connections, no entities, no actions and no Assist tools, and the card never downloads Email's screens. Switching it off again removes its entities and devices (each person's accounts and settings are kept for next time).
 
 - **One contacts book.** Email uses the card's Contacts: a contact added from an email shows in Messages, and tapping an email address on a contact starts an email.
 - **One app icon badge.** When **App Icon Badge** is on (the editor's Notifications page), unread email is added to the number on the Home Assistant app's icon. Each person chooses which email counts (all unread, email that notified them, VIPs only, or none) in Email's Settings.
@@ -346,7 +368,7 @@ Microsoft only lets apps it knows sign in to Outlook, so an administrator regist
 
 #### Writing
 
-- **Rich text** — bold, italic, underline, lists, quotes, emoji and stickers
+- **Rich text** — bold, italic, underline, lists, quotes, emoji, stickers and GIFs (a GIF goes into the email where the cursor is, so every mail app that plays GIFs shows it)
 - **Attachments** — photos, files and PDFs, up to 25 MB by default
 - **Signatures** for each account
 - **Voting buttons** — a poll in an email; replies are counted for you
@@ -697,6 +719,7 @@ actions:
 | Action | Description |
 |--------|-------------|
 | `crow_messenger.send_message` | Sends a message from Home Assistant to one or more people, optionally with a photo or file and buttons. `to` takes names, user IDs or `person.` entities; `group_name` sends to a named group; `actions` adds buttons (a title, or a `title` and `action`) |
+| `crow_messenger.announce` | Says something out loud on speakers, with music paused and carried on afterwards. `message` is required; `speakers` takes media players (or `all` for every speaker on the Announce screen); `volume` (1–100) sets the announcement volume; `people` (names, user IDs or `person.` entities) sends it to their phones too, when People is switched on |
 | `crow_messenger.post` | Posts in the Feed, as Home Assistant (or as the person who ran the action). `message` is required; `attachment` adds photos or videos (one or a list); `to` limits who sees it (names, user IDs or `person.` entities — everyone by default); `group` posts in a Feed group instead; `background` gives a short post a coloured background |
 
 > **Attachments** can be under `/local/` (your `www` folder) or `/media/local/`. Automations and administrators can also attach from any folder listed in `allowlist_external_dirs`; people who aren't administrators can only attach from `www` and the media folders, so private files such as `secrets.yaml` can never be shared. The file is copied into Crow Messenger's own private folder when it's sent.
@@ -711,6 +734,7 @@ actions:
 | `crow_messenger_reaction` | Fired when someone reacts, with `user_id`, `reaction`, `to_user_id` and `on` (`message` with `thread_id` and `message_id`; `post` or `comment` with `post_id` and `comment_id`) |
 | `crow_messenger_post_comment` | Fired when someone comments in the Feed, with `user_id`, `post_id`, `comment_id`, `post_author_id`, `reply_to_user_id`, `has_photo` and `has_sticker`. What it says is never included |
 | `crow_messenger_read` | Fired when someone reads a chat, with `user_id`, `thread_id`, `read_up_to`, `last_sender_id` and `with_home_assistant` — so an alert that repeats can stop once it's read |
+| `crow_messenger_announced` | Fired when someone announces (or the announce action runs), with `user_id`, `message`, `speakers` and `people` |
 | `crow_messenger_ring_answered` | Fired when someone taps I Found It after Ring Phone, with `user_id`, `rung_by_id`, `thread_id` and `message_id` |
 
 ---
@@ -797,7 +821,7 @@ show_people_map: true
 feed_nav: true
 ```
 
-> **Note:** Everything above can be set from the visual editor. It opens on a list of pages, like iPhone Settings: General, Messages, Contacts & Maps, Feed, Email, Notifications, AI, and Storage & Reset. Each page shows this card's own settings first (anyone who can edit the dashboard), then its **Household (everyone)** settings, which are saved in Home Assistant and used by every card and phone (administrators only). Feed, Email and AI start with their own on/off switch, rarely changed settings are under **More**, and a setting that only matters while another is on is only shown then. The search box at the top finds any setting on any page and takes you to it.
+> **Note:** Everything above can be set from the visual editor. It opens on a list of pages, like iPhone Settings: **General** for how this card looks and opens; the apps in the same order as the app bar (**Messages**, **Contacts & Maps**, **Announce**, **Feed** and **Email**); what they share (**GIFs**, **Notifications** and **AI**); and **Storage & Reset**. Each app's on/off switch is at the top of its own page. Each page shows this card's own settings first (anyone who can edit the dashboard), then its **Household (everyone)** settings, which are saved in Home Assistant and used by every card and phone (administrators only). Feed, Email and AI start with their own on/off switch, rarely changed settings are under **More**, and a setting that only matters while another is on is only shown then. The search box at the top finds any setting on any page and takes you to it.
 
 ### The Crow Feed card
 
@@ -818,15 +842,15 @@ The Feed shows what's shared with whoever is signed in on that device. On a shar
 | Option | Default | Description |
 |--------|---------|-------------|
 | `feed_nav` | `true` | The Facebook-style navigation bar along the bottom of the Feed (frosted glass with `glass_bars` on, solid with it off) |
-| `app_bar_items` | `[messages, contacts, maps, feed, email]` | Which places are in the app bar at the top left, in order. One left out still shows on its own screen. Maps shows while the People map is on, and Email while Email is switched on |
+| `app_bar_items` | `[messages, contacts, maps, announce, feed, email]` | Which places are in the app bar at the top left, in order. One left out still shows on its own screen. Maps shows while the People map is on, and Email while Email is switched on |
 | `app_bar_filter` | `true` | The Filter button in the app bar on Messages |
 | `app_bar_dots` | `true` | Red dots in the app bar for unread chats and new Feed posts or notifications |
 | `feed_start_tab` | `feed` | The tab the Feed opens on: `feed` (Home), `videos`, `groups` or `events` |
 | `feed_autoplay` | `false` | Videos in Feed posts play silently while they're on screen |
 | `show_stories` | `true` | The Stories row at the top of the Feed |
 | `show_memories` | `true` | On This Day at the top of the Feed |
-| `contact_extras` | `true` | A household member's contact card shows their Feed, your chats with them, Hide Alerts and Ring Phone |
-| `start_view` | `messages` | Startup Screen: `messages` (reopens the chat you were last in), `contacts`, `feed`, `feed_videos`, `feed_groups`, `feed_events` or `feed_alerts` (Notifications). The Feed screens need the Feed switched on, otherwise it opens on Messages. Back always goes to Messages |
+| `contact_extras` | `true` | A household member's contact card shows their Feed, your chats with them, Hide Alerts, Ring Phone and (with People on) Announce |
+| `start_view` | `messages` | Startup Screen: `messages` (reopens the chat you were last in), `contacts`, `announce`, `feed`, `feed_videos`, `feed_groups`, `feed_events` or `feed_alerts` (Notifications). The Feed screens need the Feed switched on, otherwise it opens on Messages. Back always goes to Messages |
 | `resume` | `true` | Return to Where You Left Off: leave the dashboard or the app and come back to the same screens — the chat, Contacts, a profile (and its tab), a post, the Feed tab you were on, Email (with the mailbox and email you had open) — scrolled to where you were. Where you are is saved the moment you leave the app. After 12 hours away the Startup Screen is used instead; a notification you tap or a link still opens what it's about |
 | `card_height` | `700` | Height in pixels, or `fill` to fill the screen |
 | `card_liquid_glass` | `true` | `true` for Glass, `false` for Classic |
@@ -870,9 +894,19 @@ The Feed shows what's shared with whoever is signed in on that device. On a shar
 | Notification Buttons | Tapbacks and Mark as Read on | Which buttons appear when a notification is pressed and held |
 | Feed Notification Buttons | All on except Hide for 30 Days | Reactions, Comment and Reply, Save, Event Answers, Poll Votes, Claim It, Write on the Card, Leave Group and Hide for 30 Days on Feed notifications |
 | Feed (Social Media) | On | The household Feed. Off hides the Feed and the Feed card and stops its notifications |
+| GIPHY API Key | Empty | Switches GIF search on for everyone (in GIFs). Searches go through Home Assistant, so the key isn't shown to anyone else; results are always rated PG |
+| Where GIFs Can Be Used | Chats, Feed and Email | Each on or off, once a GIPHY key is added |
+| Announce | On | Say something out loud on the household's speakers. Off hides Announce everywhere |
+| Who Can Announce | Everyone | Everyone, Administrators, or Chosen People (administrators always can) |
+| Text-to-Speech | Automatic | How announcements are spoken: Home Assistant Cloud when it's there, otherwise the first text-to-speech Home Assistant has, or one you choose |
+| Announcement Volume | Keep Each Speaker's Volume | The volume speakers announce at unless it's changed on the Announce screen |
+| Pause and Resume Music | On | Music is paused for an announcement and carries on afterwards |
+| Chime Before Speaking | Off | A short two-note chime before the announcement |
+| Announce on Phones | Off | A People section in Announce, and Announce on household members' contact cards: the announcement goes to their phones too |
+| Speakers | All shown | Hide speakers from Announce, or give them shorter names |
 | Share to Crow Messenger | On | Links shared to the Home Assistant app from a phone's share sheet can be sent to a chat |
-| AI Features | Off | Turns on the AI features for everyone (in Features) |
-| Typing and Viewing sensors | On | Two sensors that change all the time; switch them off to keep Home Assistant's history smaller (in Features) |
+| AI Features | Off | Turns on the AI features for everyone (at the top of the AI page) |
+| Typing and Viewing sensors | On | Two sensors that change all the time; switch them off to keep Home Assistant's history smaller (on the Messages page, under More) |
 | Post on Someone's Page | On | People can post on each other's pages |
 | Default Audience | Everyone at Home | Who a new post or story is for until it's changed (Everyone at Home or Only Me) |
 | Post Types | All on | Polls, Events, Chip In and Up for Grabs, each on or off |
@@ -881,6 +915,18 @@ The Feed shows what's shared with whoever is signed in on that device. On a shar
 | Year in Review | On | The most-loved photos of the year, on 31 December |
 | Keep Posts | Same as Keep Messages | Its own time for posts, or Forever, even if messages are deleted sooner |
 | Erase Everything | — | Administrators only, in Reset: delete everything for everyone and wipe it from the server so Crow Messenger starts as if just installed (type ERASE), or choose just some of it (type RESET). Download a Backup First makes one .zip of everything |
+
+---
+
+## Changing the Code
+
+The readable files are in the `source` folder. What Home Assistant serves, in `custom_components/crow_messenger/www`, is built from them: each file is minified, with compressed copies (`.br` and `.gz`) that Home Assistant sends to browsers that accept them. After changing a file in `source`, build it again:
+
+```
+cd source
+npm install      # once
+npm run build
+```
 
 ---
 
