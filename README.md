@@ -1006,13 +1006,7 @@ Afterwards the integration restarts itself, so nothing that was waiting (Send La
 - The [Home Assistant](https://www.home-assistant.io) team
 - All users who test, report issues and suggest improvements
 - My Loving Wife for her endless support
-
----
-
-## License
-
-MIT License — free to use, modify and distribute.
-
+ 
 ---
 
 ## Support
