@@ -213,7 +213,7 @@ A private social feed for the people in your home. It's **on by default** and ca
 - **Posts** — words, up to 20 photos, videos and GIFs, link previews, a feeling or activity, a place (check in at a Home Assistant zone), @mentions, and coloured backgrounds for short posts that follow your theme
 - **Post on someone's page** — like Facebook: it shows on their profile as “person1 ▸ person2” and they're told about it. It's always shared with them (and whoever else you choose), and they can hide it from their page or delete it. Every profile has **Post on Their Page**
 - **Tag people in photos** — tap where someone is; they're told, can see it in their Photos, and can remove the tag
-- **Reactions** — Love, Like, Haha, Wow, Sad and Angry (press and hold Like), and see who reacted with what
+- **Reactions** — Love, Like, Care, Haha, Wow, Sad and Angry (press and hold Like), and see who reacted with what
 - **One row under each post** — Like, Comment and Share, each with how many, a Save bookmark (saved posts are in Menu → Saved), and the reactions on the right (tap them to see who reacted)
 - **Comments** — with replies, @mentions, a photo, a GIF or a sticker, reactions on comments, edit and delete
 - **GIFs** — search GIPHY and add GIFs to posts, comments and stories (as a GIF sticker), or add your own. An administrator adds a free GIPHY API key in the card editor (GIFs) to switch search on; searches go through Home Assistant so the key stays private, and results are always rated PG
