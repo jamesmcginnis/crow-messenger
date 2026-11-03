@@ -42,7 +42,7 @@ DAY_MS = 86_400_000
 STORY_MS = DAY_MS
 URL_RE = re.compile(r"https?://[^\s<>\"']+", re.I)
 
-REACTIONS = {"love": "❤️", "like": "👍", "haha": "😂", "wow": "😮", "sad": "😢", "angry": "😡"}
+REACTIONS = {"love": "❤️", "like": "👍", "care": "🤗", "haha": "😂", "wow": "😮", "sad": "😢", "angry": "😡"}
 BACKGROUNDS = ("accent", "sunset", "ocean", "forest", "berry", "night", "rose", "gold")
 KINDS = ("post", "poll", "event", "fund", "grabs", "recs", "list")
 AUTO_KINDS = ("birthday", "milestone", "review", "badges")
