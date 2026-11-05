@@ -1,6 +1,6 @@
 # Crow Messenger
 
-Crow Messenger is a Home Assistant integration and Lovelace card for private messaging between the people in your home. Designed with an **iPhone Messages** look and feel, the card gives you one-to-one and group chats with photos, videos, files, replies, tapbacks, effects, polls, games and much more — while the integration keeps every conversation on your own Home Assistant server, sends phone notifications through the Companion app and lets your automations send messages too.
+Crow Messenger is a Home Assistant integration and dashboard card for private messaging between the people in your home. Designed with an **iPhone Messages** look and feel, the card gives you one-to-one and group chats with photos, videos, files, replies, tapbacks, effects, polls, games and much more — while the integration keeps every conversation on your own Home Assistant server, sends phone notifications through the Companion app and lets your automations send messages too.
 
 It also has a **Feed**: a private, Facebook-style social feed just for your household, with posts, photos, videos, stories, groups, albums, events and more — every post seen only by the people you share it with.
 
@@ -15,9 +15,13 @@ Everything is **private to your household** — messages, photos and contacts ar
 > **AI features are optional and off by default.** Turn on **AI Features** in the card editor to unlock them — they use the conversation agent and AI Task you've already set up in Home Assistant (see [AI Features Setup](#ai-features-setup-optional) below). With AI off, everything else in the card works as normal.
 
 ![Home Assistant](https://img.shields.io/badge/Home%20Assistant-2025.8+-blue)
-![HACS](https://img.shields.io/badge/HACS-Custom-orange)
+![Marketplace](https://img.shields.io/badge/Marketplace-Custom%20repository-orange)
 
-**Step 1 — Add the repository to HACS:**
+**Step 1 — Add the repository to the Marketplace:**
+
+In Home Assistant, open **Settings → Marketplace → ⋮ menu** (top right) **→ Custom repositories** and add `https://github.com/jamesmcginnis/crow-messenger` as an **Integration** repository.
+
+On Home Assistant 2026.10 or older, use HACS instead:
 
 [![Open your Home Assistant instance and add this repository to HACS.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=jamesmcginnis&repository=crow-messenger&category=integration)
 
@@ -25,7 +29,7 @@ Everything is **private to your household** — messages, photos and contacts ar
 
 [![Open your Home Assistant instance and start setting up Crow Messenger.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=crow_messenger)
 
-**Step 3 — Add the card to a dashboard:**
+**Step 3 — Add the dashboard card:**
 
 [![Open your Home Assistant instance and show your dashboards.](https://my.home-assistant.io/badges/lovelace_dashboards.svg)](https://my.home-assistant.io/redirect/lovelace_dashboards/)
 
@@ -35,16 +39,27 @@ Open a dashboard, click **Edit** → **+ Add Card** and search for **Crow Messen
 
 ## Installation
 
-### Via HACS (Recommended)
+### Via the Marketplace (Recommended)
 
-1. Click the **Add to HACS** button above, or in Home Assistant open **HACS** → **⋮ menu** (top right) → **Custom repositories**
-2. Add `https://github.com/jamesmcginnis/crow-messenger` as an **Integration** repository, then close
-3. Search for **Crow Messenger** and click **Download**
+The Marketplace is built into Home Assistant 2026.11 and newer, in place of HACS.
+
+1. In Home Assistant, open **Settings → Marketplace → ⋮ menu** (top right) **→ Custom repositories**
+2. Add `https://github.com/jamesmcginnis/crow-messenger` as an **Integration** repository, then close (if asked, connect your GitHub account; custom repositories need it)
+3. Search the Marketplace for **Crow Messenger** and click **Download**
 4. **Restart Home Assistant**
 5. Click the **Add Integration** button above, or go to **Settings → Devices & Services → + Add Integration** and search for **Crow Messenger**
 6. Click **Submit** — there's nothing to fill in, everything else is set from the card
 7. Hard-refresh your browser (Cmd+Shift+R on Mac) or close and reopen the Home Assistant app on your iPhone
 8. Click the **Add Card** button above, edit a dashboard, click **+ Add Card** and search for **Crow Messenger**
+
+Updates appear under **Settings → Updates**, alongside Home Assistant's own.
+
+> **Already installed through HACS?** There's nothing to do. When you update to Home Assistant 2026.11, the Marketplace takes over Crow Messenger and your custom repository automatically.
+
+### Via HACS (Home Assistant 2026.10 or older)
+
+1. Click the **Add to HACS** button above, or open **HACS → ⋮ menu** (top right) **→ Custom repositories** and add `https://github.com/jamesmcginnis/crow-messenger` as an **Integration** repository
+2. Search for **Crow Messenger**, click **Download**, then carry on from step 4 above
 
 ### Manual
 
