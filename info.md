@@ -12,6 +12,10 @@ Everything is **private to your household** — nothing is stored in the cloud.
 
 > **AI features are optional and off by default.** Turn on **AI Features** in the card editor to unlock them — they use the conversation agent and AI Task you've already set up in Home Assistant. With AI off, everything else in the card works as normal.
 
+If you enjoy Crow Messenger, you can support its development:
+
+<a href="https://buymeacoffee.com/jamesmcginnis"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20Me%20a%20Coffee&emoji=&slug=jamesmcginnis&button_colour=FFDD00&font_colour=000000&font_family=Inter&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me a Coffee" height="40"></a>
+
 **Step 1 — Add the repository to the Marketplace:**
 
 In Home Assistant, open **Settings → Marketplace → ⋮ menu** (top right) **→ Custom repositories** and add `https://github.com/jamesmcginnis/crow-messenger` as an **Integration** repository.
