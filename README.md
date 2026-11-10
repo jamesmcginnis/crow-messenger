@@ -19,7 +19,7 @@ Everything is **private to your household** — messages, photos and contacts ar
 
 If you enjoy Crow Messenger, you can support its development:
 
-<a href="https://buymeacoffee.com/jamesmcginnis"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20Me%20a%20Coffee&emoji=&slug=jamesmcginnis&button_colour=FFDD00&font_colour=000000&font_family=Inter&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me a Coffee" height="40"></a>
+[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20Me%20a%20Coffee&emoji=&slug=jamesmcginnis&button_colour=FFDD00&font_colour=000000&font_family=Inter&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/jamesmcginnis)
 
 **Step 1 — Add the repository to the Marketplace:**
 

@@ -1,5 +1,9 @@
 # Crow Messenger
 
+If you enjoy Crow Messenger, you can support its development:
+
+[![Buy Me a Coffee](https://img.buymeacoffee.com/button-api/?text=Buy%20Me%20a%20Coffee&emoji=&slug=jamesmcginnis&button_colour=FFDD00&font_colour=000000&font_family=Inter&outline_colour=000000&coffee_colour=ffffff)](https://buymeacoffee.com/jamesmcginnis)
+
 Crow Messenger is a Home Assistant integration and dashboard card for private messaging between the people in your home. Designed with an **iPhone Messages** look and feel, the card gives you one-to-one and group chats with photos, videos, files, replies, tapbacks, effects, polls and games — while the integration keeps every conversation on your own Home Assistant server, sends phone notifications through the Companion app and lets your automations send messages too.
 
 It also has a **Feed**: a private, Facebook-style social feed for your household — every post seen only by the people you share it with.
@@ -11,10 +15,6 @@ Everything is **private to your household** — nothing is stored in the cloud.
 > **One download installs both.** The card is bundled inside the integration and loads into your dashboards automatically — no resource to add.
 
 > **AI features are optional and off by default.** Turn on **AI Features** in the card editor to unlock them — they use the conversation agent and AI Task you've already set up in Home Assistant. With AI off, everything else in the card works as normal.
-
-If you enjoy Crow Messenger, you can support its development:
-
-<a href="https://buymeacoffee.com/jamesmcginnis"><img src="https://img.buymeacoffee.com/button-api/?text=Buy%20Me%20a%20Coffee&emoji=&slug=jamesmcginnis&button_colour=FFDD00&font_colour=000000&font_family=Inter&outline_colour=000000&coffee_colour=ffffff" alt="Buy Me a Coffee" height="40"></a>
 
 **Step 1 — Add the repository to the Marketplace:**
 
