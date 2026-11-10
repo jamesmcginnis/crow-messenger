@@ -4,7 +4,8 @@
   down, and is told when it's done (Home Assistant keeps the time, so it still goes off
   with every phone locked, and after a restart).
 * Games, played in the conversation: Noughts and Crosses, Connect Four, Reversi, Draughts and
-  Sea Battle. Home Assistant checks every move (and keeps each Sea Battle fleet secret).
+  Sea Battle, plus Hangman, Rock Paper Scissors, Higher or Lower,
+  Dots and Boxes, Chess and Backgammon. Home Assistant checks every move (and keeps each Sea Battle fleet secret).
 * Home Status: a card that shows, live, whether the house is locked up - nothing is stored
   for it; each phone reads the states from Home Assistant.
 """
@@ -17,15 +18,20 @@ from homeassistant.core import callback
 from homeassistant.helpers.event import async_track_point_in_utc_time
 
 from . import games as G
+from . import games2 as G2
 from .const import HA_SENDER_ID
 
 if TYPE_CHECKING:
     from .manager import Messenger
 
 TIMER_MIN, TIMER_MAX = 5, 24 * 3600
-GAME_KINDS = ("ttt", "c4", "rev", "dr", "sea")
+NEW_KINDS = ("hang", "rps", "hol", "dots", "chess", "bg")
+SETTER_KINDS = ("hang",)     # one person sets a secret word, the other guesses it
+GAME_KINDS = ("ttt", "c4", "rev", "dr", "sea") + NEW_KINDS
 GAME_NAMES = {"ttt": "Noughts and Crosses", "c4": "Connect Four", "rev": "Reversi", "dr": "Draughts",
-              "sea": "Sea Battle", "word": "Word Game"}
+              "sea": "Sea Battle", "word": "Word Game", "hang": "Hangman",
+              "rps": "Rock Paper Scissors", "hol": "Higher or Lower", "dots": "Dots and Boxes",
+              "chess": "Chess", "bg": "Backgammon"}
 C4_COLS, C4_ROWS = 7, 6
 
 TTT_LINES = [(0, 1, 2), (3, 4, 5), (6, 7, 8), (0, 3, 6), (1, 4, 7), (2, 5, 8), (0, 4, 8), (2, 4, 6)]
@@ -86,6 +92,8 @@ class PlayMixin:
                 return {"game": {**base, "board": G.dr_new(), "count": [12, 12], "quiet": 0}}
             if game == "sea":
                 return {"game": {**base, **G.sea_new()}}
+            if game in NEW_KINDS:
+                return {"game": {**base, **self._new_game_state(game, g, solo=not others)}}
             size = 9 if game == "ttt" else C4_COLS * C4_ROWS
             return {"game": {**base, "board": [0] * size}}
         if kind == "status":
@@ -97,8 +105,24 @@ class PlayMixin:
         g = msg.get("game")
         if not g:
             return None
-        if g.get("kind") == "word" and not g.get("done"):   # a Word Game from before it was removed
+        kind, over = g.get("kind"), g.get("winner") is not None
+        if kind == "word" and not g.get("done"):     # a Word Game from before it was removed
+            return {k: v for k, v in g.items() if k != "secret"}
+        if kind in SETTER_KINDS:
             g = {k: v for k, v in g.items() if k != "secret"}
+            if over:
+                g["answer"] = msg["game"].get("secret")
+            return g
+        if kind == "rps":
+            g = {k: v for k, v in g.items() if k != "picks"}
+            g["picked"] = [p is not None for p in msg["game"]["picks"]]
+            return g
+        if kind == "hol":
+            g = {k: v for k, v in g.items() if k != "deck"}
+            g["left"] = len(msg["game"]["deck"])
+            return g
+        if kind == "chess":
+            return {k: v for k, v in g.items() if k != "hist"}
         if g.get("kind") == "sea":
             # the ships stay hidden; each player asks for their own fleet (game/fleet).
             # once the game's over, both fleets are shown
@@ -124,6 +148,29 @@ class PlayMixin:
         if g["players"][0] == g["players"][1]:
             return {"fleet": g["fleets"][g["turn"]], "side": g["turn"]}   # playing yourself: the fleet whose turn it is
         return {"fleet": g["fleets"][side], "side": side}
+
+    async def async_game_secret(self: Messenger, uid: str, thread_id: str, message_id: str) -> dict:
+        """The word you set in Hangman (nobody else's)."""
+        _t, _m, g, side = self._game_for(uid, thread_id, message_id)
+        if g.get("kind") not in SETTER_KINDS or side != 0:
+            return {"secret": None}
+        return {"secret": g.get("secret")}
+
+    def _new_game_state(self: Messenger, game: str, opts: dict, solo: bool) -> dict:
+        try:
+            if game == "hang":
+                return G2.hang_new(opts.get("word")) | {"turn": 1}
+            if game == "rps":
+                return G2.rps_new(int(opts.get("rounds") or 3))
+            if game == "hol":
+                return G2.hol_new()
+            if game == "dots":
+                return G2.db_new()
+            if game == "chess":
+                return G2.ch_new()
+            return G2.bg_new()
+        except ValueError as err:
+            raise _err("invalid_format", str(err)) from err
 
     async def async_game_shuffle(self: Messenger, uid: str, thread_id: str, message_id: str) -> dict:
         """Move your ships somewhere else, before anyone's fired at them."""
@@ -207,6 +254,15 @@ class PlayMixin:
             players[1] = uid  # in a group, whoever plays second joins the game
         if players[turn] != uid:
             raise _err("invalid_format", "It's not your turn")
+        if g["kind"] in NEW_KINDS:
+            nudge = await self._new_game_move(thread, msg, g, uid, move)
+            if nudge:
+                users = await self.async_user_map()
+                who = users.get(uid, {}).get("name", "Someone")
+                over = g.get("winner") is not None
+                body = (f"{who} finished your game." if over else f"{who} played. It's your turn.")
+                self._alert(thread, [nudge], GAME_NAMES.get(g["kind"], "Game"), body, tag=f"game_{message_id}")
+            return self.message_view(msg, self._hidden(thread, uid))
         if g["kind"] in ("rev", "dr", "sea"):
             nudge = await self._big_game_move(thread, msg, g, uid, move)
             name = GAME_NAMES.get(g["kind"], "Game")
@@ -259,6 +315,36 @@ class PlayMixin:
             who = users.get(uid, {}).get("name", "Someone")
             self._alert(thread, [nudge], name, f"{who} played. It's your turn.", tag=f"game_{message_id}")
         return self.message_view(msg, self._hidden(thread, uid))
+
+    async def _new_game_move(self: Messenger, thread: dict, msg: dict, g: dict, uid: str, move: Any) -> str | None:
+        """The newer games: check the move, play it, and say who to tell (if anyone)."""
+        turn, kind = g["turn"], g["kind"]
+        players = g["players"]
+        try:
+            if kind == "hang":
+                G2.hang_play(g, str(move), turn)
+            elif kind == "rps":
+                G2.rps_play(g, int(move), turn, solo=players[0] == players[1])
+            elif kind == "hol":
+                G2.hol_play(g, int(move), turn)
+            elif kind == "dots":
+                G2.db_play(g, int(move), turn)
+            elif kind == "chess":
+                G2.ch_play(g, move if isinstance(move, list) else [int(x) for x in str(move).split(",")], turn)
+            else:
+                G2.bg_play(g, move if move == "roll" or isinstance(move, list) else [int(x) for x in str(move).split(",")], turn)
+        except (TypeError, ValueError) as err:
+            raise _err("invalid_format", str(err) or "That move isn't allowed") from err
+        g["moves"] = g.get("moves", 0) + 1
+        self._save()
+        self._push_update(thread, msg)
+        if g.get("winner") is not None:
+            other = players[0] if kind in SETTER_KINDS else players[1 - turn]
+            return other if other and other != uid else None
+        if kind in SETTER_KINDS or g["turn"] == turn:
+            return None
+        nxt = players[g["turn"]]
+        return nxt if nxt and nxt != uid else None
 
     async def _big_game_move(self: Messenger, thread: dict, msg: dict, g: dict, uid: str, move: Any) -> str | None:
         """Reversi, Draughts and Sea Battle: check the move, play it, and say who goes next."""
